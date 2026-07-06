@@ -7,6 +7,7 @@ import { bookingPendingEmail, bookingDecidedEmail } from '@/lib/email/templates'
 import { isManagerOf } from '@/features/equipment/service'
 import { isCertified } from '@/features/certifications/service'
 import { evaluateBooking, type Verdict, type Role, type PolicyInput } from './policy'
+import { expandWeekly } from './recurrence'
 
 export type CreateBookingInput = { userId: string; equipmentId: string; startsAt: Date; endsAt: Date; purpose: string }
 export type CreateBookingResult =
@@ -146,5 +147,106 @@ export async function cancelBooking(args: { bookingId: string; byUserId: string 
   const allowed = b.userId === args.byUserId || (await isManagerOf(args.byUserId, b.equipmentId))
   if (!allowed) return { ok: false, message: 'You can only cancel your own bookings.' }
   await prisma.booking.update({ where: { id: b.id }, data: { status: 'CANCELLED' } })
+  return { ok: true }
+}
+
+export type CreateRecurringInput = {
+  userId: string; equipmentId: string; purpose: string
+  daysOfWeek: number[]; startMinutes: number; durationMinutes: number
+  firstDate: string; untilDate: string
+}
+export type CreateRecurringResult =
+  | { ok: true; ruleId: string; count: number }
+  | { ok: false; error: 'blocked'; message: string }
+  | { ok: false; error: 'conflicts'; conflicts: string[] }
+  | { ok: false; error: 'not_found' }
+
+export async function createRecurringBooking(input: CreateRecurringInput): Promise<CreateRecurringResult> {
+  const { tz } = await orgInfo()
+  const occurrences = expandWeekly({ ...input, timezone: tz })
+  if (occurrences.length === 0) return { ok: false, error: 'blocked', message: 'The pattern produces no occurrences.' }
+  if (occurrences.length > 200) return { ok: false, error: 'blocked', message: 'Too many occurrences (max 200). Shorten the date range.' }
+
+  // Policy check on the first occurrence (recurring=true covers routing + allowRecurring).
+  const ctx = await buildPolicyInput(input.userId, input.equipmentId, occurrences[0], true)
+  if (!ctx) return { ok: false, error: 'not_found' }
+  const verdict = evaluateBooking(ctx)
+  if (verdict.kind === 'blocked') return { ok: false, error: 'blocked', message: verdict.message }
+
+  // Per-occurrence checks: booking + maintenance overlap, computed in bulk.
+  const [bookings, windows] = await Promise.all([
+    prisma.booking.findMany({
+      where: { equipmentId: input.equipmentId, status: { in: ['PENDING', 'CONFIRMED'] }, endsAt: { gt: occurrences[0].startsAt } },
+      select: { startsAt: true, endsAt: true },
+    }),
+    prisma.maintenanceWindow.findMany({ where: { equipmentId: input.equipmentId }, select: { startsAt: true, endsAt: true } }),
+  ])
+  const blockers = [...bookings, ...windows]
+  const conflicts = occurrences.filter((o) => blockers.some((b) => b.startsAt < o.endsAt && b.endsAt > o.startsAt))
+  if (conflicts.length > 0) {
+    return { ok: false, error: 'conflicts', conflicts: conflicts.map((c) => formatRange(c.startsAt, c.endsAt, tz)) }
+  }
+
+  try {
+    const rule = await prisma.$transaction(async (tx) => {
+      // Same per-equipment advisory lock as createBooking: serialize the rule + N
+      // booking inserts behind the transaction-scoped lock keyed on equipmentId so
+      // overlapping inserts don't cycle into a GiST deadlock. Released at COMMIT/ROLLBACK.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.equipmentId}, 0))`
+      const rule = await tx.recurrenceRule.create({
+        data: {
+          equipmentId: input.equipmentId, userId: input.userId,
+          daysOfWeek: input.daysOfWeek, startMinutes: input.startMinutes,
+          durationMinutes: input.durationMinutes, firstDate: input.firstDate, untilDate: input.untilDate,
+        },
+      })
+      for (const o of occurrences) {
+        await tx.booking.create({
+          data: {
+            userId: input.userId, equipmentId: input.equipmentId, purpose: input.purpose.slice(0, 500),
+            startsAt: o.startsAt, endsAt: o.endsAt, status: 'PENDING', recurrenceRuleId: rule.id,
+          },
+        })
+      }
+      return rule
+    })
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: input.userId } })
+    const first = formatRange(occurrences[0].startsAt, occurrences[0].endsAt, tz)
+    await notifyManagersOfPending(input.equipmentId, user.name, `recurring ×${occurrences.length}, first ${first}`)
+    return { ok: true, ruleId: rule.id, count: occurrences.length }
+  } catch (e) {
+    if (isOverlapError(e)) return { ok: false, error: 'conflicts', conflicts: ['A slot was taken while submitting. Try again.'] }
+    throw e
+  }
+}
+
+export async function decideRecurring(args: { ruleId: string; deciderId: string; decision: 'approve' | 'reject'; reason?: string }): Promise<{ ok: boolean; message?: string }> {
+  const rule = await prisma.recurrenceRule.findUnique({ where: { id: args.ruleId }, include: { equipment: true } })
+  if (!rule) return { ok: false, message: 'Request not found.' }
+  if (!(await isManagerOf(args.deciderId, rule.equipmentId))) return { ok: false, message: 'Only equipment managers can decide this request.' }
+  if (args.decision === 'reject' && !args.reason?.trim()) return { ok: false, message: 'A rejection reason is required.' }
+  const approved = args.decision === 'approve'
+  const { count } = await prisma.booking.updateMany({
+    where: { recurrenceRuleId: rule.id, status: 'PENDING' },
+    data: { status: approved ? 'CONFIRMED' : 'REJECTED', decidedById: args.deciderId, decidedAt: new Date(), rejectionReason: approved ? null : args.reason!.trim() },
+  })
+  if (count === 0) return { ok: false, message: 'This request is no longer pending.' }
+  const { name: orgName, tz } = await orgInfo()
+  await notify(rule.userId, 'booking_decided',
+    { message: `Recurring booking of ${rule.equipment.name} (${count} slots): ${approved ? 'approved' : `rejected — ${args.reason}`}` },
+    bookingDecidedEmail(orgName, rule.equipment.name, `recurring ×${count}`, approved, args.reason))
+  return { ok: true }
+}
+
+export async function cancelRecurring(args: { bookingId: string; byUserId: string; scope: 'one' | 'future' }): Promise<{ ok: boolean; message?: string }> {
+  if (args.scope === 'one') return cancelBooking({ bookingId: args.bookingId, byUserId: args.byUserId })
+  const b = await prisma.booking.findUnique({ where: { id: args.bookingId } })
+  if (!b?.recurrenceRuleId) return { ok: false, message: 'Not a recurring booking.' }
+  const allowed = b.userId === args.byUserId || (await isManagerOf(args.byUserId, b.equipmentId))
+  if (!allowed) return { ok: false, message: 'You can only cancel your own bookings.' }
+  await prisma.booking.updateMany({
+    where: { recurrenceRuleId: b.recurrenceRuleId, status: { in: ['PENDING', 'CONFIRMED'] }, startsAt: { gte: b.startsAt, gt: new Date() } },
+    data: { status: 'CANCELLED' },
+  })
   return { ok: true }
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/session'
-import { createBooking } from '@/features/booking/service'
+import { createBooking, createRecurringBooking } from '@/features/booking/service'
 import { bookingBody } from '@/features/booking/schema'
 
 export async function POST(req: Request) {
@@ -11,8 +11,11 @@ export async function POST(req: Request) {
   const b = parsed.data
 
   if (b.recurring) {
-    // Replaced by the real implementation in Task 14.
-    return NextResponse.json({ error: 'blocked', message: 'Recurring bookings arrive in the next release step.' }, { status: 422 })
+    const r = await createRecurringBooking({ userId: user.id, equipmentId: b.equipmentId, purpose: b.purpose, ...b.recurring })
+    if (r.ok) return NextResponse.json({ ok: true, pending: true, count: r.count }, { status: 201 })
+    if (r.error === 'conflicts') return NextResponse.json({ error: 'conflicts', conflicts: r.conflicts }, { status: 409 })
+    if (r.error === 'not_found') return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    return NextResponse.json({ error: 'blocked', message: r.message }, { status: 422 })
   }
 
   const r = await createBooking({ userId: user.id, equipmentId: b.equipmentId, startsAt: b.startsAt, endsAt: b.endsAt, purpose: b.purpose })

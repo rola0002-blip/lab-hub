@@ -34,11 +34,22 @@ export default async function ApprovalsPage() {
     when: formatRange(p.startsAt, p.endsAt, org.timezone),
   }))
 
+  const singles = items.filter((i) => !i.recurrenceRuleId)
+  const ruleGroups = new Map<string, typeof items>()
+  for (const i of items) {
+    if (i.recurrenceRuleId) {
+      ruleGroups.set(i.recurrenceRuleId, [...(ruleGroups.get(i.recurrenceRuleId) ?? []), i])
+    }
+  }
+  const recurringItems = [...ruleGroups.entries()].map(([ruleId, occ]) => ({
+    ruleId, count: occ.length, first: occ[0],
+  }))
+
   return (
     <div>
       <p className="text-sm font-medium text-gray-400">02 — Approvals</p>
       <h1 className="mt-1 text-2xl font-semibold">Approvals queue</h1>
-      <ApprovalsClient items={items} />
+      <ApprovalsClient items={singles} recurring={recurringItems} />
     </div>
   )
 }
