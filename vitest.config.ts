@@ -13,14 +13,20 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
-    // src/lib/env.ts eagerly parses process.env at import time; supply the one
-    // required var so unit modules import without a real .env present.
-    env: { DATABASE_URL: 'postgresql://localhost:5432/labhub_test' },
+    // src/lib/env.ts eagerly parses process.env at import time; supply the
+    // required vars so unit modules import without a real .env present.
+    env: {
+      DATABASE_URL: 'postgresql://localhost:5432/labhub_test',
+      BETTER_AUTH_SECRET: 'unit-test-secret-0123456789abcdef',
+    },
+    // Thresholds live on the merged run only (see package.json `coverage`): the
+    // 85% gate spans src/lib + src/features exercised by BOTH the unit run (pure
+    // modules) and the integration run (services/DB). Per-run blobs must not fail
+    // on thresholds, so they are applied via CLI flags on `--merge-reports`.
     coverage: {
       provider: 'v8',
       include: ['src/lib/**', 'src/features/**'],
       exclude: ['**/*.test.ts'],
-      thresholds: { lines: 85, functions: 85, branches: 80 },
     },
   },
 })

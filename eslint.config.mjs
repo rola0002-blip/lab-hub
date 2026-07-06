@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated coverage report + vitest blob dir (see `npm run coverage`).
+    "coverage/**",
+    ".vitest/**",
   ]),
 ]);
 

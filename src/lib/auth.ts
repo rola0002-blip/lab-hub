@@ -16,7 +16,7 @@ async function isSetupComplete() {
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: 'postgresql' }),
-  secret: process.env.BETTER_AUTH_SECRET,
+  secret: env.BETTER_AUTH_SECRET,
   baseURL: env.APP_URL,
   emailAndPassword: {
     enabled: true,

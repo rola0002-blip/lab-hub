@@ -12,6 +12,11 @@
 
 # testing
 /coverage
+/.vitest/
+/.vitest-reports/
+
+# backups (scripts/backup.sh output)
+/backups/
 
 # next.js
 /.next/

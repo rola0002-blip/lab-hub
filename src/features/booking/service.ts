@@ -231,7 +231,7 @@ export async function decideRecurring(args: { ruleId: string; deciderId: string;
     data: { status: approved ? 'CONFIRMED' : 'REJECTED', decidedById: args.deciderId, decidedAt: new Date(), rejectionReason: approved ? null : args.reason!.trim() },
   })
   if (count === 0) return { ok: false, message: 'This request is no longer pending.' }
-  const { name: orgName, tz } = await orgInfo()
+  const { name: orgName } = await orgInfo()
   await notify(rule.userId, 'booking_decided',
     { message: `Recurring booking of ${rule.equipment.name} (${count} slots): ${approved ? 'approved' : `rejected — ${args.reason}`}` },
     bookingDecidedEmail(orgName, rule.equipment.name, `recurring ×${count}`, approved, args.reason))

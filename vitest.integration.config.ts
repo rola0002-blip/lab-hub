@@ -20,5 +20,15 @@ export default defineConfig({
     globalSetup: ['tests/integration/setup.ts'],
     fileParallelism: false, // tests share one database; run files serially
     testTimeout: 20000,
+    // Coverage `include` matches vitest.config.ts so the combined (unit +
+    // integration) blob-merged report enforces one consistent gate; the
+    // service/DB modules under src/features + src/lib are exercised here, not in
+    // the unit run. Thresholds are applied only on the merged run — see the
+    // `coverage` script in package.json.
+    coverage: {
+      provider: 'v8',
+      include: ['src/lib/**', 'src/features/**'],
+      exclude: ['**/*.test.ts'],
+    },
   },
 })

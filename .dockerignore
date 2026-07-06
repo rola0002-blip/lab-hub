@@ -1,0 +1,15 @@
+# Keep the build context lean and prevent host-arch artifacts from leaking in
+# via `COPY . .` (deps are reinstalled cleanly in the `deps` stage).
+node_modules
+.next
+.git
+.vitest
+data
+backups
+*.log
+.env
+.env.*
+!.env.example
+coverage
+playwright-report
+test-results

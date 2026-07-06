@@ -1,5 +1,5 @@
 {
-  "name": "labhub-tmp",
+  "name": "labhub",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -11,7 +11,9 @@
     "test:int": "vitest run --config vitest.integration.config.ts",
     "test": "npm run test:unit && npm run test:int",
     "test:e2e": "playwright test",
-    "coverage": "vitest run --coverage"
+    "coverage:unit": "vitest run --coverage.enabled --reporter=blob --outputFile=.vitest/blob/unit.json",
+    "coverage:int": "vitest run --config vitest.integration.config.ts --coverage.enabled --reporter=blob --outputFile=.vitest/blob/int.json",
+    "coverage": "rm -rf .vitest/blob && npm run coverage:unit && npm run coverage:int && vitest run --merge-reports=.vitest/blob --coverage --coverage.thresholds.lines=85 --coverage.thresholds.functions=85 --coverage.thresholds.branches=80"
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",

@@ -16,7 +16,35 @@ services:
       timeout: 3s
       retries: 10
 
-  # app + cloudflared services are added in Task 21 (production deployment)
+  app:
+    build: .
+    profiles: ['prod']
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://labhub:${POSTGRES_PASSWORD:-labhub}@db:5432/labhub
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      UPLOADS_DIR: /data/uploads
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-LabHub <no-reply@localhost>}
+    volumes:
+      - uploads:/data/uploads
+    ports:
+      - '3000:3000'
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles: ['tunnel']
+    command: tunnel run --token ${TUNNEL_TOKEN}
+    depends_on:
+      - app
+    restart: unless-stopped
 
 volumes:
   db-data:

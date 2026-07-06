@@ -1,36 +1,35 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# LabHub
 
-## Getting Started
+Self-hosted lab platform: equipment booking with per-instrument policies,
+certification gating, approvals, recurring bookings, and maintenance windows.
+Messaging and project management arrive in later releases on this same foundation.
 
-First, run the development server:
+## Install (any org)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+Requirements: Docker + Docker Compose. Optional: a Cloudflare Tunnel token for public access.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+1. `git clone <this repo> && cd lab-hub`
+2. `cp .env.example .env` — set `BETTER_AUTH_SECRET` (`openssl rand -hex 32`),
+   `POSTGRES_PASSWORD`, `APP_URL`, and SMTP credentials (any provider).
+   For public access set `TUNNEL_TOKEN` and your domain as `APP_URL`.
+3. `docker compose --profile prod up -d --build`
+   (add `--profile tunnel` for Cloudflare Tunnel)
+   The app applies database migrations automatically on start.
+4. Open the app → the setup wizard configures your organisation name, logo,
+   accent colour, timezone, and the first admin account.
+5. Invite people from the People page. Guests (e.g. FYP students,
+   collaborators) only need an email address.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Operations
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Backup:** `./scripts/backup.sh` → `backups/` (database dump + uploads).
+- **Upgrade:** `git pull && docker compose --profile prod up -d --build`
+  (migrations apply automatically on start).
+- **Dev:** `docker compose up -d db && npm install && npm run dev`
 
-## Learn More
+## Tests
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `npm run test:unit` — pure logic (policy engine, recurrence, chips, templates)
+- `npm run test:int` — services + API against real Postgres (`labhub_test`)
+- `npm run test:e2e` — Playwright journeys
+- `npm run coverage` — ≥85% gate on src/lib + src/features (unit + integration)
