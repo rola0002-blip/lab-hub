@@ -10,6 +10,7 @@
     "test:unit": "vitest run",
     "test:int": "vitest run --config vitest.integration.config.ts",
     "test": "npm run test:unit && npm run test:int",
+    "test:e2e": "playwright test",
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
