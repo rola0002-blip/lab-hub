@@ -6,6 +6,8 @@ import { APIError } from 'better-auth/api'
 import { hash, verify } from '@node-rs/argon2'
 import { prisma } from './db'
 import { env } from './env'
+import { enqueueEmail } from './email/outbox'
+import { resetPasswordEmail } from './email/templates'
 
 async function isSetupComplete() {
   const org = await prisma.organization.findFirst()
@@ -24,14 +26,9 @@ export const auth = betterAuth({
       verify: ({ hash: h, password }) => verify(h, password),
     },
     sendResetPassword: async ({ user, url }) => {
-      // Replaced with enqueueEmail + template in Task 6.
-      await prisma.emailOutbox.create({
-        data: {
-          toEmail: user.email,
-          subject: 'Reset your LabHub password',
-          html: `<p><a href="${url}">Reset your password</a> (link expires in 1 hour).</p>`,
-        },
-      })
+      const org = await prisma.organization.findFirst()
+      const t = resetPasswordEmail(org?.name ?? 'LabHub', url)
+      await enqueueEmail(user.email, t.subject, t.html)
     },
   },
   // user.role is provided by the admin plugin (never client-settable);
