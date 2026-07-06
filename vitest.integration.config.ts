@@ -6,7 +6,14 @@ process.env.DISABLE_JOBS = '1'
 process.env.BETTER_AUTH_SECRET = process.env.BETTER_AUTH_SECRET ?? 'integration-test-secret-0123456789abcdef'
 
 export default defineConfig({
-  resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+      // `import 'server-only'` throws under vitest's default resolution; map it
+      // to the package's empty stub so server modules are testable.
+      'server-only': path.resolve(__dirname, 'node_modules/server-only/empty.js'),
+    },
+  },
   test: {
     environment: 'node',
     include: ['tests/integration/**/*.test.ts'],
