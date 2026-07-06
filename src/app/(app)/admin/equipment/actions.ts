@@ -1,8 +1,15 @@
 'use server'
+import { ZodError } from 'zod'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/session'
 import { saveUpload } from '@/lib/uploads'
 import { createEquipment, updateEquipment, setManagers, retireEquipment, equipmentSchema } from '@/features/equipment/service'
+
+function errorMessage(e: unknown): string {
+  if (e instanceof ZodError) return e.issues[0].message
+  if (e instanceof Error && e.message === 'invalid_upload') return 'Photo must be PNG/JPEG/WebP under 2 MB.'
+  return e instanceof Error ? e.message : 'Invalid input'
+}
 
 function parseForm(fd: FormData) {
   return equipmentSchema.omit({ photoPath: true }).parse({
@@ -25,7 +32,7 @@ export async function createEquipmentAction(fd: FormData): Promise<{ ok: boolean
     const eq = await createEquipment({ ...parseForm(fd), photoPath: (await photoPathFrom(fd)) ?? null })
     await setManagers(eq.id, fd.getAll('managers').map(String))
   } catch (e) {
-    return { ok: false, message: e instanceof Error ? e.message : 'Invalid input' }
+    return { ok: false, message: errorMessage(e) }
   }
   revalidatePath('/admin/equipment'); revalidatePath('/booking')
   return { ok: true }
@@ -38,7 +45,7 @@ export async function updateEquipmentAction(id: string, fd: FormData): Promise<{
     await updateEquipment(id, { ...parseForm(fd), ...(photoPath ? { photoPath } : {}) })
     await setManagers(id, fd.getAll('managers').map(String))
   } catch (e) {
-    return { ok: false, message: e instanceof Error ? e.message : 'Invalid input' }
+    return { ok: false, message: errorMessage(e) }
   }
   revalidatePath('/admin/equipment'); revalidatePath('/booking')
   return { ok: true }

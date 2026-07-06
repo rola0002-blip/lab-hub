@@ -34,4 +34,12 @@ describe('equipment service', () => {
     expect((await prisma.equipment.findUniqueOrThrow({ where: { id: eq.id } })).status).toBe('RETIRED')
     expect(await prisma.notification.count({ where: { userId: u.id, type: 'booking_cancelled' } })).toBe(1)
   })
+
+  it('retire with no future bookings returns { cancelled: 0 } and notifies no one', async () => {
+    const eq = await makeEquipment()
+    const { cancelled } = await retireEquipment(eq.id)
+    expect(cancelled).toBe(0)
+    expect((await prisma.equipment.findUniqueOrThrow({ where: { id: eq.id } })).status).toBe('RETIRED')
+    expect(await prisma.notification.count({ where: { type: 'booking_cancelled' } })).toBe(0)
+  })
 })

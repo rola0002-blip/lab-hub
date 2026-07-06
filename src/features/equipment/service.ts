@@ -42,19 +42,27 @@ export async function isManagerOf(userId: string, equipmentId: string): Promise<
 export async function retireEquipment(id: string): Promise<{ cancelled: number }> {
   const eq = await prisma.equipment.update({ where: { id }, data: { status: 'RETIRED' } })
   const org = await prisma.organization.findFirst()
-  const victims = await prisma.booking.findMany({
-    where: { equipmentId: id, status: { in: ['PENDING', 'CONFIRMED'] }, startsAt: { gt: new Date() } },
-  })
-  await prisma.booking.updateMany({
-    where: { id: { in: victims.map((v) => v.id) } },
-    data: { status: 'CANCELLED', rejectionReason: 'Equipment retired' },
-  })
-  for (const b of victims) {
-    const when = formatRange(b.startsAt, b.endsAt, org?.timezone ?? 'Asia/Singapore')
-    await notify(b.userId, 'booking_cancelled', { message: `${eq.name} was retired; your booking ${when} was cancelled.` }, {
-      subject: `[${org?.name ?? 'LabHub'}] Booking cancelled: ${eq.name} retired`,
-      html: `<p>Your booking of <strong>${eq.name}</strong> (${when}) was cancelled because the instrument was retired.</p>`,
+  let cancelled = 0
+  // Converging loop: a booking inserted concurrently between snapshot and update would be
+  // missed by a single findMany. Since the equipment is already RETIRED, no new future
+  // bookings can be created, so repeated passes drain the set until findMany returns empty.
+  for (;;) {
+    const victims = await prisma.booking.findMany({
+      where: { equipmentId: id, status: { in: ['PENDING', 'CONFIRMED'] }, startsAt: { gt: new Date() } },
     })
+    if (victims.length === 0) break
+    await prisma.booking.updateMany({
+      where: { id: { in: victims.map((v) => v.id) } },
+      data: { status: 'CANCELLED', rejectionReason: 'Equipment retired' },
+    })
+    for (const b of victims) {
+      const when = formatRange(b.startsAt, b.endsAt, org?.timezone ?? 'Asia/Singapore')
+      await notify(b.userId, 'booking_cancelled', { message: `${eq.name} was retired; your booking ${when} was cancelled.` }, {
+        subject: `[${org?.name ?? 'LabHub'}] Booking cancelled: ${eq.name} retired`,
+        html: `<p>Your booking of <strong>${eq.name}</strong> (${when}) was cancelled because the instrument was retired.</p>`,
+      })
+    }
+    cancelled += victims.length
   }
-  return { cancelled: victims.length }
+  return { cancelled }
 }
