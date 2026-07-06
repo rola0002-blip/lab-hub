@@ -1,0 +1,99 @@
+import { describe, it, expect } from 'vitest'
+import { evaluateBooking, type PolicyInput } from './policy'
+
+const NOW = new Date('2026-07-07T04:00:00Z')
+const h = (n: number) => new Date(NOW.getTime() + n * 3_600_000)
+
+function input(over: Partial<PolicyInput> & { eq?: Partial<PolicyInput['equipment']>; slot?: PolicyInput['slot'] } = {}): PolicyInput {
+  const { eq, ...rest } = over
+  return {
+    now: NOW, role: 'member', isManager: false, isCertified: false,
+    equipment: {
+      status: 'ACTIVE', advanceBookingDays: 14, maxDurationMinutes: 480,
+      certificationRequired: false, approvalPolicy: 'GUESTS', allowRecurring: false, ...eq,
+    },
+    slot: { startsAt: h(24), endsAt: h(28) },
+    recurring: false, maintenance: [],
+    ...rest,
+  }
+}
+
+describe('evaluateBooking — blocking rules', () => {
+  it('rejects end <= start', () => {
+    const v = evaluateBooking(input({ slot: { startsAt: h(2), endsAt: h(2) } }))
+    expect(v).toMatchObject({ kind: 'blocked', reason: 'invalid_range' })
+  })
+  it('rejects a start in the past', () => {
+    const v = evaluateBooking(input({ slot: { startsAt: h(-1), endsAt: h(1) } }))
+    expect(v).toMatchObject({ kind: 'blocked', reason: 'in_past' })
+  })
+  it('rejects retired equipment for everyone including admins', () => {
+    const v = evaluateBooking(input({ role: 'admin', isManager: true, eq: { status: 'RETIRED' } }))
+    expect(v).toMatchObject({ kind: 'blocked', reason: 'retired' })
+  })
+  it('blocks uncertified users (any role, even managers) when certification is required', () => {
+    for (const [role, isManager] of [['guest', false], ['member', false], ['admin', true]] as const) {
+      const v = evaluateBooking(input({ role, isManager, eq: { certificationRequired: true } }))
+      expect(v).toMatchObject({ kind: 'blocked', reason: 'certification_required' })
+    }
+  })
+  it('allows certified users past the certification gate', () => {
+    const v = evaluateBooking(input({ isCertified: true, eq: { certificationRequired: true, approvalPolicy: 'NONE' } }))
+    expect(v).toEqual({ kind: 'instant' })
+  })
+  it('blocks recurring on instruments that disallow it', () => {
+    const v = evaluateBooking(input({ recurring: true, eq: { allowRecurring: false } }))
+    expect(v).toMatchObject({ kind: 'blocked', reason: 'recurring_not_allowed' })
+  })
+  it('enforces the advance window for non-managers with the day count in the message', () => {
+    const v = evaluateBooking(input({ slot: { startsAt: h(15 * 24), endsAt: h(15 * 24 + 2) } }))
+    expect(v).toMatchObject({ kind: 'blocked', reason: 'advance_window' })
+    if (v.kind === 'blocked') expect(v.message).toContain('14')
+  })
+  it('managers and admins bypass the advance window', () => {
+    const slot = { startsAt: h(30 * 24), endsAt: h(30 * 24 + 2) }
+    expect(evaluateBooking(input({ isManager: true, slot }))).toEqual({ kind: 'instant' })
+  })
+  it('recurring requests skip the advance-window check (approval covers them)', () => {
+    const v = evaluateBooking(input({ recurring: true, slot: { startsAt: h(30 * 24), endsAt: h(30 * 24 + 2) }, eq: { allowRecurring: true } }))
+    expect(v).toEqual({ kind: 'approval', why: 'recurring' })
+  })
+  it('enforces max duration for non-managers; managers bypass', () => {
+    const slot = { startsAt: h(24), endsAt: h(24 + 9) } // 9h > 480min
+    expect(evaluateBooking(input({ slot }))).toMatchObject({ kind: 'blocked', reason: 'max_duration' })
+    expect(evaluateBooking(input({ isManager: true, slot }))).toEqual({ kind: 'instant' })
+  })
+  it('blocks overlap with a maintenance window (all roles)', () => {
+    const maintenance = [{ startsAt: h(25), endsAt: h(26) }]
+    expect(evaluateBooking(input({ maintenance }))).toMatchObject({ kind: 'blocked', reason: 'maintenance_overlap' })
+    expect(evaluateBooking(input({ isManager: true, maintenance }))).toMatchObject({ kind: 'blocked', reason: 'maintenance_overlap' })
+  })
+  it('does not block for adjacent (non-overlapping) maintenance', () => {
+    const maintenance = [{ startsAt: h(28), endsAt: h(30) }] // touches endsAt exactly
+    expect(evaluateBooking(input({ maintenance }))).toEqual({ kind: 'instant' })
+  })
+})
+
+describe('evaluateBooking — approval routing', () => {
+  it('NONE policy: everyone books instantly', () => {
+    for (const role of ['guest', 'member', 'admin'] as const) {
+      expect(evaluateBooking(input({ role, eq: { approvalPolicy: 'NONE' } }))).toEqual({ kind: 'instant' })
+    }
+  })
+  it('GUESTS policy: guests need approval, members/admins do not', () => {
+    expect(evaluateBooking(input({ role: 'guest' }))).toEqual({ kind: 'approval', why: 'guest_policy' })
+    expect(evaluateBooking(input({ role: 'member' }))).toEqual({ kind: 'instant' })
+    expect(evaluateBooking(input({ role: 'admin', isManager: true }))).toEqual({ kind: 'instant' })
+  })
+  it('ALL policy: everyone queues, including managers (spec §6.2)', () => {
+    expect(evaluateBooking(input({ role: 'admin', isManager: true, eq: { approvalPolicy: 'ALL' } }))).toEqual({ kind: 'approval', why: 'all_policy' })
+  })
+  it('recurring always routes to approval even on NONE policy', () => {
+    const v = evaluateBooking(input({ recurring: true, eq: { approvalPolicy: 'NONE', allowRecurring: true } }))
+    expect(v).toEqual({ kind: 'approval', why: 'recurring' })
+  })
+  it('certified guest on certification-required + GUESTS policy → approval (spec §6.1 table)', () => {
+    const v = evaluateBooking(input({ role: 'guest', isCertified: true, eq: { certificationRequired: true } }))
+    expect(v).toEqual({ kind: 'approval', why: 'guest_policy' })
+  })
+})
