@@ -1,0 +1,249 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------- better-auth managed (verify with: npx @better-auth/cli generate) ----------
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  role          String    @default("guest") // 'admin' | 'member' | 'guest'
+  banned        Boolean   @default(false)
+  banReason     String?
+  banExpires    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions       Session[]
+  accounts       Account[]
+  bookings       Booking[]          @relation("BookingUser")
+  certifications Certification[]    @relation("CertUser")
+  managed        EquipmentManager[]
+  notifications  Notification[]
+
+  @@map("user")
+}
+
+model Session {
+  id             String   @id
+  expiresAt      DateTime
+  token          String   @unique
+  ipAddress      String?
+  userAgent      String?
+  impersonatedBy String?
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("verification")
+}
+
+// ---------- LabHub domain ----------
+model Organization {
+  id            String  @id @default(cuid())
+  name          String
+  logoPath      String?
+  accentColor   String  @default("#0d9488")
+  timezone      String  @default("Asia/Singapore")
+  setupComplete Boolean @default(false)
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+}
+
+model Invitation {
+  id          String           @id @default(cuid())
+  email       String
+  role        String // 'admin' | 'member' | 'guest'
+  token       String           @unique
+  status      InvitationStatus @default(PENDING)
+  expiresAt   DateTime
+  invitedById String
+  createdAt   DateTime         @default(now())
+}
+
+enum EquipmentStatus {
+  ACTIVE
+  RETIRED
+}
+
+enum ApprovalPolicy {
+  NONE
+  GUESTS
+  ALL
+}
+
+model Equipment {
+  id                    String          @id @default(cuid())
+  name                  String
+  description           String          @default("")
+  location              String          @default("")
+  photoPath             String?
+  status                EquipmentStatus @default(ACTIVE)
+  advanceBookingDays    Int             @default(14)
+  maxDurationMinutes    Int             @default(480)
+  certificationRequired Boolean         @default(false)
+  approvalPolicy        ApprovalPolicy  @default(GUESTS)
+  allowRecurring        Boolean         @default(false)
+  createdAt             DateTime        @default(now())
+
+  bookings       Booking[]
+  certifications Certification[]
+  managers       EquipmentManager[]
+  maintenance    MaintenanceWindow[]
+  recurrences    RecurrenceRule[]
+}
+
+model Certification {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation("CertUser", fields: [userId], references: [id], onDelete: Cascade)
+  equipmentId String
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  grantedById String
+  grantedAt   DateTime  @default(now())
+
+  @@unique([userId, equipmentId])
+}
+
+model EquipmentManager {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  equipmentId String
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, equipmentId])
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  CANCELLED
+  EXPIRED
+}
+
+model Booking {
+  id               String          @id @default(cuid())
+  equipmentId      String
+  equipment        Equipment       @relation(fields: [equipmentId], references: [id])
+  userId           String
+  user             User            @relation("BookingUser", fields: [userId], references: [id])
+  startsAt         DateTime        @db.Timestamptz
+  endsAt           DateTime        @db.Timestamptz
+  purpose          String          @default("")
+  status           BookingStatus   @default(PENDING)
+  decidedById      String?
+  decidedAt        DateTime?
+  rejectionReason  String?
+  recurrenceRuleId String?
+  recurrenceRule   RecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id])
+  reminderSentAt   DateTime?
+  createdAt        DateTime        @default(now())
+
+  @@index([equipmentId, startsAt])
+  @@index([userId, startsAt])
+  @@index([status, startsAt])
+}
+
+model RecurrenceRule {
+  id              String    @id @default(cuid())
+  equipmentId     String
+  equipment       Equipment @relation(fields: [equipmentId], references: [id])
+  userId          String
+  daysOfWeek      Int[] // 0=Sunday .. 6=Saturday
+  startMinutes    Int // minutes from midnight, org timezone
+  durationMinutes Int
+  firstDate       String // 'yyyy-MM-dd' in org timezone
+  untilDate       String // 'yyyy-MM-dd' inclusive
+  createdAt       DateTime  @default(now())
+
+  bookings Booking[]
+}
+
+model MaintenanceWindow {
+  id          String    @id @default(cuid())
+  equipmentId String
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  startsAt    DateTime
+  endsAt      DateTime
+  reason      String
+  createdById String
+  createdAt   DateTime  @default(now())
+
+  @@index([equipmentId, startsAt])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  payload   Json
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}
+
+enum EmailStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+model EmailOutbox {
+  id            String      @id @default(cuid())
+  toEmail       String
+  subject       String
+  html          String
+  status        EmailStatus @default(QUEUED)
+  attempts      Int         @default(0)
+  nextAttemptAt DateTime    @default(now())
+  lastError     String?
+  sentAt        DateTime?
+  createdAt     DateTime    @default(now())
+
+  @@index([status, nextAttemptAt])
+}
