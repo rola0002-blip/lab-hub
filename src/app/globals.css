@@ -1,0 +1,14 @@
+@import 'tailwindcss';
+
+:root {
+  --accent: #0d9488; /* overridden per-org by (app) layout */
+}
+
+@theme inline {
+  --color-accent: var(--accent);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+}
+
+body {
+  @apply bg-white text-gray-900 antialiased;
+}
