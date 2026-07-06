@@ -33,7 +33,15 @@ export async function revokeInvitation(id: string): Promise<void> {
 
 export async function resendInvitation(id: string): Promise<void> {
   const token = newToken()
-  const inv = await prisma.invitation.update({ where: { id }, data: { token, status: 'PENDING', expiresAt: new Date(Date.now() + EXPIRY_MS) } })
+  // Guard on status so a REVOKED/ACCEPTED invitation is never resurrected to
+  // PENDING. updateMany reports 0 affected rows when the guard fails; bail
+  // without emailing. Preserves PENDING behaviour: new token, +7d expiry, re-email.
+  const { count } = await prisma.invitation.updateMany({
+    where: { id, status: 'PENDING' },
+    data: { token, expiresAt: new Date(Date.now() + EXPIRY_MS) },
+  })
+  if (count === 0) return
+  const inv = await prisma.invitation.findUniqueOrThrow({ where: { id } })
   await sendInvite(inv.email, token)
 }
 

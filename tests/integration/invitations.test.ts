@@ -44,4 +44,17 @@ describe('invitations', () => {
     expect(rotated.token).not.toBe(token)
     expect(await getPendingInvitation(rotated.token)).not.toBeNull()
   })
+
+  it('resend does not resurrect a REVOKED invitation and sends no email', async () => {
+    const admin = await makeUser({ role: 'admin' })
+    const { token } = await createInvitation('r@a.test', 'member', admin.id)
+    const inv = await prisma.invitation.findFirstOrThrow({ where: { token } })
+    await revokeInvitation(inv.id)
+    await prisma.emailOutbox.deleteMany() // drop the original invite email
+    await resendInvitation(inv.id)
+    const after = await prisma.invitation.findUniqueOrThrow({ where: { id: inv.id } })
+    expect(after.status).toBe('REVOKED') // not flipped back to PENDING
+    expect(after.token).toBe(token) // token unchanged (no rotation)
+    expect(await prisma.emailOutbox.count()).toBe(0) // no email enqueued
+  })
 })

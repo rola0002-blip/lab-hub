@@ -23,6 +23,13 @@ Requirements: Docker + Docker Compose. Optional: a Cloudflare Tunnel token for p
 ## Operations
 
 - **Backup:** `./scripts/backup.sh` → `backups/` (database dump + uploads).
+- **Restore:**
+  ```
+  gunzip -c backups/labhub-<stamp>.sql.gz | docker compose exec -T db psql -U labhub labhub
+  ```
+  Restore into a fresh database volume (or after `docker compose down -v`) and
+  restart the app; to restore uploads, untar the uploads archive and
+  `docker compose cp` the extracted folder to `app:/data/uploads`.
 - **Upgrade:** `git pull && docker compose --profile prod up -d --build`
   (migrations apply automatically on start).
 - **Dev:** `docker compose up -d db && npm install && npm run dev`

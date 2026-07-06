@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireUser } from '@/lib/session'
 import { requireSetup } from '@/lib/org'
 import { TZDate } from '@date-fns/tz'
+import { dayAnchor } from '@/lib/tz'
 import { addDays, format } from 'date-fns'
 
 const START_HOUR = 7, END_HOUR = 23, PX_PER_HOUR = 40
@@ -11,7 +12,7 @@ export default async function DayViewPage({ searchParams }: { searchParams: Prom
   await requireUser()
   const org = await requireSetup()
   const { date } = await searchParams
-  const anchor = date ? new TZDate(`${date}T00:00:00`, org.timezone) : new TZDate(new Date(), org.timezone)
+  const anchor = dayAnchor(date, org.timezone)
   const dayStart = new Date(+new TZDate(anchor.getFullYear(), anchor.getMonth(), anchor.getDate(), START_HOUR, 0, org.timezone))
   const dayEnd = new Date(+new TZDate(anchor.getFullYear(), anchor.getMonth(), anchor.getDate(), END_HOUR, 0, org.timezone))
 

@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import { requireUser } from '@/lib/session'
 import { requireSetup } from '@/lib/org'
 import { isManagerOf } from '@/features/equipment/service'
-import { TZDate } from '@date-fns/tz'
+import { dayAnchor } from '@/lib/tz'
 import { addDays, format, startOfWeek } from 'date-fns'
 import WeekCalendar, { type CalSlot } from '@/components/week-calendar'
 import MaintenanceDialogButton from './maintenance-dialog'
@@ -21,7 +21,7 @@ export default async function EquipmentPage({ params, searchParams }: {
   const eq = await prisma.equipment.findUnique({ where: { id: equipmentId } })
   if (!eq) notFound()
 
-  const anchor = week ? new TZDate(`${week}T00:00:00`, org.timezone) : new TZDate(new Date(), org.timezone)
+  const anchor = dayAnchor(week, org.timezone)
   const weekStart = startOfWeek(anchor, { weekStartsOn: 1 })
   const weekEnd = addDays(weekStart, 7)
 
