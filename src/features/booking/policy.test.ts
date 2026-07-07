@@ -97,3 +97,38 @@ describe('evaluateBooking — approval routing', () => {
     expect(v).toEqual({ kind: 'approval', why: 'guest_policy' })
   })
 })
+
+describe('evaluateBooking — edge-semantics pins', () => {
+  it('managers do NOT bypass the recurring-not-allowed rule', () => {
+    const v = evaluateBooking(input({ role: 'admin', isManager: true, recurring: true, eq: { allowRecurring: false } }))
+    expect(v).toMatchObject({ kind: 'blocked', reason: 'recurring_not_allowed' })
+  })
+  it('retired is checked before recurring, so retired wins', () => {
+    const v = evaluateBooking(input({ recurring: true, eq: { status: 'RETIRED', allowRecurring: false } }))
+    expect(v).toMatchObject({ kind: 'blocked', reason: 'retired' })
+  })
+  it('blocks maintenance that fully contains the slot', () => {
+    const maintenance = [{ startsAt: h(23), endsAt: h(29) }] // slot is h(24)-h(28)
+    expect(evaluateBooking(input({ maintenance }))).toMatchObject({ kind: 'blocked', reason: 'maintenance_overlap' })
+  })
+  it('blocks maintenance strictly contained inside the slot', () => {
+    const maintenance = [{ startsAt: h(25), endsAt: h(27) }]
+    expect(evaluateBooking(input({ maintenance }))).toMatchObject({ kind: 'blocked', reason: 'maintenance_overlap' })
+  })
+  it('does not block maintenance that touches the slot start (m.endsAt === slot.startsAt)', () => {
+    const maintenance = [{ startsAt: h(22), endsAt: h(24) }] // ends exactly at slot.startsAt
+    expect(evaluateBooking(input({ maintenance }))).toEqual({ kind: 'instant' })
+  })
+  it('advance window: a slot at exactly the horizon is allowed, +1ms is blocked', () => {
+    const horizon = NOW.getTime() + 14 * 86_400_000 // advanceBookingDays default is 14
+    const dur = 2 * 3_600_000
+    const atHorizon = { startsAt: new Date(horizon), endsAt: new Date(horizon + dur) }
+    expect(evaluateBooking(input({ slot: atHorizon }))).toEqual({ kind: 'instant' })
+    const overHorizon = { startsAt: new Date(horizon + 1), endsAt: new Date(horizon + 1 + dur) }
+    expect(evaluateBooking(input({ slot: overHorizon }))).toMatchObject({ kind: 'blocked', reason: 'advance_window' })
+  })
+  it('in_past seam: a slot starting at exactly now is allowed (check is strict <)', () => {
+    const v = evaluateBooking(input({ slot: { startsAt: NOW, endsAt: h(2) } }))
+    expect(v).toEqual({ kind: 'instant' })
+  })
+})
