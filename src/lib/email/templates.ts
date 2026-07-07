@@ -23,6 +23,9 @@ export function bookingDecidedEmail(orgName: string, equipmentName: string, when
 export function bookingCancelledMaintenanceEmail(orgName: string, equipmentName: string, when: string, reason: string): Tpl {
   return { subject: `[${orgName}] Booking cancelled (maintenance): ${equipmentName}`, html: wrap(`<p>Your booking of <strong>${esc(equipmentName)}</strong> (${esc(when)}) was cancelled for maintenance: ${esc(reason)}.</p>`) }
 }
+export function bookingCancelledUserDeactivatedEmail(orgName: string, userName: string, equipmentName: string, when: string): Tpl {
+  return { subject: `[${orgName}] Booking cancelled: ${userName} deactivated`, html: wrap(`<p><strong>${esc(userName)}</strong> was deactivated; their booking of <strong>${esc(equipmentName)}</strong> (${esc(when)}) was cancelled.</p>`) }
+}
 export function bookingReminderEmail(orgName: string, equipmentName: string, when: string): Tpl {
   return { subject: `[${orgName}] Upcoming booking: ${equipmentName}`, html: wrap(`<p>Reminder: you have <strong>${esc(equipmentName)}</strong> ${esc(when)}.</p>`) }
 }
