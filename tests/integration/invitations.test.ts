@@ -57,4 +57,46 @@ describe('invitations', () => {
     expect(after.token).toBe(token) // token unchanged (no rotation)
     expect(await prisma.emailOutbox.count()).toBe(0) // no email enqueued
   })
+
+  // DB-level pin: the partial unique index is the concurrency backstop. Two raw
+  // PENDING rows for the same address must be rejected by Postgres itself,
+  // independent of any service-layer pre-check. Deterministic red before the
+  // migration (both inserts succeed without the index).
+  it('DB rejects a second PENDING invitation for the same email', async () => {
+    const admin = await makeUser({ role: 'admin' })
+    const base = { role: 'member', invitedById: admin.id, status: 'PENDING' as const, expiresAt: new Date(Date.now() + 3_600_000) }
+    await prisma.invitation.create({ data: { email: 'dup@a.test', token: 'tok-1', ...base } })
+    await expect(
+      prisma.invitation.create({ data: { email: 'dup@a.test', token: 'tok-2', ...base } }),
+    ).rejects.toThrow()
+  })
+
+  it('concurrent createInvitation for the same address yields exactly one PENDING row', async () => {
+    const admin = await makeUser({ role: 'admin' })
+    const results = await Promise.allSettled([
+      createInvitation('race@a.test', 'member', admin.id),
+      createInvitation('race@a.test', 'member', admin.id),
+    ])
+    const pending = await prisma.invitation.findMany({ where: { email: 'race@a.test', status: 'PENDING' } })
+    expect(pending).toHaveLength(1) // index makes the second insert lose
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
+    for (const r of results) {
+      if (r.status === 'rejected') expect((r.reason as Error).message).toBe('already_exists')
+    }
+  })
+
+  it('re-invites after the pending invitation has expired, leaving one PENDING row', async () => {
+    const admin = await makeUser({ role: 'admin' })
+    const { token: first } = await createInvitation('again@a.test', 'member', admin.id)
+    const inv = await prisma.invitation.findFirstOrThrow({ where: { token: first } })
+    // Force the pending invite into the past; the row keeps status='PENDING'.
+    await prisma.invitation.update({ where: { id: inv.id }, data: { expiresAt: new Date(Date.now() - 1) } })
+    const { token: second } = await createInvitation('again@a.test', 'member', admin.id)
+    expect(second).not.toBe(first)
+    const pending = await prisma.invitation.findMany({ where: { email: 'again@a.test', status: 'PENDING' } })
+    expect(pending).toHaveLength(1) // exactly one live PENDING row
+    expect(pending[0].token).toBe(second)
+    const old = await prisma.invitation.findUniqueOrThrow({ where: { id: inv.id } })
+    expect(old.status).toBe('REVOKED') // the expired row was revoked, not left dangling
+  })
 })
