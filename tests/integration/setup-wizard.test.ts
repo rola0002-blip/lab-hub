@@ -26,4 +26,18 @@ describe('setup wizard', () => {
     expect(r.ok).toBe(false)
     expect(await prisma.user.count()).toBe(1)
   })
+
+  it('serializes concurrent first-runs to a single Organization row', async () => {
+    // Five simultaneous first-run submissions. Without the advisory-lock guard each
+    // racer's findFirst returns null and each creates its own Organization row,
+    // breaking the "One Organization row" invariant. The lock must collapse them to
+    // exactly one row. (admin-user creation is outside the lock — accepted residual.)
+    const racers = Array.from({ length: 5 }, (_, i) =>
+      completeSetup({ ...input, adminEmail: `admin${i}@lab.test` }),
+    )
+    await Promise.allSettled(racers)
+    expect(await prisma.organization.count()).toBe(1)
+    const org = await prisma.organization.findFirstOrThrow()
+    expect(org.setupComplete).toBe(true)
+  })
 })
