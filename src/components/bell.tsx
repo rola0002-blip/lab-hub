@@ -1,5 +1,6 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEvents } from './use-events'
 
 type Item = { id: string; type: string; payload: Record<string, string>; readAt: string | null; createdAt: string }
 
@@ -10,6 +11,9 @@ const LABEL: Record<string, string> = {
   booking_reminder: 'Upcoming booking',
   booking_expired: 'Booking request expired',
   booking_cancelled: 'Booking cancelled',
+  message_mention: 'You were mentioned',
+  message_dm: 'New direct message',
+  channel_added: 'Added to a channel',
 }
 
 export default function Bell() {
@@ -35,6 +39,8 @@ export default function Bell() {
     const t = setInterval(load, 30_000) // spec: 30 s polling
     return () => clearInterval(t)
   }, [load])
+
+  useEvents((e) => { if (e.t === 'notif' || e.t === 'reconnect') void load() })
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
