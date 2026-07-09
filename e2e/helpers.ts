@@ -13,7 +13,9 @@ export const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: T
 
 export async function wipe() {
   await db.$executeRawUnsafe(`
-    TRUNCATE TABLE "Notification","EmailOutbox","Booking","RecurrenceRule",
+    TRUNCATE TABLE "Conversation","ConversationMember","Message","Reaction",
+      "ChatAttachment","PushSubscription",
+      "Notification","EmailOutbox","Booking","RecurrenceRule",
       "MaintenanceWindow","Certification","EquipmentManager","Equipment",
       "Invitation","Organization","session","account","verification","user" CASCADE
   `)
@@ -42,4 +44,26 @@ export async function signIn(page: Page, email: string, password: string) {
 export async function latestInviteToken(email: string): Promise<string> {
   const inv = await db.invitation.findFirstOrThrow({ where: { email }, orderBy: { createdAt: 'desc' } })
   return inv.token
+}
+
+// Invite a member/guest from the admin's People page and return the accept-invite token.
+// (The brief's helper signature carried a `name` argument; the invite form only needs
+// email + role, so the display name is supplied later at acceptInvite time instead.)
+export async function createMemberViaInvite(page: Page, email: string, role: 'member' | 'guest'): Promise<string> {
+  await page.goto('/people')
+  await page.fill('input[name=email]', email)
+  await page.selectOption('select[name=role]', role)
+  await page.click('button:has-text("Invite")')
+  await page.getByText('Invitation sent.').waitFor()
+  return latestInviteToken(email)
+}
+
+// Accept an invite in a fresh browser context: creates the account and lands on /dashboard,
+// already signed in as the new member (mirrors journeys.spec.ts's accept flow).
+export async function acceptInvite(page: Page, token: string, name: string, password: string): Promise<void> {
+  await page.goto(`/accept-invite/${token}`)
+  await page.fill('input[name=name]', name)
+  await page.fill('input[name=password]', password)
+  await page.click('button:has-text("Create account")')
+  await page.waitForURL('**/dashboard')
 }
