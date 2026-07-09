@@ -16,6 +16,16 @@ const eslintConfig = defineConfig([
     "coverage/**",
     ".vitest/**",
   ]),
+  // Honor the `_`-prefix convention for intentionally-unused bindings, already
+  // used across the codebase (e.g. `_req` in route handlers, `_args` in stubs).
+  {
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

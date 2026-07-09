@@ -1,4 +1,6 @@
-const USER_TOKEN = /<@([a-z0-9]+)>/g
+// User ids are opaque (better-auth / cuid / UUID), so the token body must accept
+// the full id-safe alphabet — letters, digits, hyphen, underscore — not just [a-z0-9].
+const USER_TOKEN = /<@([a-zA-Z0-9_-]+)>/g
 const CHANNEL_TOKEN = '<!channel>'
 
 export function parseMentions(body: string): { userIds: string[]; channel: boolean } {
