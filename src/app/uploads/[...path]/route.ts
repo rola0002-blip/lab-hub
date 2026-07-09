@@ -21,7 +21,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
     return new Response('Not found', { status: 404 })
   }
 
-  const isChat = path[0] === 'chat'
+  const isChat = path[0].toLowerCase() === 'chat'
 
   // Chat attachments are chat reads of potentially confidential lab data, so
   // they go through the ConversationMember gate like every other chat read.

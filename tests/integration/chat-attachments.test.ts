@@ -79,6 +79,27 @@ describe('attachment serving', () => {
     expect(body2.byteLength).not.toBe(64)
   })
 
+  it('case-variant first segment cannot bypass the membership gate on a case-insensitive FS (denied, no bytes)', async () => {
+    const { path } = await seedChatAttachment()
+    const basename = path.split('/').pop()! // '<uuid>.pdf' — the stored chat file
+
+    // On a case-insensitive filesystem (macOS APFS dev), 'Chat/<uuid>' case-folds
+    // to the real lowercase 'chat/<uuid>' inode, so readUpload serves the bytes.
+    // The isChat gate must therefore match case-insensitively; otherwise 'Chat'
+    // is treated as a public asset and the confidential file is served to an
+    // unauthenticated caller with a public cache header. An unauthenticated
+    // caller must be DENIED (401 here, or 404 for an authed exact-case miss),
+    // never a 200 with the file bytes.
+    mockUser.current = null
+    const variantParts = ['Chat', basename]
+    const res = await reqFor('/uploads/' + variantParts.join('/'), variantParts)
+    expect(res.status).not.toBe(200)
+    expect(res.headers.get('Cache-Control')).not.toBe('public, max-age=86400')
+    expect(res.headers.get('Content-Type')).not.toBe('application/pdf')
+    const body = new Uint8Array(await res.arrayBuffer())
+    expect(body.byteLength).not.toBe(64) // the seeded file is exactly 64 bytes
+  })
+
   it('SP1 public assets (logo/equipment) stay public and unauthenticated', async () => {
     const logoPath = await saveUpload(new File([new Uint8Array(64)], 'logo.png', { type: 'image/png' }), 'logo')
     mockUser.current = null // signed out
