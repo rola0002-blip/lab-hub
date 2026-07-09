@@ -49,6 +49,11 @@ export default function MessagePane({ conversationId, conversationType, channelN
   }, [])
 
   const upsert = useCallback((msg: Msg) => {
+    // Only root-level messages live in this list. Replies belong to the thread
+    // panel; a reply's arrival is handled in the SSE handler (a genuinely new
+    // reply bumps the root's replyCount there — edits/reactions/deletes of an
+    // existing reply must not touch it), so ignore any reply here.
+    if (msg.parentId) return
     setMessages((prev) => {
       // A real message replaces the sender's optimistic temp (matched by author+body).
       if (!msg.id.startsWith('tmp-')) {
@@ -57,10 +62,6 @@ export default function MessagePane({ conversationId, conversationType, channelN
       }
       const i = prev.findIndex((m) => m.id === msg.id)
       if (i >= 0) return [...prev.slice(0, i), msg, ...prev.slice(i + 1)]
-      if (msg.parentId) {
-        // thread reply: bump the root's replyCount instead of appending to the main list
-        return prev.map((m) => (m.id === msg.parentId ? { ...m, replyCount: m.replyCount + 1 } : m))
-      }
       return [...prev, msg]
     })
   }, [])
@@ -69,8 +70,18 @@ export default function MessagePane({ conversationId, conversationType, channelN
     if (e.t === 'reconnect') { void loadLatest(); return }
     if (!('cid' in e) || e.cid !== conversationId) return
     if (e.t === 'msg' || e.t === 'msg_edit' || e.t === 'msg_del' || e.t === 'rx') {
+      const isNew = e.t === 'msg'
       void fetch(`/api/chat/messages/${e.mid}`).then(async (r) => {
-        if (r.ok) { upsert((await r.json()).message); markRead() }
+        if (!r.ok) return
+        const m: Msg = (await r.json()).message
+        if (m.parentId) {
+          // A reply never appears in the root list. Only a brand-new reply bumps
+          // the root's replyCount; edits, reactions and deletes of an existing
+          // reply must not inflate it.
+          if (isNew) setMessages((prev) => prev.map((x) => (x.id === m.parentId ? { ...x, replyCount: x.replyCount + 1 } : x)))
+          return
+        }
+        upsert(m); markRead()
       })
     }
     if (e.t === 'typing') {
