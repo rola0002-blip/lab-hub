@@ -1,6 +1,7 @@
 import Image from 'next/image'
 import { requireSetup } from '@/lib/org'
 import { requireUser } from '@/lib/session'
+import { totalUnread } from '@/features/chat/conversation-service'
 import Sidebar, { type NavItem } from '@/components/sidebar'
 import Bell from '@/components/bell'
 import SignOutButton from '@/components/sign-out'
@@ -8,9 +9,11 @@ import SignOutButton from '@/components/sign-out'
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const org = await requireSetup()
   const user = await requireUser()
+  const chatUnread = await totalUnread(user.id)
 
   const items: NavItem[] = [
     { href: '/dashboard', label: 'Dashboard' },
+    { href: '/chat', label: chatUnread > 0 ? `Chat (${chatUnread > 99 ? '99+' : chatUnread})` : 'Chat' },
     { href: '/booking', label: 'Booking' },
     { href: '/bookings', label: 'My bookings' },
   ]
