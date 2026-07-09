@@ -26,10 +26,37 @@ describe('buildImportPlan', () => {
   const plan = buildImportPlan(readFixture())
   const byTs = (ts: string) => plan.messages.find((m) => m.slackTs === ts)!
 
-  it('imports 5 messages and skips subtyped join/leave events', () => {
-    expect(plan.messages).toHaveLength(5) // 3 general + 1 file message + 1 secret
-    // the channel_join message (ts .000350) is dropped
+  it('imports 8 messages and skips other subtypes (join/leave/bot)', () => {
+    expect(plan.messages).toHaveLength(8) // 7 general + 1 secret
+    // the channel_join message (ts .000350) is dropped, unlike thread_broadcast/file_share
     expect(plan.messages.some((m) => m.slackTs === '1705300250.000350')).toBe(false)
+  })
+
+  it('imports thread_broadcast as a reply linked to the thread root', () => {
+    expect(byTs('1705300400.000600')).toMatchObject({
+      authorSlackId: 'U1',
+      threadParentTs: '1705300100.000200',
+      body: 'broadcasting to channel',
+    })
+  })
+
+  it('imports file_share with its text plus a 📎 file line', () => {
+    expect(byTs('1705300500.000700').body).toBe('sharing a file\n📎 paper.pdf: https://files.slack.com/y')
+  })
+
+  it('rosters a ghost author absent from users.json as an Unknown placeholder', () => {
+    // U9 authors a message and reacts, but never appears in users.json.
+    expect(plan.placeholderUsers).toContainEqual({
+      slackId: 'U9',
+      name: 'Unknown (U9)',
+      email: 'slack-U9@import.invalid',
+    })
+    // its message survives, attributed to U9 rather than being silently dropped.
+    expect(byTs('1705300600.000800')).toMatchObject({ authorSlackId: 'U9', body: 'ghost speaks' })
+  })
+
+  it('keeps a reaction by a ghost reactor so apply can resolve it', () => {
+    expect(byTs('1705300100.000200').reactions).toEqual([{ emoji: '❤️', userSlackIds: ['U9'] }])
   })
 
   it('rewrites <@U2> mentions to plain @real_name text', () => {

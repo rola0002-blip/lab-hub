@@ -7,6 +7,10 @@ export type ApplyResult = {
   channels: number
   messages: number
   skipped: number
+  // Plan-messages that could not be applied (e.g. an unresolvable conversation).
+  // With ghost authors now rostered this is 0 in normal runs, but it is kept as
+  // the reconciliation safety net: planTotal = messages + skipped + dropped.
+  dropped: number
   reactions: number
 }
 
@@ -92,6 +96,8 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyResult> {
     })
     .filter((r): r is NonNullable<typeof r> => r !== null)
 
+  const dropped = plan.messages.length - rows.length
+
   const inserted = rows.length
     ? await prisma.message.createMany({ data: rows, skipDuplicates: true })
     : { count: 0 }
@@ -145,5 +151,5 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyResult> {
     ? (await prisma.reaction.createMany({ data: reactionRows, skipDuplicates: true })).count
     : 0
 
-  return { matched, placeholders, channels: plan.channels.length, messages, skipped, reactions }
+  return { matched, placeholders, channels: plan.channels.length, messages, skipped, dropped, reactions }
 }

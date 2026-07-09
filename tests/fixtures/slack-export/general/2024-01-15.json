@@ -1,7 +1,10 @@
 [
   { "type": "message", "user": "U1", "text": "hello <@U2> team", "ts": "1705300000.000100" },
-  { "type": "message", "user": "U2", "text": "starting a thread", "ts": "1705300100.000200", "thread_ts": "1705300100.000200" },
+  { "type": "message", "user": "U2", "text": "starting a thread", "ts": "1705300100.000200", "thread_ts": "1705300100.000200", "reactions": [ { "name": "heart", "users": ["U9"] } ] },
   { "type": "message", "user": "U1", "text": "replying here", "ts": "1705300200.000300", "thread_ts": "1705300100.000200", "reactions": [ { "name": "+1", "users": ["U2"] } ] },
   { "type": "message", "subtype": "channel_join", "user": "U3", "text": "has joined the channel", "ts": "1705300250.000350" },
-  { "type": "message", "user": "U3", "text": "", "ts": "1705300300.000400", "files": [ { "name": "data.csv", "url_private": "https://files.slack.com/x" } ] }
+  { "type": "message", "user": "U3", "text": "", "ts": "1705300300.000400", "files": [ { "name": "data.csv", "url_private": "https://files.slack.com/x" } ] },
+  { "type": "message", "subtype": "thread_broadcast", "user": "U1", "text": "broadcasting to channel", "ts": "1705300400.000600", "thread_ts": "1705300100.000200" },
+  { "type": "message", "subtype": "file_share", "user": "U2", "text": "sharing a file", "ts": "1705300500.000700", "files": [ { "name": "paper.pdf", "url_private": "https://files.slack.com/y" } ] },
+  { "type": "message", "user": "U9", "text": "ghost speaks", "ts": "1705300600.000800" }
 ]

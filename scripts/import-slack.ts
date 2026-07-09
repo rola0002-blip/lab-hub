@@ -68,18 +68,25 @@ function readExport(dir: string) {
   return { users, channels, messagesByChannel }
 }
 
-function printSummary(r: ApplyResult) {
+function printSummary(r: ApplyResult, planTotal: number) {
   const rows: [string, number][] = [
     ['users matched', r.matched],
     ['placeholders created', r.placeholders],
     ['channels', r.channels],
+    ['plan messages (total)', planTotal],
     ['messages inserted', r.messages],
     ['messages skipped (dupes)', r.skipped],
+    ['messages dropped', r.dropped],
     ['reactions', r.reactions],
   ]
   console.log('\nSlack import complete')
   console.log('─'.repeat(36))
   for (const [label, n] of rows) console.log(`${label.padEnd(27)}${n}`)
+  // Reconciliation identity so an operator can verify nothing vanished at cutover.
+  const accounted = r.messages + r.skipped + r.dropped
+  console.log('─'.repeat(36))
+  console.log(`reconcile  ${r.messages} + ${r.skipped} + ${r.dropped} = ${accounted} (plan ${planTotal})`)
+  console.log(accounted === planTotal ? 'planTotal reconciles ✓' : 'planTotal MISMATCH ✗')
   console.log('')
 }
 
@@ -101,7 +108,7 @@ async function main() {
   const { prisma } = await import('../src/lib/db')
 
   try {
-    printSummary(await applyImportPlan(plan))
+    printSummary(await applyImportPlan(plan), plan.messages.length)
   } finally {
     await prisma.$disconnect()
   }

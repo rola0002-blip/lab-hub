@@ -59,6 +59,12 @@ export const EMOJI: Record<string, string> = {
 
 const displayName = (u: SlackUser) => u.profile?.real_name || u.name
 
+// Subtypes that still carry real user content and must be imported:
+//   thread_broadcast — a thread reply also sent to the channel (keeps thread linkage)
+//   file_share       — pre-2019 file posts (text + files[], like a normal file message)
+// Every other subtype (channel_join/leave, bot_message, …) is skipped.
+const IMPORTED_SUBTYPES = new Set(['thread_broadcast', 'file_share'])
+
 // Rewrite Slack `<@U123>` / `<@U123|label>` mentions to plain `@name` text.
 // Keeping history readable without minting fake LabHub mention tokens/notifications.
 function rewriteMentions(text: string, nameById: Map<string, string>): string {
@@ -70,26 +76,31 @@ export function buildImportPlan(input: {
   channels: SlackChannel[]
   messagesByChannel: Record<string, SlackMsg[]>
 }): ImportPlan {
+  const knownIds = new Set(input.users.map((u) => u.id))
   const nameById = new Map(input.users.map((u) => [u.id, displayName(u)]))
 
-  const placeholderUsers = input.users.map((u) => ({
-    slackId: u.id,
-    name: displayName(u),
-    email: u.profile?.email ?? `slack-${u.id}@import.invalid`,
-  }))
+  // Every slack id referenced by imported content must be rostered so apply can
+  // always resolve it — otherwise ghost authors/reactors (ids absent from
+  // users.json) would resolve to undefined and be silently dropped.
+  const referenced = new Set<string>()
 
-  const channels = input.channels.map((c) => ({
-    slackChannelId: c.id,
-    name: c.name,
-    isPrivate: !!c.is_private,
-    topic: c.topic?.value ?? '',
-    memberSlackIds: c.members ?? [],
-  }))
+  const channels = input.channels.map((c) => {
+    const memberSlackIds = c.members ?? []
+    for (const id of memberSlackIds) referenced.add(id)
+    return {
+      slackChannelId: c.id,
+      name: c.name,
+      isPrivate: !!c.is_private,
+      topic: c.topic?.value ?? '',
+      memberSlackIds,
+    }
+  })
 
   const messages: ImportPlan['messages'] = []
   for (const c of input.channels) {
     for (const m of input.messagesByChannel[c.id] ?? []) {
-      if (m.type !== 'message' || m.subtype || !m.user) continue // skip joins/leaves/bots
+      // Import no-subtype messages plus thread_broadcast/file_share; skip the rest.
+      if (m.type !== 'message' || (m.subtype && !IMPORTED_SUBTYPES.has(m.subtype)) || !m.user) continue
       const raw = m.text ?? ''
       const files = m.files ?? []
       if (!raw.trim() && files.length === 0) continue // empty with no files
@@ -103,6 +114,9 @@ export function buildImportPlan(input: {
         .filter((r) => EMOJI[r.name])
         .map((r) => ({ emoji: EMOJI[r.name], userSlackIds: r.users }))
 
+      referenced.add(m.user)
+      for (const r of reactions) for (const id of r.userSlackIds) referenced.add(id)
+
       messages.push({
         slackChannelId: c.id,
         slackTs: m.ts,
@@ -113,6 +127,18 @@ export function buildImportPlan(input: {
         reactions,
       })
     }
+  }
+
+  // Roster: users.json entries first, then a placeholder for every referenced id
+  // that users.json never listed (ghost authors/reactors/members).
+  const placeholderUsers = input.users.map((u) => ({
+    slackId: u.id,
+    name: displayName(u),
+    email: u.profile?.email ?? `slack-${u.id}@import.invalid`,
+  }))
+  for (const id of referenced) {
+    if (knownIds.has(id)) continue
+    placeholderUsers.push({ slackId: id, name: `Unknown (${id})`, email: `slack-${id}@import.invalid` })
   }
 
   return { placeholderUsers, channels, messages }

@@ -35,18 +35,26 @@ describe('applyImportPlan (Slack import)', () => {
     const plan = buildImportPlan(readFixture())
     const result = await applyImportPlan(plan)
 
-    expect(result).toMatchObject({ matched: 1, placeholders: 2, channels: 2, messages: 5, skipped: 0 })
-    expect(result.reactions).toBe(1)
+    // 8 messages (incl. thread_broadcast + file_share), 3 placeholders (U2, U3, ghost U9).
+    expect(result).toMatchObject({ matched: 1, placeholders: 3, channels: 2, messages: 8, skipped: 0, dropped: 0 })
+    expect(result.reactions).toBe(2)
 
-    // Matched user's messages (2 in general + 1 in secret) attach to the real account.
+    // Matched user's messages (hello + reply + thread_broadcast in general, 1 in secret) attach to the real account.
     const piMsgs = await prisma.message.findMany({ where: { userId: pi.id } })
-    expect(piMsgs).toHaveLength(3)
+    expect(piMsgs).toHaveLength(4)
 
     // Placeholders created banned as guests.
     const alumni = await prisma.user.findUnique({ where: { email: 'left@lab.test' } })
     const visitor = await prisma.user.findUnique({ where: { email: 'slack-u3@import.invalid' } })
     expect(alumni).toMatchObject({ banned: true, role: 'guest', emailVerified: false })
     expect(visitor).toMatchObject({ banned: true, role: 'guest' })
+
+    // Ghost author U9 (never in users.json) gets a banned "Unknown (U9)" placeholder,
+    // and its message imports attributed to it rather than vanishing.
+    const ghost = await prisma.user.findUnique({ where: { email: 'slack-u9@import.invalid' } })
+    expect(ghost).toMatchObject({ name: 'Unknown (U9)', banned: true, role: 'guest' })
+    const ghostMsg = await prisma.message.findFirst({ where: { userId: ghost!.id } })
+    expect(ghostMsg!.body).toBe('ghost speaks')
 
     // Channel membership: general has all three; secret is private with only the matched member.
     const general = await prisma.conversation.findUnique({
@@ -79,8 +87,9 @@ describe('applyImportPlan (Slack import)', () => {
     // Idempotency: a second apply of the identical plan inserts zero new messages.
     const rerun = await applyImportPlan(plan)
     expect(rerun.messages).toBe(0)
-    expect(rerun.skipped).toBe(5)
-    expect(await prisma.message.count()).toBe(5)
-    expect(await prisma.reaction.count()).toBe(1)
+    expect(rerun.skipped).toBe(8)
+    expect(rerun.dropped).toBe(0)
+    expect(await prisma.message.count()).toBe(8)
+    expect(await prisma.reaction.count()).toBe(2)
   })
 })
