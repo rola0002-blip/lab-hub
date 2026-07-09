@@ -84,7 +84,8 @@ install dev dependencies, and point `DATABASE_URL` at the production database �
 compose `db` service publishes it on `localhost:5432`:
 
 ```bash
-npm ci   # installs dev dependencies, including the tsx the importer runs under
+npm ci                # installs dev dependencies, including the tsx the importer runs under
+npx prisma generate   # a fresh checkout has no generated Prisma client (no postinstall hook)
 
 # Use the same POSTGRES_PASSWORD you set for the stack (defaults to `labhub`).
 DATABASE_URL='postgresql://labhub:<POSTGRES_PASSWORD>@localhost:5432/labhub' \
@@ -210,6 +211,17 @@ DELETE FROM "Message" WHERE "slackTs" IS NOT NULL;
 --    (and to any messages still in them, also ON DELETE CASCADE).
 DELETE FROM "Conversation" WHERE "slackChannelId" IS NOT NULL;
 ```
+
+> **On-disk attachment files are not removed by these SQL deletes.** In normal
+> app use, deleting a message unlinks its attachment files, but the cascades
+> above only drop `ChatAttachment` *rows* and leave the bytes on disk. Imported
+> Slack messages carry no real attachment files (Slack files import as a text
+> line), so a pure import rollback orphans nothing. But if native messages with
+> uploads were posted into an imported channel before you rolled back, their
+> files are now orphaned under the uploads directory (`$UPLOADS_DIR/chat`,
+> default `data/uploads/chat`). Reconcile that directory against the surviving
+> paths — `SELECT "path" FROM "ChatAttachment";` — and delete any file with no
+> matching row.
 
 Optionally remove the banned placeholder accounts the import created (safe only
 **after** step 1, because `Message.userId` is `ON DELETE RESTRICT` — imported
