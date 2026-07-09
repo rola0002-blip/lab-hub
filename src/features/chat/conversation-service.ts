@@ -30,6 +30,7 @@ export async function createChannel(args: { name: string; topic?: string; isPriv
       members: { create: { userId: args.createdById } },
     },
   })
+  await emitEvent({ t: 'member', cid: convo.id, uid: args.createdById }) // creator's live list picks up the new channel
   return { ok: true, conversationId: convo.id }
 }
 
@@ -46,6 +47,7 @@ export async function getOrCreateDm(args: { userIds: string[]; byId: string }): 
     const convo = await prisma.conversation.create({
       data: { type: 'DM', createdById: args.byId, dmKey, members: { create: ids.map((userId) => ({ userId })) } },
     })
+    for (const userId of ids) await emitEvent({ t: 'member', cid: convo.id, uid: userId }) // only on CREATE; every participant's live list updates
     return { ok: true, conversationId: convo.id }
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {

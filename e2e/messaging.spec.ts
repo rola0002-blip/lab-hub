@@ -17,17 +17,14 @@ async function newPage(browser: Browser): Promise<Page> {
 //
 // SSE subscription model (verified against the running app — see task-15-report.md):
 //  - A live SSE subscription only receives `msg`/`rx`/… events for conversations in its
-//    `conversationIds` snapshot, which is reloaded ONLY on a `member` event.
-//  - Channel `join`/`addMembers` emit `member`, so a JOINER's subscription self-updates and
-//    receives live messages immediately. But `createChannel` and `getOrCreateDm` emit NO
-//    `member` event, so a CREATOR's (and both DM participants') pre-existing subscription does
-//    not include the new conversation until a fresh page load. These journeys therefore
-//    navigate (full load) into a freshly-created conversation to establish the live
-//    subscription, then assert genuine live SSE delivery (no further reload) across it.
-//  - The notification Bell has no live `notif` SSE push wired (`notify()` writes the row but
-//    never emits `{ t: 'notif' }`); the badge updates via the Bell's own 30 s poll. Journey 3
-//    asserts the badge with a poll-tolerant timeout. Both findings are documented, not patched
-//    (app-behavior changes are out of scope for this task).
+//    `conversationIds` snapshot, which is reloaded on a `member` event.
+//  - `join`/`addMembers`/`createChannel`/`getOrCreateDm` all emit `member`, so a participant's
+//    pre-existing subscription self-updates and a freshly-created conversation appears live in
+//    their list (journey 6 asserts this for a DM with NO navigation by the recipient). The
+//    channel-create journeys still navigate into the new channel, then assert genuine live SSE
+//    delivery (no further reload) across it.
+//  - `notify()` emits `{ t: 'notif' }`, so the Bell badge upgrades to instant: journey 3 asserts
+//    the badge within a few seconds, proving the live SSE push rather than the Bell's 30 s poll.
 
 test.describe.configure({ mode: 'serial' })
 test.beforeEach(async () => { await wipe() })
@@ -152,9 +149,9 @@ test('3: mention → bell notification', async ({ browser }) => {
   await page.getByRole('button', { name: 'Bob Member' }).click()
   await box.press('Enter')
 
-  // The bell badge reflects the mention. NOTE: the app emits no live `notif` SSE event, so the
-  // badge arrives via the Bell's 30 s poll (verified ~30 s) — hence the poll-tolerant timeout.
-  await expect(bell).toContainText(/[1-9]/, { timeout: 40_000 })
+  // The bell badge reflects the mention live: notify() emits `{ t: 'notif' }`, so the Bell
+  // reloads over SSE within seconds. The tight timeout proves the live path, not the 30 s poll.
+  await expect(bell).toContainText(/[1-9]/, { timeout: 5_000 })
   await bell.click()
   await expect(pageB.getByText('You were mentioned')).toBeVisible()
 
@@ -246,6 +243,10 @@ test('6: DM with unread badge', async ({ browser }) => {
   const page = await admin(browser)
   const pageB = await joinAs(page, browser, BOB, 'member')
 
+  // A sits on the chat home with a live SSE subscription BEFORE the DM exists.
+  await page.goto('/chat')
+  await expect(page.getByRole('heading', { name: 'Channels' })).toBeVisible()
+
   // B starts a DM to A ("Roland") and sends the first message
   await pageB.goto('/chat')
   await pageB.getByRole('button', { name: 'New direct message' }).click()
@@ -255,8 +256,8 @@ test('6: DM with unread badge', async ({ browser }) => {
   const dmId = new URL(pageB.url()).pathname.split('/').pop()!
   await send(pageB, 'dm hello')
 
-  // A opens chat: the DM shows with an unread badge of 1
-  await page.goto('/chat')
+  // The DM appears live in A's list (getOrCreateDm's member event → store refresh) with an
+  // unread badge of 1 — A does NOT navigate; this proves the live conversation-creation seam.
   const dmRow = page.getByRole('link', { name: /Bob Member/ })
   await expect(dmRow).toBeVisible()
   await expect(dmRow).toContainText('1')

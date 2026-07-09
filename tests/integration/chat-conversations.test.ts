@@ -1,11 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { prisma } from '@/lib/db'
 import { resetDb, makeUser, makeChannel, makeMember, makeMessage } from '../factories'
-import { _resetForTests } from '@/lib/events'
+import { subscribe, _resetForTests, type LabEvent } from '@/lib/events'
 import {
   createChannel, getOrCreateDm, addMembers, removeMember, joinPublicChannel,
   archiveChannel, isMember, canManage, accessibleConversationIds, listConversations, listPublicChannels,
 } from '@/features/chat/conversation-service'
+
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+function collector() {
+  const events: LabEvent[] = []
+  return { events, send: (e: LabEvent) => events.push(e) }
+}
 
 describe('conversation service', () => {
   beforeEach(resetDb)
@@ -80,6 +86,36 @@ describe('conversation service', () => {
     expect((await getOrCreateDm({ userIds: [guest.id, banned.id], byId: guest.id })).ok).toBe(false)
     const nine = [guest.id, member.id, ...(await Promise.all(Array.from({ length: 7 }, () => makeUser()))).map((u) => u.id)]
     expect((await getOrCreateDm({ userIds: nine, byId: guest.id })).ok).toBe(false) // 9 > 8
+  })
+
+  it('createChannel emits a live member event for the creator', async () => {
+    const creator = await makeUser()
+    const c = collector()
+    subscribe({ userId: creator.id, conversationIds: new Set(), reload: async () => new Set(), send: c.send })
+    await wait(300) // listener connects
+    const ch = await createChannel({ name: 'live', isPrivate: false, createdById: creator.id })
+    await wait(300)
+    expect(ch.ok).toBe(true)
+    if (!ch.ok) return
+    expect(c.events).toContainEqual({ t: 'member', cid: ch.conversationId, uid: creator.id })
+  })
+
+  it('getOrCreateDm emits member to a participant on CREATE, but not on the dedupe-return', async () => {
+    const a = await makeUser()
+    const b = await makeUser()
+    const c = collector() // participant a's live subscription
+    subscribe({ userId: a.id, conversationIds: new Set(), reload: async () => new Set(), send: c.send })
+    await wait(300)
+    const d1 = await getOrCreateDm({ userIds: [a.id, b.id], byId: a.id }) // CREATE
+    await wait(300)
+    expect(d1.ok).toBe(true)
+    if (!d1.ok) return
+    expect(c.events).toContainEqual({ t: 'member', cid: d1.conversationId, uid: a.id })
+    const memberCountAfterCreate = c.events.filter((e) => e.t === 'member').length
+    const d2 = await getOrCreateDm({ userIds: [b.id, a.id], byId: b.id }) // dedupe-return, no emit
+    await wait(300)
+    expect(d2.ok && (d2 as { conversationId: string }).conversationId === d1.conversationId).toBe(true)
+    expect(c.events.filter((e) => e.t === 'member').length).toBe(memberCountAfterCreate)
   })
 
   it('listConversations returns unread and mention counts from lastReadAt', async () => {
