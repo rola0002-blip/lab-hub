@@ -1,5 +1,5 @@
 'use client'
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createMaintenanceAction } from './maintenance-actions'
 
@@ -10,6 +10,14 @@ export default function MaintenanceDialogButton({ equipmentId }: { equipmentId: 
   const [error, setError] = useState<string | null>(null)
   const [conflicts, setConflicts] = useState<Array<{ id: string; when: string; userName: string }>>([])
   const [form, setForm] = useState({ start: '', end: '', reason: '' })
+
+  // Escape closes the open dialog (matches the Close button / backdrop click).
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open])
 
   function submit(confirmCancel: boolean) {
     start(async () => {

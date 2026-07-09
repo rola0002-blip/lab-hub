@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { TZDate } from '@date-fns/tz'
 import { addDays, format } from 'date-fns'
 import BookingDialog from './booking-dialog'
@@ -21,11 +21,11 @@ export default function WeekCalendar({ equipmentId, timezone, weekStartISO, slot
   const [drag, setDrag] = useState<{ day: number; from: number; to: number } | null>(null)
   const [dialog, setDialog] = useState<{ start: Date; end: Date } | null>(null)
 
-  function rowToDate(day: number, row: number): Date {
+  const rowToDate = useCallback((day: number, row: number): Date => {
     const d = addDays(weekStart, day)
     const t = new TZDate(d.getFullYear(), d.getMonth(), d.getDate(), START_HOUR + Math.floor(row / 2), (row % 2) * 30, timezone)
     return new Date(+t)
-  }
+  }, [weekStart, timezone])
 
   function slotRect(s: CalSlot, day: number): { top: number; height: number } | null {
     const dayStart = rowToDate(day, 0)
@@ -37,12 +37,27 @@ export default function WeekCalendar({ equipmentId, timezone, weekStartISO, slot
     return { top, height: Math.max(((clampB - clampA) / 60_000 / 30) * ROW_PX, 10) }
   }
 
-  function finishDrag() {
+  const finishDrag = useCallback(() => {
     if (!drag || retired) return setDrag(null)
     const [a, b] = [Math.min(drag.from, drag.to), Math.max(drag.from, drag.to) + 1]
     setDialog({ start: rowToDate(drag.day, a), end: rowToDate(drag.day, b) })
     setDrag(null)
-  }
+  }, [drag, retired, rowToDate])
+
+  // Document-level backstop: a pointer released/cancelled outside the grid (above the
+  // header, off-window, or a touch pointercancel) never reaches a cell, so own drag
+  // completion here. This is the single completion path — cells have no onPointerUp.
+  useEffect(() => {
+    if (!drag) return
+    const onUp = () => finishDrag()
+    const onCancel = () => setDrag(null)
+    document.addEventListener('pointerup', onUp)
+    document.addEventListener('pointercancel', onCancel)
+    return () => {
+      document.removeEventListener('pointerup', onUp)
+      document.removeEventListener('pointercancel', onCancel)
+    }
+  }, [drag, finishDrag])
 
   return (
     <div className="select-none overflow-x-auto rounded-xl border border-gray-200">
@@ -72,7 +87,6 @@ export default function WeekCalendar({ equipmentId, timezone, weekStartISO, slot
                   style={{ top: row * ROW_PX, height: ROW_PX }}
                   onPointerDown={() => !retired && setDrag({ day, from: row, to: row })}
                   onPointerEnter={() => drag?.day === day && setDrag({ ...drag, to: row })}
-                  onPointerUp={finishDrag}
                 />
               )
             })}

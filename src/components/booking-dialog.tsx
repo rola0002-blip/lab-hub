@@ -30,33 +30,47 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, i
 
   useEffect(() => {
     const t = setTimeout(async () => {
-      const r = await fetch('/api/bookings/preview', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          equipmentId, startsAt: initialStart, endsAt: initialEnd, purpose: '',
-          ...(recurring ? { recurring: { daysOfWeek: days, startMinutes, durationMinutes, firstDate, untilDate: until } } : {}),
-        }),
-      })
-      if (r.ok) setVerdict(await r.json())
+      try {
+        const r = await fetch('/api/bookings/preview', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            equipmentId, startsAt: initialStart, endsAt: initialEnd, purpose: '',
+            ...(recurring ? { recurring: { daysOfWeek: days, startMinutes, durationMinutes, firstDate, untilDate: until } } : {}),
+          }),
+        })
+        if (r.ok) setVerdict(await r.json())
+      } catch { /* preview is best-effort — keep the last verdict on network/parse failure */ }
     }, 300)
     return () => clearTimeout(t)
   }, [equipmentId, initialStart, initialEnd, recurring, days, until, startMinutes, durationMinutes, firstDate])
 
+  // Escape closes the dialog (unless a submit is in flight); matches the backdrop-click close.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy) onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [busy, onClose])
+
   async function submit() {
     setBusy(true); setError(null); setConflicts([])
-    const r = await fetch('/api/bookings', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        equipmentId, startsAt: initialStart, endsAt: initialEnd, purpose,
-        ...(recurring ? { recurring: { daysOfWeek: days, startMinutes, durationMinutes, firstDate, untilDate: until } } : {}),
-      }),
-    })
-    setBusy(false)
-    const body = await r.json()
-    if (r.ok) { onClose(); router.refresh(); return }
-    if (body.error === 'conflicts') setConflicts(body.conflicts)
-    else setError(body.message ?? 'Booking failed')
-    if (r.status === 409 && body.error === 'slot_taken') router.refresh() // show the fresh calendar behind the dialog
+    try {
+      const r = await fetch('/api/bookings', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          equipmentId, startsAt: initialStart, endsAt: initialEnd, purpose,
+          ...(recurring ? { recurring: { daysOfWeek: days, startMinutes, durationMinutes, firstDate, untilDate: until } } : {}),
+        }),
+      })
+      const body = await r.json() // may throw on a non-JSON 5xx — caught below
+      if (r.ok) { onClose(); router.refresh(); return }
+      if (body.error === 'conflicts') setConflicts(body.conflicts)
+      else setError(body.message ?? 'Booking failed')
+      if (r.status === 409 && body.error === 'slot_taken') router.refresh() // show the fresh calendar behind the dialog
+    } catch {
+      setError('Booking failed — please try again.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const when = `${format(local, 'EEE d MMM, HH:mm')}–${format(new TZDate(initialEnd, timezone), 'HH:mm')}`
