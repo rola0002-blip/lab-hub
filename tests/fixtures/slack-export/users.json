@@ -1,0 +1,5 @@
+[
+  { "id": "U1", "name": "roland", "profile": { "email": "pi@lab.test", "real_name": "Roland" } },
+  { "id": "U2", "name": "alumni", "profile": { "email": "left@lab.test", "real_name": "Alumni" } },
+  { "id": "U3", "name": "bot-ish", "profile": { "real_name": "Visitor" } }
+]

@@ -1,0 +1,4 @@
+[
+  { "id": "C1", "name": "general", "is_private": false, "topic": { "value": "General discussion" }, "members": ["U1", "U2", "U3"] },
+  { "id": "C2", "name": "secret", "is_private": true, "topic": { "value": "PI only" }, "members": ["U1"] }
+]
