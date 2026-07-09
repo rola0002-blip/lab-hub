@@ -27,6 +27,11 @@ model User {
   managed        EquipmentManager[]
   notifications  Notification[]
 
+  chatMemberships   ConversationMember[]
+  chatMessages      Message[]            @relation("ChatAuthor")
+  chatReactions     Reaction[]
+  pushSubscriptions PushSubscription[]
+
   @@map("user")
 }
 
@@ -246,4 +251,97 @@ model EmailOutbox {
   createdAt     DateTime    @default(now())
 
   @@index([status, nextAttemptAt])
+}
+
+// ---------- Messaging (sub-project 2) ----------
+enum ConversationType {
+  CHANNEL
+  DM
+}
+
+model Conversation {
+  id             String           @id @default(cuid())
+  type           ConversationType
+  name           String?
+  topic          String           @default("")
+  isPrivate      Boolean          @default(false)
+  createdById    String
+  archivedAt     DateTime?
+  slackChannelId String?          @unique
+  dmKey          String?          @unique
+  createdAt      DateTime         @default(now())
+
+  members  ConversationMember[]
+  messages Message[]
+}
+
+model ConversationMember {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadAt     DateTime     @default(now())
+  muted          Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id              String                   @id @default(cuid())
+  conversationId  String
+  conversation    Conversation             @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User                     @relation("ChatAuthor", fields: [userId], references: [id])
+  body            String
+  parentId        String?
+  parent          Message?                 @relation("Thread", fields: [parentId], references: [id])
+  replies         Message[]                @relation("Thread")
+  mentionUserIds  String[]
+  mentionsChannel Boolean                  @default(false)
+  editedAt        DateTime?
+  deletedAt       DateTime?
+  slackTs         String?
+  createdAt       DateTime                 @default(now())
+  search          Unsupported("tsvector")?
+
+  reactions   Reaction[]
+  attachments ChatAttachment[]
+
+  @@unique([conversationId, slackTs])
+  @@index([conversationId, createdAt])
+  @@index([parentId])
+}
+
+model Reaction {
+  id        String  @id @default(cuid())
+  messageId String
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String
+
+  @@unique([messageId, userId, emoji])
+}
+
+model ChatAttachment {
+  id        String  @id @default(cuid())
+  messageId String
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  path      String
+  name      String
+  mime      String
+  size      Int
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
 }
