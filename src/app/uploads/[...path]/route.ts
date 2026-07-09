@@ -5,6 +5,22 @@ import { readUpload } from '@/lib/uploads'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params
+
+  // Path-traversal guard — must run BEFORE the isChat gate and readUpload.
+  // The gate below decides "is this a chat read?" from path[0], but readUpload
+  // sanitises each segment (stripping chars outside [A-Za-z0-9._-]) and then
+  // path.join()s them, which collapses '.'/'..' and drops empty segments. Those
+  // two views disagree: a request like ['logo','..','chat',<uuid>] has
+  // path[0] === 'logo' (gate skipped) yet resolves into chat/, leaking a
+  // confidential attachment with a public cache header. Reject any segment that
+  // is empty, '.'/'..', or that the sanitiser would rewrite, so path[0]
+  // provably names the same top-level dir readUpload will open — no arrangement
+  // can resolve into chat/ while evading the session+membership check.
+  const sanitize = (seg: string) => seg.replace(/[^a-zA-Z0-9._-]/g, '')
+  if (path.some((seg) => seg === '' || seg === '.' || seg === '..' || sanitize(seg) !== seg)) {
+    return new Response('Not found', { status: 404 })
+  }
+
   const isChat = path[0] === 'chat'
 
   // Chat attachments are chat reads of potentially confidential lab data, so

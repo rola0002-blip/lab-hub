@@ -54,6 +54,31 @@ describe('attachment serving', () => {
     expect(ok.headers.get('Content-Type')).toBe('application/pdf')
   })
 
+  it('path traversal cannot bypass the membership gate to reach a chat file (404, no bytes)', async () => {
+    const { path } = await seedChatAttachment()
+    const basename = path.split('/').pop()! // '<uuid>.pdf' — the stored chat file
+
+    // Traversal: path[0] === 'logo' so the isChat gate thinks "public asset" and
+    // skips session+membership checks, but readUpload path.join()s the segments
+    // and 'logo/..' normalises away → it would resolve to chat/<basename>. An
+    // unauthenticated caller must be DENIED, never served the confidential file.
+    mockUser.current = null
+    const traversalParts = ['logo', '..', 'chat', basename]
+    const res = await reqFor('/uploads/' + traversalParts.join('/'), traversalParts)
+    expect(res.status).toBe(404)
+    expect(res.headers.get('Cache-Control')).not.toBe('public, max-age=86400')
+    expect(res.headers.get('Content-Type')).not.toBe('application/pdf')
+    const body = new Uint8Array(await res.arrayBuffer())
+    expect(body.byteLength).not.toBe(64) // the seeded file is exactly 64 bytes
+
+    // The %2e%2e-encoded (undecoded) segment form must also be denied.
+    const encodedParts = ['logo', '%2e%2e', 'chat', basename]
+    const res2 = await reqFor('/uploads/' + encodedParts.join('/'), encodedParts)
+    expect(res2.status).toBe(404)
+    const body2 = new Uint8Array(await res2.arrayBuffer())
+    expect(body2.byteLength).not.toBe(64)
+  })
+
   it('SP1 public assets (logo/equipment) stay public and unauthenticated', async () => {
     const logoPath = await saveUpload(new File([new Uint8Array(64)], 'logo.png', { type: 'image/png' }), 'logo')
     mockUser.current = null // signed out
