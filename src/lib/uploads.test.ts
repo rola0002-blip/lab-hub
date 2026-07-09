@@ -13,6 +13,13 @@ describe('validateUpload', () => {
     expect(() => validateUpload('image/png', 3 * 1024 * 1024)).toThrow('invalid_upload')
     expect(() => validateUpload('image/png', 0)).toThrow('invalid_upload')
   })
+  it('chat kind accepts documents up to 25MB and still blocks executables', () => {
+    expect(() => validateUpload('application/pdf', 10 * 1024 * 1024, 'chat')).not.toThrow()
+    expect(() => validateUpload('application/zip', 24 * 1024 * 1024, 'chat')).not.toThrow()
+    expect(() => validateUpload('application/pdf', 26 * 1024 * 1024, 'chat')).toThrow('invalid_upload')
+    expect(() => validateUpload('application/x-msdownload', 1024, 'chat')).toThrow('invalid_upload')
+    expect(() => validateUpload('application/pdf', 1024)).toThrow('invalid_upload') // logo kind unchanged
+  })
 })
 
 describe('uploadsDir', () => {

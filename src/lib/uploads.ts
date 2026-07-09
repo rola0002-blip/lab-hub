@@ -3,21 +3,37 @@ import { mkdir, writeFile, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 
-const ALLOWED: Record<string, string> = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp' }
-const MAX_BYTES = 2 * 1024 * 1024
+const IMAGE_ALLOWED: Record<string, string> = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp' }
+const CHAT_ALLOWED: Record<string, string> = {
+  ...IMAGE_ALLOWED,
+  'image/gif': '.gif',
+  'application/pdf': '.pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
+  'text/plain': '.txt',
+  'text/csv': '.csv',
+  'application/zip': '.zip',
+}
+const IMAGE_MAX = 2 * 1024 * 1024
+const CHAT_MAX = 25 * 1024 * 1024
+
+export type UploadKind = 'logo' | 'equipment' | 'chat'
 
 export function uploadsDir() {
   return path.resolve(process.env.UPLOADS_DIR ?? './data/uploads')
 }
 
-export function validateUpload(mime: string, size: number): string {
-  const ext = ALLOWED[mime]
-  if (!ext || size > MAX_BYTES || size === 0) throw new Error('invalid_upload')
+export function validateUpload(mime: string, size: number, kind: UploadKind = 'logo'): string {
+  const table = kind === 'chat' ? CHAT_ALLOWED : IMAGE_ALLOWED
+  const max = kind === 'chat' ? CHAT_MAX : IMAGE_MAX
+  const ext = table[mime]
+  if (!ext || size > max || size === 0) throw new Error('invalid_upload')
   return ext
 }
 
-export async function saveUpload(file: File, kind: 'logo' | 'equipment'): Promise<string> {
-  const ext = validateUpload(file.type, file.size)
+export async function saveUpload(file: File, kind: UploadKind): Promise<string> {
+  const ext = validateUpload(file.type, file.size, kind)
   const name = `${randomUUID()}${ext}`
   const dir = path.join(uploadsDir(), kind)
   await mkdir(dir, { recursive: true })
@@ -30,7 +46,9 @@ export async function readUpload(relPath: string[]): Promise<{ data: Buffer; mim
   const full = path.join(uploadsDir(), ...safe)
   if (!full.startsWith(uploadsDir())) return null
   const ext = path.extname(full)
-  const mime = Object.entries(ALLOWED).find(([, e]) => e === ext)?.[0] ?? (ext === '.jpg' ? 'image/jpeg' : null)
+  // Resolve against the CHAT_ALLOWED superset so document attachments (pdf,
+  // office, txt/csv, zip) serve with their real mime, not just images.
+  const mime = Object.entries(CHAT_ALLOWED).find(([, e]) => e === ext)?.[0] ?? (ext === '.jpg' ? 'image/jpeg' : null)
   if (!mime) return null
   try { return { data: await readFile(full), mime } } catch { return null }
 }
