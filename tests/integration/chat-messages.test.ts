@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { resetDb, makeUser, makeChannel, makeDm, makeMember, makeMessage } from '../factories'
 import { resetRate } from '@/features/chat/rate-limit'
 import { _resetForTests } from '@/lib/events'
+import { saveUpload, readUpload } from '@/lib/uploads'
 import {
   sendMessage, editMessage, deleteMessage, toggleReaction, listMessages, listThread, markRead,
 } from '@/features/chat/message-service'
@@ -74,6 +75,26 @@ describe('message service', () => {
     expect(gone.deletedAt).not.toBeNull()
     expect(gone.body).toBe('')
     expect((await editMessage({ messageId: r.message.id, userId: a.id, body: 'zombie' })).ok).toBe(false)
+  })
+
+  it('deleting a message removes its attachment rows and unlinks the files', async () => {
+    const { ch, users: [a] } = await channelWith('member')
+    const uploadPath = await saveUpload(new File([new Uint8Array(32)], 'data.pdf', { type: 'application/pdf' }), 'chat')
+    const rel = uploadPath.replace('/uploads/', '').split('/')
+    const sent = await sendMessage({
+      userId: a.id, conversationId: ch.id, body: 'here',
+      attachments: [{ path: uploadPath, name: 'data.pdf', mime: 'application/pdf', size: 32 }],
+    })
+    expect(sent.ok).toBe(true)
+    if (!sent.ok) return
+    expect(await readUpload(rel)).not.toBeNull() // file on disk
+    expect(await prisma.chatAttachment.count({ where: { messageId: sent.message.id } })).toBe(1)
+
+    expect((await deleteMessage({ messageId: sent.message.id, userId: a.id })).ok).toBe(true)
+    expect(await prisma.chatAttachment.count({ where: { messageId: sent.message.id } })).toBe(0) // rows gone
+    expect(await readUpload(rel)).toBeNull() // file unlinked
+    const tombstone = await prisma.message.findUniqueOrThrow({ where: { id: sent.message.id } })
+    expect(tombstone.deletedAt).not.toBeNull() // message row survives as a tombstone
   })
 
   it('reactions toggle per (user,emoji) and require membership', async () => {

@@ -1,5 +1,5 @@
 import 'server-only'
-import { mkdir, writeFile, readFile } from 'node:fs/promises'
+import { mkdir, writeFile, readFile, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 
@@ -51,4 +51,15 @@ export async function readUpload(relPath: string[]): Promise<{ data: Buffer; mim
   const mime = Object.entries(CHAT_ALLOWED).find(([, e]) => e === ext)?.[0] ?? (ext === '.jpg' ? 'image/jpeg' : null)
   if (!mime) return null
   try { return { data: await readFile(full), mime } } catch { return null }
+}
+
+// Delete a previously saved file by its stored public path (e.g. a
+// ChatAttachment.path like '/uploads/chat/<uuid>.pdf'). Sanitised and confined
+// to uploadsDir() exactly like readUpload, so a crafted path can never unlink
+// outside the uploads tree. Best-effort: a missing file is not an error.
+export async function removeUpload(publicPath: string): Promise<void> {
+  const rel = publicPath.replace(/^\/uploads\//, '').split('/').map((p) => p.replace(/[^a-zA-Z0-9._-]/g, ''))
+  const full = path.join(uploadsDir(), ...rel)
+  if (!full.startsWith(uploadsDir())) return
+  await rm(full, { force: true })
 }

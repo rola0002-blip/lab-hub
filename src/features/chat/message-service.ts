@@ -2,6 +2,7 @@ import 'server-only'
 import type { Prisma as P } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { emitEvent } from '@/lib/events'
+import { removeUpload } from '@/lib/uploads'
 import { isMember } from './conversation-service'
 import { parseMentions } from './mentions'
 import { checkRate } from './rate-limit'
@@ -111,10 +112,17 @@ export async function deleteMessage(args: { messageId: string; userId: string })
   ])
   if (!msg || msg.deletedAt || !user) return { ok: false, message: 'Message not found.' }
   if (msg.userId !== args.userId && user.role !== 'admin') return { ok: false, message: 'You can only delete your own messages.' }
+  // The message row stays as a tombstone, but its attachments must be revoked:
+  // drop the ChatAttachment rows and unlink the on-disk files. Otherwise the
+  // capability URL every member already holds keeps serving the "deleted" file
+  // and the uploads dir grows without bound.
+  const attachments = await prisma.chatAttachment.findMany({ where: { messageId: msg.id }, select: { path: true } })
   await prisma.message.update({
     where: { id: msg.id },
     data: { deletedAt: new Date(), body: '', mentionUserIds: [], mentionsChannel: false },
   })
+  await prisma.chatAttachment.deleteMany({ where: { messageId: msg.id } })
+  await Promise.all(attachments.map((a) => removeUpload(a.path).catch(() => {}))) // file removal is best-effort
   await emitEvent({ t: 'msg_del', cid: msg.conversationId, mid: msg.id })
   return { ok: true }
 }

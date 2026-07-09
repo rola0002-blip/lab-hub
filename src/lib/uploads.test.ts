@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { validateUpload, uploadsDir, saveUpload, readUpload } from './uploads'
+import { validateUpload, uploadsDir, saveUpload, readUpload, removeUpload } from './uploads'
 
 describe('validateUpload', () => {
   it('accepts small png', () => {
@@ -71,5 +71,22 @@ describe('saveUpload + readUpload', () => {
   it('returns null for an unknown extension and for a missing file', async () => {
     expect(await readUpload(['equipment', 'note.txt'])).toBeNull()
     expect(await readUpload(['logo', 'does-not-exist.png'])).toBeNull()
+  })
+
+  it('removeUpload deletes a saved file and is a no-op on a missing one', async () => {
+    const url = await saveUpload(new File([new Uint8Array([9])], 'doc.pdf', { type: 'application/pdf' }), 'chat')
+    const rel = url.replace('/uploads/', '').split('/')
+    expect(await readUpload(rel)).not.toBeNull()
+    await removeUpload(url)
+    expect(await readUpload(rel)).toBeNull() // gone
+    await expect(removeUpload(url)).resolves.toBeUndefined() // second remove: missing file, no throw
+  })
+
+  it('removeUpload cannot escape uploadsDir via a ".." segment', async () => {
+    const outside = path.join(dir, '..', `labhub-keep-${Date.now()}.txt`)
+    await writeFile(outside, 'keep')
+    await removeUpload('/uploads/../' + path.basename(outside)) // startsWith guard rejects → no-op
+    expect((await readFile(outside)).toString()).toBe('keep')
+    await rm(outside, { force: true })
   })
 })
