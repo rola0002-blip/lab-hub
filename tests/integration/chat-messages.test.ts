@@ -60,6 +60,22 @@ describe('message service', () => {
     expect(list.ok && list.messages.some((m) => m.id === reply.message.id)).toBe(false) // replies not in root list
   })
 
+  it('listThread denies non-members and rejects a reply used as a root', async () => {
+    const { ch, users: [a] } = await channelWith('member')
+    const outsider = await makeUser()
+    const root = await sendMessage({ userId: a.id, conversationId: ch.id, body: 'root' })
+    expect(root.ok).toBe(true)
+    if (!root.ok) return
+    const reply = await sendMessage({ userId: a.id, conversationId: ch.id, body: 'reply', parentId: root.message.id })
+    expect(reply.ok).toBe(true)
+    if (!reply.ok) return
+
+    expect((await listThread({ userId: outsider.id, rootId: root.message.id })).ok).toBe(false) // membership gate
+    expect((await listThread({ userId: a.id, rootId: reply.message.id })).ok).toBe(false) // a reply is not a valid root
+    const ok = await listThread({ userId: a.id, rootId: root.message.id })
+    expect(ok.ok && ok.replies.map((r) => r.body)).toEqual(['reply']) // member gets the thread
+  })
+
   it('edit is author-only and re-parses mentions; delete is author-or-admin soft delete', async () => {
     const { ch, users: [a, b, admin] } = await channelWith('member', 'member', 'admin')
     const r = await sendMessage({ userId: a.id, conversationId: ch.id, body: 'v1' })

@@ -40,6 +40,53 @@ describe('fanoutMessage', () => {
     expect(push.mock.calls[0][0]).toBe(c.id)
   })
 
+  it('skips banned members even when directly mentioned', async () => {
+    const sender = await makeUser({ name: 'Sender' })
+    const banned = await makeUser({ banned: true })
+    const ch = await makeChannel({ name: 'general' })
+    await Promise.all([makeMember(ch.id, sender.id), makeMember(ch.id, banned.id)])
+    const push = vi.fn().mockResolvedValue(undefined)
+    const convo = await prisma.conversation.findUniqueOrThrow({ where: { id: ch.id } })
+    await fanoutMessage(
+      { message: msg({ conversationId: ch.id, userId: sender.id, mentionUserIds: [banned.id] }) as never, conversation: convo, senderName: 'Sender' },
+      { hasLive: () => false, push }, // offline: would email+push if not skipped
+    )
+    expect(await prisma.notification.count()).toBe(0) // banned member skipped before notify
+    expect(await prisma.emailOutbox.count()).toBe(0)
+    expect(push).not.toHaveBeenCalled()
+  })
+
+  it('DM mute suppresses plain messages but a direct mention still pierces', async () => {
+    const a = await makeUser({ name: 'A' })
+    const mutedB = await makeUser()
+    const dm = await makeDm([a.id, mutedB.id])
+    await prisma.conversationMember.updateMany({ where: { conversationId: dm.id, userId: mutedB.id }, data: { muted: true } })
+    const push = vi.fn().mockResolvedValue(undefined)
+    const convo = await prisma.conversation.findUniqueOrThrow({ where: { id: dm.id } })
+    const seams = { hasLive: () => true, push }
+
+    await fanoutMessage({ message: msg({ conversationId: dm.id, userId: a.id }) as never, conversation: convo, senderName: 'A' }, seams)
+    expect(await prisma.notification.count({ where: { userId: mutedB.id } })).toBe(0) // plain DM suppressed by mute
+
+    await fanoutMessage({ message: msg({ conversationId: dm.id, userId: a.id, mentionUserIds: [mutedB.id] }) as never, conversation: convo, senderName: 'A' }, seams)
+    expect(await prisma.notification.count({ where: { userId: mutedB.id, type: 'message_dm' } })).toBe(1) // direct mention pierces mute in a DM
+  })
+
+  it('channel mention to an offline recipient queues a mention email and a push', async () => {
+    const { sender, rcpt, ch } = await setup()
+    const push = vi.fn().mockResolvedValue(undefined)
+    const convo = await prisma.conversation.findUniqueOrThrow({ where: { id: ch.id } })
+    await fanoutMessage(
+      { message: msg({ conversationId: ch.id, userId: sender.id, mentionUserIds: [rcpt.id] }) as never, conversation: convo, senderName: 'Sender' },
+      { hasLive: (uid) => uid !== rcpt.id, push }, // rcpt offline
+    )
+    expect(await prisma.notification.count({ where: { userId: rcpt.id, type: 'message_mention' } })).toBe(1)
+    expect(await prisma.emailOutbox.count()).toBe(1) // offline → mentionEmail queued
+    expect((await prisma.emailOutbox.findFirstOrThrow()).toEmail).toBe(rcpt.email)
+    expect(push).toHaveBeenCalledTimes(1)
+    expect(push.mock.calls[0][0]).toBe(rcpt.id)
+  })
+
   it('channel: direct mentions pierce mute; @channel does not; plain messages notify nobody', async () => {
     const { sender, rcpt, mutedUser, ch } = await setup()
     const push = vi.fn().mockResolvedValue(undefined)
