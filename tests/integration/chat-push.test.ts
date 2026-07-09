@@ -23,12 +23,15 @@ describe('web push', () => {
     const u = await makeUser()
     await saveSubscription(u.id, SUB)
     await saveSubscription(u.id, { endpoint: 'https://push.example/ep2', keys: { p256dh: 'k2', auth: 'a2' } })
-    const sender = vi.fn()
-      .mockRejectedValueOnce(Object.assign(new Error('gone'), { statusCode: 410 }))
-      .mockResolvedValueOnce(undefined)
+    // Reject by endpoint identity, not call order: findMany returns the two
+    // subscriptions unordered, so a positional mock would prune whichever ran
+    // first. Keying the 410 to SUB.endpoint makes the assertion deterministic.
+    const sender = vi.fn(async (endpoint: string) => {
+      if (endpoint === SUB.endpoint) throw Object.assign(new Error('gone'), { statusCode: 410 })
+    })
     await sendPush(u.id, { title: 't', body: 'b', url: '/chat/x' }, sender)
     expect(sender).toHaveBeenCalledTimes(2)
-    expect(await prisma.pushSubscription.count()).toBe(1) // 410 endpoint pruned
+    expect(await prisma.pushSubscription.count()).toBe(1) // the 410 endpoint (ep1) pruned
     expect((await prisma.pushSubscription.findFirstOrThrow()).endpoint).toBe('https://push.example/ep2')
   })
 

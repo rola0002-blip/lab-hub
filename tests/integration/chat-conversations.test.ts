@@ -118,6 +118,15 @@ describe('conversation service', () => {
     expect((await getOrCreateDm({ userIds: nine, byId: guest.id })).ok).toBe(false) // 9 > 8
   })
 
+  it('getOrCreateDm refuses a caller who is not a participant', async () => {
+    const a = await makeUser()
+    const b = await makeUser()
+    const outsider = await makeUser()
+    expect(await getOrCreateDm({ userIds: [a.id, b.id], byId: outsider.id }))
+      .toMatchObject({ ok: false, message: 'You must be part of the DM.' })
+    expect(await prisma.conversation.count({ where: { type: 'DM' } })).toBe(0) // nothing created
+  })
+
   it('createChannel emits a live member event for the creator', async () => {
     const creator = await makeUser()
     const c = collector()

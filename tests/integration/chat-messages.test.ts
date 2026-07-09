@@ -40,6 +40,7 @@ describe('message service', () => {
     expect(r1.message.mentionUserIds).toEqual([g.id]) // outsider + self filtered
     expect(r1.message.mentionsChannel).toBe(true)
     const r2 = await sendMessage({ userId: g.id, conversationId: ch.id, body: 'oi <!channel>' })
+    expect(r2.ok).toBe(true)
     if (!r2.ok) return
     expect(r2.message.mentionsChannel).toBe(false) // guests cannot @channel
   })
@@ -47,6 +48,7 @@ describe('message service', () => {
   it('threads are single-level: replies attach to roots only, and reply counts show up', async () => {
     const { ch, users: [a, b] } = await channelWith('member', 'member')
     const root = await sendMessage({ userId: a.id, conversationId: ch.id, body: 'root' })
+    expect(root.ok).toBe(true)
     if (!root.ok) return
     const reply = await sendMessage({ userId: b.id, conversationId: ch.id, body: 'reply', parentId: root.message.id })
     expect(reply.ok).toBe(true)
@@ -79,6 +81,7 @@ describe('message service', () => {
   it('edit is author-only and re-parses mentions; delete is author-or-admin soft delete', async () => {
     const { ch, users: [a, b, admin] } = await channelWith('member', 'member', 'admin')
     const r = await sendMessage({ userId: a.id, conversationId: ch.id, body: 'v1' })
+    expect(r.ok).toBe(true)
     if (!r.ok) return
     expect((await editMessage({ messageId: r.message.id, userId: b.id, body: 'nope' })).ok).toBe(false)
     expect((await editMessage({ messageId: r.message.id, userId: a.id, body: `v2 <@${b.id}>` })).ok).toBe(true)
@@ -117,6 +120,7 @@ describe('message service', () => {
     const { ch, users: [a, b] } = await channelWith('member', 'member')
     const outsider = await makeUser()
     const r = await sendMessage({ userId: a.id, conversationId: ch.id, body: 'react to me' })
+    expect(r.ok).toBe(true)
     if (!r.ok) return
     expect((await toggleReaction({ messageId: r.message.id, userId: b.id, emoji: '👍' })).ok).toBe(true)
     expect((await toggleReaction({ messageId: r.message.id, userId: outsider.id, emoji: '👍' })).ok).toBe(false)
