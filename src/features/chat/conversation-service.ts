@@ -61,7 +61,7 @@ export async function canManage(userId: string, conversationId: string): Promise
     prisma.user.findUnique({ where: { id: userId } }),
     prisma.conversation.findUnique({ where: { id: conversationId } }),
   ])
-  if (!user || !convo || convo.type !== 'CHANNEL') return false
+  if (!user || user.banned || !convo || convo.type !== 'CHANNEL') return false
   return user.role === 'admin' || convo.createdById === userId
 }
 

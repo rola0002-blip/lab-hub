@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { prisma } from '@/lib/db'
 import { resetDb, makeUser, makeChannel, makeMember, makeMessage } from '../factories'
 import { _resetForTests } from '@/lib/events'
 import {
@@ -38,6 +39,7 @@ describe('conversation service', () => {
     const ch = await createChannel({ name: 'fyp', isPrivate: false, createdById: admin.id })
     if (!ch.ok) throw new Error('setup')
     expect(await accessibleConversationIds(guest.id)).toEqual([])
+    expect(await listPublicChannels(guest.id)).toEqual([])
     const add = await addMembers({ conversationId: ch.conversationId, userIds: [guest.id], byId: admin.id })
     expect(add.ok).toBe(true)
     expect(await accessibleConversationIds(guest.id)).toEqual([ch.conversationId])
@@ -56,6 +58,15 @@ describe('conversation service', () => {
     expect((await removeMember({ conversationId: ch.conversationId, userId: joiner.id, byId: joiner.id })).ok).toBe(true) // self-leave
     expect((await archiveChannel({ conversationId: ch.conversationId, byId: rando.id })).ok).toBe(false)
     expect((await archiveChannel({ conversationId: ch.conversationId, byId: creator.id })).ok).toBe(true)
+  })
+
+  it('a banned channel creator cannot manage', async () => {
+    const creator = await makeUser()
+    const ch = await createChannel({ name: 'banme', isPrivate: false, createdById: creator.id })
+    if (!ch.ok) throw new Error('setup')
+    await prisma.user.update({ where: { id: creator.id }, data: { banned: true } })
+    expect(await canManage(creator.id, ch.conversationId)).toBe(false)
+    expect((await archiveChannel({ conversationId: ch.conversationId, byId: creator.id })).ok).toBe(false)
   })
 
   it('DMs dedupe by member set, enforce 2..8 active users, and guests may DM anyone', async () => {
