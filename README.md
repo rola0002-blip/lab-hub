@@ -11,7 +11,8 @@ replies, `@mentions` (and `@channel`), emoji reactions, and 25 MB file
 attachments. Full-text search spans every conversation you belong to. Delivery
 is realtime over one Server-Sent-Events stream per tab (no WebSockets), fanned
 out with Postgres `LISTEN`/`NOTIFY`. Web Push notifies you of mentions and DMs
-when you have no tab open — opt-in, and silenced per conversation by mute.
+when you have no tab open — opt-in, and silenced per conversation by mute (except
+direct @mentions).
 Membership is the single authorization rule: you only ever read, search, or
 receive events for conversations you are a member of.
 

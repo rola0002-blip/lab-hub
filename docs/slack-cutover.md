@@ -75,10 +75,20 @@ Run the importer against the ZIP (an already-extracted directory also works):
 npm run import:slack -- /path/to/slack-export.zip
 ```
 
-In production run it inside the app container so it uses the same `DATABASE_URL`:
+In production, run the importer from a host checkout of this repo — **not** inside
+the `app` container. The runtime image is built with `npm ci --omit=dev`, so it has
+no `tsx` (the importer's runner is a devDependency), and the standalone output ships
+neither the root `package.json` scripts nor the TypeScript `src/` tree; the `app`
+service also has no source bind-mount. Instead, on the host, check out this repo,
+install dev dependencies, and point `DATABASE_URL` at the production database — the
+compose `db` service publishes it on `localhost:5432`:
 
 ```bash
-docker compose exec app npm run import:slack -- /path/to/slack-export.zip
+npm ci   # installs dev dependencies, including the tsx the importer runs under
+
+# Use the same POSTGRES_PASSWORD you set for the stack (defaults to `labhub`).
+DATABASE_URL='postgresql://labhub:<POSTGRES_PASSWORD>@localhost:5432/labhub' \
+  npm run import:slack -- /path/to/slack-export.zip
 ```
 
 The CLI prints a summary like:
@@ -170,7 +180,8 @@ Set expectations with your users up front:
   `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` in `.env` and restarted, each person
   enables notifications from the chat UI in their browser (and installs the PWA
   on iOS to receive push there). Push fires for mentions and DMs only when the
-  recipient has no live tab open, and per-conversation mute silences it.
+  recipient has no live tab open, and per-conversation mute silences it (except
+  direct @mentions).
 - Keep the Slack workspace readable (not deleted) for a grace period so people
   can reach DM history, which did not migrate.
 
