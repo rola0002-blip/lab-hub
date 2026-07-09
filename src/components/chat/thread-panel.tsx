@@ -29,6 +29,10 @@ export default function ThreadPanel({ rootId, conversationId, names, selfId, sel
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load() }, [load])
 
+  const removeReply = useCallback((id: string) => {
+    setReplies((prev) => prev.filter((x) => x.id !== id))
+  }, [])
+
   const upsertReply = useCallback((m: Msg) => {
     if (m.id === rootId) { setRoot(m); return } // edits/reactions land on the root
     setReplies((prev) => {
@@ -44,6 +48,7 @@ export default function ThreadPanel({ rootId, conversationId, names, selfId, sel
   }, [rootId])
 
   useEffect(() => registerConversationHandler((e) => {
+    if (e.t === 'reconnect') { void load(); return } // refetch replies missed during an SSE outage
     if (!('cid' in e) || e.cid !== conversationId) return
     if (e.t === 'msg' || e.t === 'msg_edit' || e.t === 'msg_del' || e.t === 'rx') {
       void fetch(`/api/chat/messages/${e.mid}`).then(async (r) => {
@@ -52,7 +57,7 @@ export default function ThreadPanel({ rootId, conversationId, names, selfId, sel
         if (m.id === rootId || m.parentId === rootId) upsertReply(m)
       })
     }
-  }), [conversationId, rootId, registerConversationHandler, upsertReply])
+  }), [conversationId, rootId, registerConversationHandler, upsertReply, load])
 
   // Escape closes the panel (matches the ✕ button); mirrors the booking-dialog convention.
   useEffect(() => {
@@ -107,7 +112,7 @@ export default function ThreadPanel({ rootId, conversationId, names, selfId, sel
         </div>
       </div>
 
-      <Composer conversationId={conversationId} selfRole={selfRole} parentId={rootId} onSent={upsertReply} />
+      <Composer conversationId={conversationId} selfRole={selfRole} parentId={rootId} onSent={upsertReply} onRemove={removeReply} />
     </aside>
   )
 }

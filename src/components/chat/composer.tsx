@@ -8,6 +8,7 @@ type Props = {
   selfRole: string
   parentId?: string
   onSent: (m: Msg) => void
+  onRemove: (tempId: string) => void
 }
 
 type Attach = { path: string; name: string; mime: string; size: number }
@@ -28,7 +29,7 @@ function detectMention(value: string, caret: number): { start: number; query: st
 // v1 tradeoff (settled in the task brief): the textarea holds RAW token text
 // (`<@id>`, `<!channel>`) directly — autocomplete inserts tokens, and a hint line
 // explains they render as friendly @Name once sent. No rich-text dual buffer.
-export default function Composer({ conversationId, selfRole, parentId, onSent }: Props) {
+export default function Composer({ conversationId, selfRole, parentId, onSent, onRemove }: Props) {
   const { users, selfId, conversations } = useChat()
   const [raw, setRaw] = useState('')
   const [attachments, setAttachments] = useState<Attach[]>([])
@@ -112,16 +113,22 @@ export default function Composer({ conversationId, selfRole, parentId, onSent }:
     }
     const payload = { conversationId, body, ...(parentId ? { parentId } : {}), ...(attachments.length ? { attachments } : {}) }
     onSent(temp)
-    setRaw(''); setAttachments([]); setMenu(null); setBusy(true)
+    setMenu(null); setBusy(true)
     try {
       const r = await fetch('/api/chat/messages', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       })
       const d = await r.json().catch(() => null)
-      if (r.status === 201 && d?.message) onSent(d.message)
-      else { setError(d?.message ?? 'Failed to send.'); onSent({ ...temp, deleted: true, body: '' }) }
+      if (r.status === 201 && d?.message) {
+        onSent(d.message)
+        // Clear the draft only once the send is confirmed (201); on failure we keep it for retry.
+        setRaw(''); setAttachments([])
+      } else {
+        // Send failed: drop the optimistic temp entirely (no tombstone) and keep the draft.
+        setError(d?.message ?? 'Failed to send.'); onRemove(tempId)
+      }
     } catch {
-      setError('Failed to send.'); onSent({ ...temp, deleted: true, body: '' })
+      setError('Failed to send.'); onRemove(tempId)
     } finally { setBusy(false) }
   }
 
@@ -130,7 +137,7 @@ export default function Composer({ conversationId, selfRole, parentId, onSent }:
       if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx((i) => (i + 1) % menu.items.length); return }
       if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIdx((i) => (i - 1 + menu.items.length) % menu.items.length); return }
       if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); insert(menu.items[activeIdx]); return }
-      if (e.key === 'Escape') { e.preventDefault(); setMenu(null); return }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setMenu(null); return }
     }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() }
   }

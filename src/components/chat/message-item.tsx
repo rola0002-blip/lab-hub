@@ -136,7 +136,8 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
           <div className="mt-0.5">
             <textarea value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus rows={2}
               onKeyDown={(e) => {
-                if (e.key === 'Escape') setEditing(false)
+                // stopPropagation so cancelling an edit doesn't also close the thread panel's document-level Escape.
+                if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setEditing(false); return }
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void saveEdit() }
               }}
               className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm" />

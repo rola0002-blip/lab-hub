@@ -21,6 +21,7 @@ export default function MessagePane({ conversationId, conversationType, channelN
   const [typing, setTyping] = useState<string | null>(null)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
+  const firstLoad = useRef(true)
 
   const markRead = useCallback(() => void fetch(`/api/chat/conversations/${conversationId}/read`, { method: 'POST' }), [conversationId])
 
@@ -35,6 +36,13 @@ export default function MessagePane({ conversationId, conversationType, channelN
   // loadLatest only setStates after awaiting fetch — async, never a synchronous cascading render.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadLatest() }, [loadLatest])
+
+  // Reset the first-load flag when the conversation changes so the next load opens at newest.
+  useEffect(() => { firstLoad.current = true }, [conversationId])
+
+  const remove = useCallback((id: string) => {
+    setMessages((prev) => prev.filter((m) => m.id !== id))
+  }, [])
 
   const upsert = useCallback((msg: Msg) => {
     setMessages((prev) => {
@@ -68,9 +76,11 @@ export default function MessagePane({ conversationId, conversationType, channelN
     }
   }), [conversationId, registerConversationHandler, loadLatest, upsert, markRead])
 
-  useEffect(() => { // stick to bottom when near it
+  useEffect(() => { // first load opens at newest unconditionally; afterwards stick to bottom only when near it
     const el = scroller.current
-    if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 200) el.scrollTop = el.scrollHeight
+    if (!el) return
+    if (firstLoad.current && messages.length) { el.scrollTop = el.scrollHeight; firstLoad.current = false; return }
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) el.scrollTop = el.scrollHeight
   }, [messages])
 
   async function loadEarlier() {
@@ -101,7 +111,7 @@ export default function MessagePane({ conversationId, conversationType, channelN
         </div>
         {archived
           ? <p className="border-t border-gray-200 p-3 text-sm text-gray-500">This conversation is archived.</p>
-          : <Composer conversationId={conversationId} selfRole={selfRole} onSent={upsert} />}
+          : <Composer conversationId={conversationId} selfRole={selfRole} onSent={upsert} onRemove={remove} />}
       </div>
       {threadRoot && (
         <ThreadPanel rootId={threadRoot} conversationId={conversationId} names={names} selfId={selfId} selfRole={selfRole}
