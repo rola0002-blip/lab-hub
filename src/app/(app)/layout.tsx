@@ -4,6 +4,7 @@ import { requireUser } from '@/lib/session'
 import { totalUnread } from '@/features/chat/conversation-service'
 import Sidebar, { type NavItem } from '@/components/sidebar'
 import Bell from '@/components/bell'
+import PushOptIn from '@/components/push-optin'
 import SignOutButton from '@/components/sign-out'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -39,6 +40,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-end gap-2 border-b border-gray-200 px-6 py-3">
+          <PushOptIn />
           <Bell />
           <span className="text-sm text-gray-600">{user.name}</span>
           <SignOutButton />

@@ -4,6 +4,8 @@ import { useChat } from './chat-store'
 import MessageItem, { type Msg } from './message-item'
 import Composer from './composer'
 import ThreadPanel from './thread-panel'
+import ConversationMenu from './conversation-menu'
+import SearchBox from './search-box'
 
 type Props = {
   conversationId: string
@@ -11,9 +13,11 @@ type Props = {
   channelName: string | null
   archived: boolean
   selfRole: string
+  manage: boolean
+  memberIds: string[]
 }
 
-export default function MessagePane({ conversationId, conversationType, channelName, archived, selfRole }: Props) {
+export default function MessagePane({ conversationId, conversationType, channelName, archived, selfRole, manage, memberIds }: Props) {
   const { users, selfId, registerConversationHandler } = useChat()
   const [messages, setMessages] = useState<Msg[]>([])
   const [hasMore, setHasMore] = useState(false)
@@ -97,9 +101,11 @@ export default function MessagePane({ conversationId, conversationType, channelN
   return (
     <div className="flex h-full min-w-0 flex-1">
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-gray-200 px-4 py-2">
-          <h1 className="truncate font-semibold">{title}</h1>
-          {/* Task 13 replaces this spot with the channel header menu */}
+        <header className="flex items-center gap-2 border-b border-gray-200 px-4 py-2">
+          <h1 className="min-w-0 flex-1 truncate font-semibold">{title}</h1>
+          <SearchBox />
+          <ConversationMenu conversationId={conversationId} conversationType={conversationType}
+            channelName={channelName} archived={archived} manage={manage} />
         </header>
         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
           {hasMore && <button onClick={loadEarlier} className="mx-auto my-2 block rounded-md border border-gray-300 px-3 py-1 text-xs text-gray-600">Load earlier</button>}
@@ -111,10 +117,10 @@ export default function MessagePane({ conversationId, conversationType, channelN
         </div>
         {archived
           ? <p className="border-t border-gray-200 p-3 text-sm text-gray-500">This conversation is archived.</p>
-          : <Composer conversationId={conversationId} selfRole={selfRole} onSent={upsert} onRemove={remove} />}
+          : <Composer conversationId={conversationId} selfRole={selfRole} memberIds={memberIds} onSent={upsert} onRemove={remove} />}
       </div>
       {threadRoot && (
-        <ThreadPanel rootId={threadRoot} conversationId={conversationId} names={names} selfId={selfId} selfRole={selfRole}
+        <ThreadPanel rootId={threadRoot} conversationId={conversationId} names={names} memberIds={memberIds} selfId={selfId} selfRole={selfRole}
           onClose={() => setThreadRoot(null)} />
       )}
     </div>

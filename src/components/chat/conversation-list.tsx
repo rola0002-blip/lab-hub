@@ -2,6 +2,7 @@
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useChat, dmName } from './chat-store'
+import { BrowseAndCreate, NewDmButton } from './channel-dialogs'
 
 export default function ConversationList({ role }: { role: string }) {
   const { conversations, users, online, selfId } = useChat()
@@ -49,9 +50,3 @@ export default function ConversationList({ role }: { role: string }) {
     </nav>
   )
 }
-
-// BrowseAndCreate and NewDmButton are implemented in Task 13 (channel management).
-// Until Task 13 lands, stub them here as `function BrowseAndCreate() { return null }`
-// and `function NewDmButton() { return null }` — Task 13 replaces the stubs with imports.
-function BrowseAndCreate() { return null }
-function NewDmButton() { return null }

@@ -6,6 +6,7 @@ import type { Msg } from './message-item'
 type Props = {
   conversationId: string
   selfRole: string
+  memberIds: string[]
   parentId?: string
   onSent: (m: Msg) => void
   onRemove: (tempId: string) => void
@@ -29,8 +30,8 @@ function detectMention(value: string, caret: number): { start: number; query: st
 // v1 tradeoff (settled in the task brief): the textarea holds RAW token text
 // (`<@id>`, `<!channel>`) directly — autocomplete inserts tokens, and a hint line
 // explains they render as friendly @Name once sent. No rich-text dual buffer.
-export default function Composer({ conversationId, selfRole, parentId, onSent, onRemove }: Props) {
-  const { users, selfId, conversations } = useChat()
+export default function Composer({ conversationId, selfRole, memberIds, parentId, onSent, onRemove }: Props) {
+  const { users, selfId } = useChat()
   const [raw, setRaw] = useState('')
   const [attachments, setAttachments] = useState<Attach[]>([])
   const [menu, setMenu] = useState<{ start: number; items: Item[] } | null>(null)
@@ -44,9 +45,9 @@ export default function Composer({ conversationId, selfRole, parentId, onSent, o
 
   const selfName = users.find((u) => u.id === selfId)?.name ?? 'You'
   const memberUsers = useMemo(() => {
-    const ids = new Set(conversations.find((c) => c.id === conversationId)?.memberIds ?? [])
+    const ids = new Set(memberIds)
     return users.filter((u) => ids.has(u.id))
-  }, [conversations, conversationId, users])
+  }, [memberIds, users])
 
   function updateMenu(value: string, caret: number) {
     const det = detectMention(value, caret)

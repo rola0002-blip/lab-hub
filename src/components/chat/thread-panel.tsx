@@ -8,12 +8,13 @@ type Props = {
   rootId: string
   conversationId: string
   names: Map<string, string>
+  memberIds: string[]
   selfId: string
   selfRole: string
   onClose: () => void
 }
 
-export default function ThreadPanel({ rootId, conversationId, names, selfId, selfRole, onClose }: Props) {
+export default function ThreadPanel({ rootId, conversationId, names, memberIds, selfId, selfRole, onClose }: Props) {
   const { registerConversationHandler } = useChat()
   const [root, setRoot] = useState<Msg | null>(null)
   const [replies, setReplies] = useState<Msg[]>([])
@@ -112,7 +113,7 @@ export default function ThreadPanel({ rootId, conversationId, names, selfId, sel
         </div>
       </div>
 
-      <Composer conversationId={conversationId} selfRole={selfRole} parentId={rootId} onSent={upsertReply} onRemove={removeReply} />
+      <Composer conversationId={conversationId} selfRole={selfRole} memberIds={memberIds} parentId={rootId} onSent={upsertReply} onRemove={removeReply} />
     </aside>
   )
 }

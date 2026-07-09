@@ -1,0 +1,200 @@
+'use client'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useChat } from './chat-store'
+
+type Props = {
+  conversationId: string
+  conversationType: 'CHANNEL' | 'DM'
+  channelName: string | null
+  archived: boolean
+  manage: boolean
+}
+
+// Backdrop + Escape modal shell (mirrors booking-dialog.tsx).
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">{title}</h2>
+          <button onClick={onClose} aria-label="Close" className="rounded p-1 text-gray-400 hover:bg-gray-100">✕</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+export default function ConversationMenu({ conversationId, conversationType, channelName, archived, manage }: Props) {
+  const router = useRouter()
+  const { conversations, selfId, refresh } = useChat()
+  const [open, setOpen] = useState(false)
+  const [dialog, setDialog] = useState<'none' | 'members'>('none')
+  const [confirmArchive, setConfirmArchive] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  const convo = conversations.find((c) => c.id === conversationId)
+  const muted = !!convo?.muted
+  const isChannel = conversationType === 'CHANNEL'
+
+  useEffect(() => {
+    function onClick(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('click', onClick)
+    return () => document.removeEventListener('click', onClick)
+  }, [])
+
+  async function toggleMute() {
+    setOpen(false); setBusy(true)
+    try {
+      await fetch(`/api/chat/conversations/${conversationId}/mute`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ muted: !muted }),
+      })
+      await refresh()
+    } catch { /* best-effort; the store keeps the prior mute state on failure */ } finally { setBusy(false) }
+  }
+
+  async function leave() {
+    setBusy(true)
+    try {
+      const r = await fetch(`/api/chat/conversations/${conversationId}/members`, {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: selfId }),
+      })
+      if (r.ok) { await refresh(); router.push('/chat') }
+    } catch { /* leaving failed; user stays a member */ } finally { setBusy(false) }
+  }
+
+  async function archive() {
+    setBusy(true)
+    try {
+      const r = await fetch(`/api/chat/conversations/${conversationId}/archive`, { method: 'POST' })
+      if (r.ok) { await refresh(); router.push('/chat') }
+    } catch { /* archive failed; channel stays active */ } finally { setBusy(false); setConfirmArchive(false) }
+  }
+
+  const item = 'block w-full px-3 py-1.5 text-left text-sm hover:bg-gray-100 disabled:opacity-50'
+
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={() => setOpen((v) => !v)} aria-label="Conversation menu" disabled={busy}
+        className="rounded p-1 text-lg leading-none text-gray-500 hover:bg-gray-100 disabled:opacity-50">⋯</button>
+      {open && (
+        <div className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+          <button onClick={toggleMute} className={item}>{muted ? 'Unmute' : 'Mute'}</button>
+          {isChannel && <button onClick={() => { setOpen(false); setDialog('members') }} className={item}>Members…</button>}
+          {isChannel && <button onClick={leave} className={item}>Leave channel</button>}
+          {isChannel && manage && !archived && (
+            <button onClick={() => { setOpen(false); setConfirmArchive(true) }} className={`${item} text-red-600`}>Archive channel</button>
+          )}
+        </div>
+      )}
+
+      {dialog === 'members' && (
+        <MembersDialog conversationId={conversationId} channelName={channelName} manage={manage} onClose={() => setDialog('none')} />
+      )}
+
+      {confirmArchive && (
+        <Modal title="Archive channel?" onClose={() => setConfirmArchive(false)}>
+          <p className="mt-2 text-sm text-gray-600">Archiving #{channelName} hides it for everyone and stops new messages. This can’t be undone here.</p>
+          <div className="mt-4 flex justify-end gap-2">
+            <button onClick={() => setConfirmArchive(false)} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm">Cancel</button>
+            <button onClick={archive} disabled={busy} className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">
+              {busy ? 'Archiving…' : 'Archive'}
+            </button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  )
+}
+
+// Members list with names; managers can add active users and remove existing ones.
+function MembersDialog({ conversationId, channelName, manage, onClose }: { conversationId: string; channelName: string | null; manage: boolean; onClose: () => void }) {
+  const { conversations, users, selfId, refresh } = useChat()
+  const memberIds = conversations.find((c) => c.id === conversationId)?.memberIds ?? []
+  const names = useMemo(() => new Map(users.map((u) => [u.id, u.name])), [users])
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const memberSet = new Set(memberIds)
+  const candidates = users.filter((u) => !memberSet.has(u.id))
+
+  async function addMembers() {
+    if (picked.size === 0 || busy) return
+    setBusy(true); setError(null)
+    try {
+      const r = await fetch(`/api/chat/conversations/${conversationId}/members`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userIds: [...picked] }),
+      })
+      if (!r.ok) { setError('Could not add members.'); return }
+      setPicked(new Set()); await refresh()
+    } catch { setError('Could not add members.') } finally { setBusy(false) }
+  }
+
+  async function remove(userId: string) {
+    setBusy(true); setError(null)
+    try {
+      const r = await fetch(`/api/chat/conversations/${conversationId}/members`, {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId }),
+      })
+      if (!r.ok) { setError('Could not remove that member.'); return }
+      await refresh()
+    } catch { setError('Could not remove that member.') } finally { setBusy(false) }
+  }
+
+  function toggle(id: string) {
+    setPicked((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  return (
+    <Modal title={`Members of #${channelName ?? ''}`} onClose={onClose}>
+      <div className="mt-3 max-h-56 space-y-0.5 overflow-y-auto">
+        {memberIds.map((id) => (
+          <div key={id} className="flex items-center justify-between rounded-md px-3 py-1.5 text-sm hover:bg-gray-50">
+            <span>{names.get(id) ?? 'unknown'}{id === selfId && <span className="ml-1 text-[11px] text-gray-400">you</span>}</span>
+            {manage && id !== selfId && (
+              <button onClick={() => remove(id)} disabled={busy} className="text-xs text-red-600 hover:underline disabled:opacity-50">Remove</button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {manage && (
+        <div className="mt-4 border-t border-gray-200 pt-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Add people</p>
+          <div className="mt-2 max-h-40 space-y-0.5 overflow-y-auto">
+            {candidates.length === 0 && <p className="px-1 text-sm text-gray-500">Everyone is already a member.</p>}
+            {candidates.map((u) => {
+              const on = picked.has(u.id)
+              return (
+                <button key={u.id} onClick={() => toggle(u.id)}
+                  className={`flex w-full items-center justify-between rounded-md px-3 py-1.5 text-left text-sm ${on ? 'bg-accent/10 text-accent' : 'hover:bg-gray-100'}`}>
+                  <span>{u.name}{u.role === 'guest' && <span className="ml-1 text-[11px] text-gray-400">guest</span>}</span>
+                  {on && <span aria-hidden>✓</span>}
+                </button>
+              )
+            })}
+          </div>
+          <div className="mt-2 flex justify-end">
+            <button onClick={addMembers} disabled={busy || picked.size === 0}
+              className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">
+              {busy ? 'Adding…' : `Add${picked.size ? ` ${picked.size}` : ''}`}
+            </button>
+          </div>
+        </div>
+      )}
+      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+    </Modal>
+  )
+}
