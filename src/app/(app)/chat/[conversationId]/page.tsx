@@ -19,6 +19,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ c
       conversationId={conversationId}
       conversationType={convo.type}
       channelName={convo.name}
+      topic={convo.topic}
       archived={!!convo.archivedAt}
       selfRole={user.role}
       manage={manage}

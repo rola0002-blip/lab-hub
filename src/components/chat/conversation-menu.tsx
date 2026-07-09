@@ -35,7 +35,7 @@ export default function ConversationMenu({ conversationId, conversationType, cha
   const router = useRouter()
   const { conversations, selfId, refresh } = useChat()
   const [open, setOpen] = useState(false)
-  const [dialog, setDialog] = useState<'none' | 'members'>('none')
+  const [dialog, setDialog] = useState<'none' | 'members' | 'edit'>('none')
   const [confirmArchive, setConfirmArchive] = useState(false)
   const [busy, setBusy] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -87,12 +87,20 @@ export default function ConversationMenu({ conversationId, conversationType, cha
       {open && (
         <div className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-md border border-gray-200 bg-white py-1 shadow-lg">
           <button onClick={toggleMute} className={item}>{muted ? 'Unmute' : 'Mute'}</button>
+          {isChannel && manage && !archived && (
+            <button onClick={() => { setOpen(false); setDialog('edit') }} className={item}>Edit channel…</button>
+          )}
           {isChannel && <button onClick={() => { setOpen(false); setDialog('members') }} className={item}>Members…</button>}
           {isChannel && <button onClick={leave} className={item}>Leave channel</button>}
           {isChannel && manage && !archived && (
             <button onClick={() => { setOpen(false); setConfirmArchive(true) }} className={`${item} text-red-600`}>Archive channel</button>
           )}
         </div>
+      )}
+
+      {dialog === 'edit' && (
+        <EditChannelDialog conversationId={conversationId} initialName={convo?.name ?? channelName ?? ''}
+          initialTopic={convo?.topic ?? ''} onClose={() => setDialog('none')} />
       )}
 
       {dialog === 'members' && (
@@ -195,6 +203,54 @@ function MembersDialog({ conversationId, channelName, manage, onClose }: { conve
         </div>
       )}
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+    </Modal>
+  )
+}
+
+// Rename a channel and/or edit its topic (managers only). Mirrors the create
+// form; on success refreshes the store (sidebar) and the server component
+// (header name/topic) via router.refresh().
+function EditChannelDialog({ conversationId, initialName, initialTopic, onClose }:
+  { conversationId: string; initialName: string; initialTopic: string; onClose: () => void }) {
+  const router = useRouter()
+  const { refresh } = useChat()
+  const [name, setName] = useState(initialName)
+  const [topic, setTopic] = useState(initialTopic)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function save() {
+    const n = name.trim()
+    if (!n || busy) return
+    setBusy(true); setError(null)
+    try {
+      const r = await fetch(`/api/chat/conversations/${conversationId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: n, topic: topic.trim() }),
+      })
+      if (!r.ok) { const d = await r.json().catch(() => null); setError(d?.error ?? 'Could not update the channel.'); return }
+      await refresh(); router.refresh(); onClose()
+    } catch { setError('Could not update the channel.') } finally { setBusy(false) }
+  }
+
+  return (
+    <Modal title="Edit channel" onClose={onClose}>
+      <label className="mt-4 block text-sm">Name
+        <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} autoFocus
+          className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
+      </label>
+      <label className="mt-3 block text-sm">Topic <span className="text-gray-400">(optional)</span>
+        <input value={topic} onChange={(e) => setTopic(e.target.value)} maxLength={200}
+          placeholder="What's this channel about?" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
+      </label>
+      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      <div className="mt-4 flex justify-end gap-2">
+        <button onClick={onClose} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm">Cancel</button>
+        <button onClick={save} disabled={busy || !name.trim()}
+          className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">
+          {busy ? 'Saving…' : 'Save'}
+        </button>
+      </div>
     </Modal>
   )
 }

@@ -11,13 +11,14 @@ type Props = {
   conversationId: string
   conversationType: 'CHANNEL' | 'DM'
   channelName: string | null
+  topic: string
   archived: boolean
   selfRole: string
   manage: boolean
   memberIds: string[]
 }
 
-export default function MessagePane({ conversationId, conversationType, channelName, archived, selfRole, manage, memberIds }: Props) {
+export default function MessagePane({ conversationId, conversationType, channelName, topic, archived, selfRole, manage, memberIds }: Props) {
   const { users, selfId, registerConversationHandler } = useChat()
   const [messages, setMessages] = useState<Msg[]>([])
   const [hasMore, setHasMore] = useState(false)
@@ -113,7 +114,10 @@ export default function MessagePane({ conversationId, conversationType, channelN
     <div className="flex h-full min-w-0 flex-1">
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center gap-2 border-b border-gray-200 px-4 py-2">
-          <h1 className="min-w-0 flex-1 truncate font-semibold">{title}</h1>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate font-semibold leading-tight">{title}</h1>
+            {conversationType === 'CHANNEL' && topic && <p className="truncate text-xs text-gray-500">{topic}</p>}
+          </div>
           <SearchBox />
           <ConversationMenu conversationId={conversationId} conversationType={conversationType}
             channelName={channelName} archived={archived} manage={manage} />

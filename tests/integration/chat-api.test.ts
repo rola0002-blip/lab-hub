@@ -14,6 +14,7 @@ vi.mock('@/lib/session', () => ({
 import { POST as sendRoute } from '@/app/api/chat/messages/route'
 import { GET as listRoute } from '@/app/api/chat/conversations/[id]/messages/route'
 import { POST as membersRoute } from '@/app/api/chat/conversations/[id]/members/route'
+import { PATCH as editConvoRoute } from '@/app/api/chat/conversations/[id]/route'
 import { POST as attachRoute } from '@/app/api/chat/attachments/route'
 
 const jreq = (url: string, body: unknown) =>
@@ -59,6 +60,25 @@ describe('chat API', () => {
     mockUser.current = { ...creator, role: creator.role }
     expect((await membersRoute(jreq('http://t', { userIds: [guest.id] }), { params })).status).toBe(200)
     expect(await prisma.notification.count({ where: { userId: guest.id, type: 'channel_added' } })).toBe(1)
+  })
+
+  it('conversation PATCH renames/sets topic, manage-gated (401 / 403 / 200)', async () => {
+    const creator = await makeUser()
+    const rando = await makeUser()
+    const ch = await makeChannel({ createdById: creator.id })
+    await makeMember(ch.id, creator.id)
+    const params = Promise.resolve({ id: ch.id })
+    const patch = (body: unknown) =>
+      new Request('http://t', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+
+    expect((await editConvoRoute(patch({ name: 'x' }), { params })).status).toBe(401) // signed out
+    mockUser.current = { ...rando, role: rando.role }
+    expect((await editConvoRoute(patch({ name: 'x' }), { params })).status).toBe(403) // non-manager
+    mockUser.current = { ...creator, role: creator.role }
+    expect((await editConvoRoute(patch({ name: 'renamed', topic: 'new topic' }), { params })).status).toBe(200)
+    const row = await prisma.conversation.findUniqueOrThrow({ where: { id: ch.id } })
+    expect(row.name).toBe('renamed')
+    expect(row.topic).toBe('new topic')
   })
 
   it('attachments: valid pdf stored, executable rejected 422', async () => {

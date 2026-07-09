@@ -4,7 +4,8 @@ import { resetDb, makeUser, makeChannel, makeMember, makeMessage } from '../fact
 import { subscribe, _resetForTests, type LabEvent } from '@/lib/events'
 import {
   createChannel, getOrCreateDm, addMembers, removeMember, joinPublicChannel,
-  archiveChannel, isMember, canManage, accessibleConversationIds, listConversations, listPublicChannels,
+  archiveChannel, renameChannel, setChannelTopic, isMember, canManage,
+  accessibleConversationIds, listConversations, listPublicChannels,
 } from '@/features/chat/conversation-service'
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -64,6 +65,35 @@ describe('conversation service', () => {
     expect((await removeMember({ conversationId: ch.conversationId, userId: joiner.id, byId: joiner.id })).ok).toBe(true) // self-leave
     expect((await archiveChannel({ conversationId: ch.conversationId, byId: rando.id })).ok).toBe(false)
     expect((await archiveChannel({ conversationId: ch.conversationId, byId: creator.id })).ok).toBe(true)
+  })
+
+  it('rename and set-topic are manage-gated, length- and uniqueness-checked', async () => {
+    const creator = await makeUser()
+    const rando = await makeUser()
+    const a = await createChannel({ name: 'alpha', isPrivate: false, createdById: creator.id })
+    const b = await createChannel({ name: 'beta', isPrivate: false, createdById: creator.id })
+    if (!a.ok || !b.ok) throw new Error('setup')
+
+    // non-managers are refused (forbidden)
+    expect(await renameChannel({ conversationId: a.conversationId, name: 'x', byId: rando.id }))
+      .toMatchObject({ ok: false, error: 'forbidden' })
+    expect(await setChannelTopic({ conversationId: a.conversationId, topic: 'x', byId: rando.id }))
+      .toMatchObject({ ok: false, error: 'forbidden' })
+
+    // length bounds + case-insensitive clash with a sibling channel (invalid)
+    expect(await renameChannel({ conversationId: a.conversationId, name: '', byId: creator.id })).toMatchObject({ ok: false, error: 'invalid' })
+    expect(await renameChannel({ conversationId: a.conversationId, name: 'z'.repeat(61), byId: creator.id })).toMatchObject({ ok: false, error: 'invalid' })
+    expect(await renameChannel({ conversationId: a.conversationId, name: 'BETA', byId: creator.id })).toMatchObject({ ok: false, error: 'invalid' })
+
+    // happy path: rename + topic persist (topic trimmed)
+    expect((await renameChannel({ conversationId: a.conversationId, name: 'alpha-2', byId: creator.id })).ok).toBe(true)
+    expect((await setChannelTopic({ conversationId: a.conversationId, topic: '  Growth runs  ', byId: creator.id })).ok).toBe(true)
+    const row = await prisma.conversation.findUniqueOrThrow({ where: { id: a.conversationId } })
+    expect(row.name).toBe('alpha-2')
+    expect(row.topic).toBe('Growth runs')
+
+    // renaming to its own current name is allowed (self excluded from the clash check)
+    expect((await renameChannel({ conversationId: a.conversationId, name: 'alpha-2', byId: creator.id })).ok).toBe(true)
   })
 
   it('a banned channel creator cannot manage', async () => {

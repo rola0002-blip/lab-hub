@@ -104,6 +104,30 @@ export async function joinPublicChannel(args: { conversationId: string; userId: 
   return { ok: true }
 }
 
+export type ManageResult = { ok: true } | { ok: false; error: 'forbidden' | 'invalid'; message: string }
+
+export async function renameChannel(args: { conversationId: string; name: string; byId: string }): Promise<ManageResult> {
+  const convo = await prisma.conversation.findUnique({ where: { id: args.conversationId } })
+  if (!convo || convo.type !== 'CHANNEL' || convo.archivedAt) return { ok: false, error: 'forbidden', message: 'Channel not found.' }
+  if (!(await canManage(args.byId, args.conversationId))) return { ok: false, error: 'forbidden', message: 'Only admins or the channel creator rename channels.' }
+  const name = args.name.trim()
+  if (name.length < 1 || name.length > 60) return { ok: false, error: 'invalid', message: 'Channel name must be 1–60 characters.' }
+  const clash = await prisma.conversation.findFirst({
+    where: { type: 'CHANNEL', archivedAt: null, name: { equals: name, mode: 'insensitive' }, id: { not: args.conversationId } },
+  })
+  if (clash) return { ok: false, error: 'invalid', message: 'A channel with that name already exists.' }
+  await prisma.conversation.update({ where: { id: args.conversationId }, data: { name } })
+  return { ok: true }
+}
+
+export async function setChannelTopic(args: { conversationId: string; topic: string; byId: string }): Promise<ManageResult> {
+  const convo = await prisma.conversation.findUnique({ where: { id: args.conversationId } })
+  if (!convo || convo.type !== 'CHANNEL' || convo.archivedAt) return { ok: false, error: 'forbidden', message: 'Channel not found.' }
+  if (!(await canManage(args.byId, args.conversationId))) return { ok: false, error: 'forbidden', message: 'Only admins or the channel creator set the topic.' }
+  await prisma.conversation.update({ where: { id: args.conversationId }, data: { topic: args.topic.trim().slice(0, 200) } })
+  return { ok: true }
+}
+
 export async function archiveChannel(args: { conversationId: string; byId: string }): Promise<{ ok: boolean; message?: string }> {
   if (!(await canManage(args.byId, args.conversationId))) return { ok: false, message: 'Only admins or the channel creator archive channels.' }
   await prisma.conversation.update({ where: { id: args.conversationId }, data: { archivedAt: new Date() } })
