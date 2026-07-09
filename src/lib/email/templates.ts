@@ -29,3 +29,15 @@ export function bookingCancelledUserDeactivatedEmail(orgName: string, userName: 
 export function bookingReminderEmail(orgName: string, equipmentName: string, when: string): Tpl {
   return { subject: `[${orgName}] Upcoming booking: ${equipmentName}`, html: wrap(`<p>Reminder: you have <strong>${esc(equipmentName)}</strong> ${esc(when)}.</p>`) }
 }
+export function mentionEmail(orgName: string, senderName: string, where: string, preview: string): Tpl {
+  return {
+    subject: `[${orgName}] ${senderName} mentioned you in ${where}`,
+    html: wrap(`<p><strong>${esc(senderName)}</strong> mentioned you in <strong>${esc(where)}</strong>:</p><p>${esc(preview)}</p><p>Open LabHub to reply.</p>`),
+  }
+}
+export function dmEmail(orgName: string, senderName: string, preview: string): Tpl {
+  return {
+    subject: `[${orgName}] Direct message from ${senderName}`,
+    html: wrap(`<p><strong>${esc(senderName)}</strong> sent you a direct message:</p><p>${esc(preview)}</p><p>Open LabHub to reply.</p>`),
+  }
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { inviteEmail, bookingDecidedEmail, bookingPendingEmail } from './templates'
+import { inviteEmail, bookingDecidedEmail, bookingPendingEmail, mentionEmail, dmEmail } from './templates'
 
 describe('email templates', () => {
   it('invite includes org name and link', () => {
@@ -19,5 +19,19 @@ describe('email templates', () => {
     expect(t.html).toContain('&amp;')
     expect(t.html).not.toContain('<script>')
     expect(t.html).toContain('CVD &lt;Furnace&gt; &amp; Co')
+  })
+})
+
+describe('chat email templates', () => {
+  it('mention email carries sender, location, escaped preview', () => {
+    const t = mentionEmail('TAY LABS', 'Roland', '#general', 'see <script> this')
+    expect(t.subject).toContain('Roland')
+    expect(t.html).toContain('#general')
+    expect(t.html).toContain('&lt;script&gt;')
+  })
+  it('dm email carries sender and escaped preview', () => {
+    const t = dmEmail('TAY LABS', 'Roland', '2 < 3')
+    expect(t.subject).toMatch(/direct message/i)
+    expect(t.html).toContain('2 &lt; 3')
   })
 })

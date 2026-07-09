@@ -6,6 +6,7 @@ import { enqueueEmail } from './email/outbox'
 export type NotificationType =
   | 'booking_pending' | 'booking_decided' | 'booking_cancelled_maintenance'
   | 'booking_reminder' | 'booking_expired' | 'booking_cancelled'
+  | 'message_mention' | 'message_dm' | 'channel_added'
 
 export async function notify(
   userId: string, type: NotificationType, payload: Record<string, unknown>,
