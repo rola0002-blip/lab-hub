@@ -20,4 +20,13 @@ describe('parseEnv', () => {
     expect(() => parseEnv({ DATABASE_URL: 'postgresql://x', BETTER_AUTH_SECRET: 'too-short' })).toThrow(/BETTER_AUTH_SECRET/)
     expect(() => parseEnv({ DATABASE_URL: 'postgresql://x' })).toThrow(/BETTER_AUTH_SECRET/)
   })
+  it('VAPID vars default to empty (push disabled)', () => {
+    const e = parseEnv({
+      DATABASE_URL: 'postgresql://x', APP_URL: 'http://localhost:3000',
+      SMTP_HOST: '', SMTP_PORT: '587', SMTP_USER: '', SMTP_PASS: '',
+      SMTP_FROM: 'x <x@x>', BETTER_AUTH_SECRET: 'a'.repeat(32),
+    })
+    expect(e.VAPID_PUBLIC_KEY).toBe('')
+    expect(e.VAPID_PRIVATE_KEY).toBe('')
+  })
 })
