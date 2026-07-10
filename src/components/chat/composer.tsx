@@ -10,6 +10,11 @@ type Props = {
   parentId?: string
   onSent: (m: Msg) => void
   onRemove: (tempId: string) => void
+  // Task 9 (optimistic send): when provided, a failed send keeps the temp in the
+  // timeline (flagged for an inline "Not delivered · Retry") instead of removing
+  // it, and the draft is cleared. The thread panel omits it, keeping the original
+  // behaviour (drop the temp, keep the draft, surface a composer-level error).
+  onFail?: (tempId: string) => void
 }
 
 type Attach = { path: string; name: string; mime: string; size: number }
@@ -30,7 +35,7 @@ function detectMention(value: string, caret: number): { start: number; query: st
 // v1 tradeoff (settled in the task brief): the textarea holds RAW token text
 // (`<@id>`, `<!channel>`) directly — autocomplete inserts tokens, and a hint line
 // explains they render as friendly @Name once sent. No rich-text dual buffer.
-export default function Composer({ conversationId, selfRole, memberIds, parentId, onSent, onRemove }: Props) {
+export default function Composer({ conversationId, selfRole, memberIds, parentId, onSent, onRemove, onFail }: Props) {
   const { users, selfId } = useChat()
   const [raw, setRaw] = useState('')
   const [attachments, setAttachments] = useState<Attach[]>([])
@@ -124,14 +129,19 @@ export default function Composer({ conversationId, selfRole, memberIds, parentId
       const d = await r.json().catch(() => null)
       if (r.status === 201 && d?.message) {
         onSent(d.message)
-        // Clear the draft only once the send is confirmed (201); on failure we keep it for retry.
+        // Clear the draft only once the send is confirmed (201).
         setRaw(''); setAttachments([])
+      } else if (onFail) {
+        // Retry-aware pane: keep the temp (flagged failed) as the retry surface and
+        // clear the draft, since the message now lives in the timeline.
+        onFail(tempId); setRaw(''); setAttachments([])
       } else {
-        // Send failed: drop the optimistic temp entirely (no tombstone) and keep the draft.
+        // No retry surface (thread panel): drop the temp and keep the draft.
         setError(d?.message ?? 'Failed to send.'); onRemove(tempId)
       }
     } catch {
-      setError('Failed to send.'); onRemove(tempId)
+      if (onFail) { onFail(tempId); setRaw(''); setAttachments([]) }
+      else { setError('Failed to send.'); onRemove(tempId) }
     } finally { setBusy(false) }
   }
 

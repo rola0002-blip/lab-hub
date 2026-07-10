@@ -1,5 +1,7 @@
 'use client'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import { ArrowDown } from 'lucide-react'
+import { dayLabel } from '@/lib/humanize'
 import { useChat } from './chat-store'
 import MessageItem, { type Msg } from './message-item'
 import Composer from './composer'
@@ -18,15 +20,52 @@ type Props = {
   memberIds: string[]
 }
 
+// A message is at the bottom of the scroller when it's within this many pixels of
+// the end; below the threshold we show the jump-to-latest button.
+const AT_BOTTOM_PX = 80
+
+// Pane-level day divider — a sticky pill that rides the top of the scroller as you
+// read through a day's messages.
+function DayDivider({ label }: { label: string }) {
+  return (
+    <div className="sticky top-2 z-10 mx-auto my-2 w-fit rounded-full border border-border bg-surface px-3 py-0.5 text-xs font-semibold text-muted shadow-sm">
+      {label}
+    </div>
+  )
+}
+
+// Pane-level "New messages" line: a red hairline flanking a "New" label, sitting
+// above the first message the viewer hasn't read yet.
+function NewMessagesDivider() {
+  return (
+    <div role="separator" aria-label="New messages" tabIndex={-1} className="my-2 flex items-center gap-2">
+      <div className="h-px flex-1 bg-[var(--color-danger)]" />
+      <span className="text-2xs font-semibold uppercase tracking-wide text-[var(--color-danger)]">New</span>
+      <div className="h-px flex-1 bg-[var(--color-danger)]" />
+    </div>
+  )
+}
+
 export default function MessagePane({ conversationId, conversationType, channelName, topic, archived, selfRole, manage, memberIds }: Props) {
   const { users, selfId, registerConversationHandler } = useChat()
   const [messages, setMessages] = useState<Msg[]>([])
   const [hasMore, setHasMore] = useState(false)
   const [threadRoot, setThreadRoot] = useState<string | null>(null)
   const [typing, setTyping] = useState<string | null>(null)
+  // The first-unread anchor is captured once per conversation (before markRead)
+  // and held in state so the "New" line stays put while you read and only clears
+  // on the next visit.
+  const [firstUnreadId, setFirstUnreadId] = useState<string | null>(null)
+  const [atBottom, setAtBottom] = useState(true)
+  const [newCount, setNewCount] = useState(0)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const firstLoad = useRef(true)
+  // Which conversation we've already captured a first-unread anchor for (guards
+  // the capture-once-before-markRead rule); mirrors atBottom into a ref so the SSE
+  // handler can read the live value without re-subscribing.
+  const unreadCapturedRef = useRef<string | null>(null)
+  const atBottomRef = useRef(true)
 
   const markRead = useCallback(() => void fetch(`/api/chat/conversations/${conversationId}/read`, { method: 'POST' }), [conversationId])
 
@@ -35,6 +74,12 @@ export default function MessagePane({ conversationId, conversationType, channelN
     if (!r.ok) return
     const d = await r.json()
     setMessages(d.messages); setHasMore(d.hasMore)
+    // Capture the unread anchor from the FIRST load of this conversation, before
+    // markRead advances lastReadAt server-side.
+    if (unreadCapturedRef.current !== conversationId) {
+      unreadCapturedRef.current = conversationId
+      setFirstUnreadId(d.firstUnreadId ?? null)
+    }
     markRead()
   }, [conversationId, markRead])
 
@@ -67,6 +112,31 @@ export default function MessagePane({ conversationId, conversationType, channelN
     })
   }, [])
 
+  // Flag a temp whose POST failed so its row can offer an inline retry.
+  const markFailed = useCallback((tempId: string) => {
+    setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, sendFailed: true } : m)))
+  }, [])
+
+  // Re-POST a failed temp reconstructed from its own row. On success the real
+  // message replaces the temp (upsert matches by author+body); on failure it
+  // re-flags for another retry.
+  const retrySend = useCallback(async (temp: Msg) => {
+    setMessages((prev) => prev.map((m) => (m.id === temp.id ? { ...m, sendFailed: false } : m)))
+    const payload = {
+      conversationId, body: temp.body,
+      ...(temp.parentId ? { parentId: temp.parentId } : {}),
+      ...(temp.attachments.length ? { attachments: temp.attachments.map((a) => ({ path: a.path, name: a.name, mime: a.mime, size: a.size })) } : {}),
+    }
+    try {
+      const r = await fetch('/api/chat/messages', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      })
+      const d = await r.json().catch(() => null)
+      if (r.status === 201 && d?.message) upsert(d.message)
+      else markFailed(temp.id)
+    } catch { markFailed(temp.id) }
+  }, [conversationId, upsert, markFailed])
+
   useEffect(() => registerConversationHandler((e) => {
     if (e.t === 'reconnect') { void loadLatest(); return }
     if (!('cid' in e) || e.cid !== conversationId) return
@@ -83,6 +153,9 @@ export default function MessagePane({ conversationId, conversationType, channelN
           return
         }
         upsert(m); markRead()
+        // A new message from someone else that lands while we're scrolled up feeds
+        // the "N new" pill on the jump button.
+        if (isNew && m.author.id !== selfId && !atBottomRef.current) setNewCount((n) => n + 1)
       })
     }
     if (e.t === 'typing') {
@@ -90,7 +163,7 @@ export default function MessagePane({ conversationId, conversationType, channelN
       if (typingTimer.current) clearTimeout(typingTimer.current)
       typingTimer.current = setTimeout(() => setTyping(null), 4000)
     }
-  }), [conversationId, registerConversationHandler, loadLatest, upsert, markRead])
+  }), [conversationId, registerConversationHandler, loadLatest, upsert, markRead, selfId])
 
   useEffect(() => { // first load opens at newest unconditionally; afterwards stick to bottom only when near it
     const el = scroller.current
@@ -98,6 +171,26 @@ export default function MessagePane({ conversationId, conversationType, channelN
     if (firstLoad.current && messages.length) { el.scrollTop = el.scrollHeight; firstLoad.current = false; return }
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) el.scrollTop = el.scrollHeight
   }, [messages])
+
+  // Track bottom-proximity for the jump button; only re-render on transitions.
+  const onScroll = useCallback(() => {
+    const el = scroller.current
+    if (!el) return
+    const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < AT_BOTTOM_PX
+    if (bottom === atBottomRef.current) return
+    atBottomRef.current = bottom
+    setAtBottom(bottom)
+    if (bottom) setNewCount(0)
+  }, [])
+
+  const jumpToLatest = useCallback(() => {
+    const el = scroller.current
+    if (!el) return
+    const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+    el.scrollTo({ top: el.scrollHeight, behavior })
+    setNewCount(0)
+    markRead()
+  }, [markRead])
 
   async function loadEarlier() {
     if (!messages.length) return
@@ -109,10 +202,11 @@ export default function MessagePane({ conversationId, conversationType, channelN
 
   const title = conversationType === 'DM' ? 'Direct message' : `#${channelName}`
   const names = new Map(users.map((u) => [u.id, u.name]))
+  const now = new Date() // viewer-local reference for day-divider labels (client render)
 
   return (
     <div className="flex h-full min-w-0 flex-1">
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="relative flex min-w-0 flex-1 flex-col">
         <header className="flex items-center gap-2 border-b border-border px-4 py-2">
           <div className="min-w-0 flex-1">
             <h1 className="truncate font-semibold leading-tight">{title}</h1>
@@ -122,17 +216,35 @@ export default function MessagePane({ conversationId, conversationType, channelN
           <ConversationMenu conversationId={conversationId} conversationType={conversationType}
             channelName={channelName} archived={archived} manage={manage} />
         </header>
-        <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
+        <div ref={scroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
           {hasMore && <button onClick={loadEarlier} className="mx-auto my-2 block rounded-md border border-border px-3 py-1 text-xs text-muted">Load earlier</button>}
-          {messages.map((m, i) => (
-            <MessageItem key={m.id} msg={m} prev={messages[i - 1]} names={names} selfId={selfId} selfRole={selfRole}
-              onUpdated={upsert} onOpenThread={() => setThreadRoot(m.id)} />
-          ))}
+          {messages.map((m, i) => {
+            const prev = messages[i - 1]
+            const prevDate = prev ? new Date(prev.createdAt) : null
+            const dayChanged = !prevDate || new Date(m.createdAt).toDateString() !== prevDate.toDateString()
+            const isFirstUnread = m.id === firstUnreadId
+            return (
+              <Fragment key={m.id}>
+                {dayChanged && <DayDivider label={dayLabel(m.createdAt, now)} />}
+                {isFirstUnread && <NewMessagesDivider />}
+                <MessageItem msg={m} prev={prev} names={names} selfId={selfId} selfRole={selfRole}
+                  forceLeading={isFirstUnread} onUpdated={upsert} onOpenThread={() => setThreadRoot(m.id)} onRetry={retrySend} />
+              </Fragment>
+            )
+          })}
           {typing && <p className="px-4 py-1 text-xs italic text-subtle">{typing} is typing…</p>}
         </div>
+        {!atBottom && (
+          <button type="button" onClick={jumpToLatest}
+            aria-label={newCount > 0 ? `Jump to ${newCount} new message${newCount === 1 ? '' : 's'}` : 'Jump to latest messages'}
+            className="absolute bottom-20 right-6 flex items-center gap-1 rounded-full bg-accent px-3 py-1.5 text-sm text-accent-on shadow-lg">
+            <ArrowDown size={16} aria-hidden />
+            {newCount > 0 ? `${newCount} new` : 'Jump to latest'}
+          </button>
+        )}
         {archived
           ? <p className="border-t border-border p-3 text-sm text-muted">This conversation is archived.</p>
-          : <Composer conversationId={conversationId} selfRole={selfRole} memberIds={memberIds} onSent={upsert} onRemove={remove} />}
+          : <Composer conversationId={conversationId} selfRole={selfRole} memberIds={memberIds} onSent={upsert} onRemove={remove} onFail={markFailed} />}
       </div>
       {threadRoot && (
         <ThreadPanel rootId={threadRoot} conversationId={conversationId} names={names} memberIds={memberIds} selfId={selfId} selfRole={selfRole}

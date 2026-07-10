@@ -147,6 +147,28 @@ describe('message service', () => {
     expect(await sendMessage({ userId: a.id, conversationId: ch.id, body: 'no' })).toMatchObject({ ok: false, error: 'rate_limited' })
   })
 
+  it('listMessages surfaces firstUnreadId = the oldest message newer than the reader lastReadAt', async () => {
+    const me = await makeUser()
+    const other = await makeUser()
+    const ch = await makeChannel()
+    const cutoff = new Date(Date.now() - 60_000)
+    await makeMember(ch.id, me.id, { lastReadAt: cutoff })
+    const base = Date.now()
+    await makeMessage(ch.id, other.id, { body: 'read', createdAt: new Date(base - 90_000) })
+    const firstUnread = await makeMessage(ch.id, other.id, { body: 'unread-1', createdAt: new Date(base - 30_000) })
+    await makeMessage(ch.id, other.id, { body: 'unread-2', createdAt: new Date(base - 10_000) })
+
+    const r = await listMessages({ userId: me.id, conversationId: ch.id })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.firstUnreadId).toBe(firstUnread.id) // oldest of the two unread messages
+
+    // Once caught up (lastReadAt advances past every message), there is no unread anchor.
+    await markRead({ userId: me.id, conversationId: ch.id })
+    const after = await listMessages({ userId: me.id, conversationId: ch.id })
+    expect(after.ok && after.firstUnreadId).toBeNull()
+  })
+
   it('pagination pages backwards by cursor; markRead zeroes unread', async () => {
     const me = await makeUser()
     const other = await makeUser()

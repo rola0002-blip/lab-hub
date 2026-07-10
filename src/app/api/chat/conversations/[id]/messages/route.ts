@@ -13,5 +13,5 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     take: url.searchParams.get('take') ? Number(url.searchParams.get('take')) : undefined,
   })
   if (!r.ok) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-  return NextResponse.json({ messages: r.messages, hasMore: r.hasMore })
+  return NextResponse.json({ messages: r.messages, hasMore: r.hasMore, firstUnreadId: r.firstUnreadId })
 }

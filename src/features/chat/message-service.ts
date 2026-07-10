@@ -143,21 +143,36 @@ export async function toggleReaction(args: { messageId: string; userId: string; 
 }
 
 export async function listMessages(args: { userId: string; conversationId: string; before?: string; take?: number }):
-  Promise<{ ok: false } | { ok: true; messages: MessageDto[]; hasMore: boolean }> {
-  if (!(await isMember(args.userId, args.conversationId))) return { ok: false }
+  Promise<{ ok: false } | { ok: true; messages: MessageDto[]; hasMore: boolean; firstUnreadId: string | null }> {
+  // Fetch the caller's membership row directly (rather than isMember): it both
+  // gates access AND carries lastReadAt, which anchors the "New messages" line.
+  const member = await prisma.conversationMember.findUnique({
+    where: { conversationId_userId: { conversationId: args.conversationId, userId: args.userId } },
+    select: { lastReadAt: true },
+  })
+  if (!member) return { ok: false }
   const take = Math.min(args.take ?? 50, 100)
   const cursor = args.before ? await prisma.message.findUnique({ where: { id: args.before } }) : null
-  const rows = await prisma.message.findMany({
-    where: {
-      conversationId: args.conversationId, parentId: null,
-      ...(cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] } : {}),
-    },
-    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    take: take + 1,
-    include: MSG_INCLUDE,
-  })
+  const [rows, firstUnread] = await Promise.all([
+    prisma.message.findMany({
+      where: {
+        conversationId: args.conversationId, parentId: null,
+        ...(cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] } : {}),
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: take + 1,
+      include: MSG_INCLUDE,
+    }),
+    // Oldest root message the reader hasn't seen yet (createdAt strictly after
+    // their lastReadAt). Conversation-wide, independent of the page cursor.
+    prisma.message.findFirst({
+      where: { conversationId: args.conversationId, parentId: null, createdAt: { gt: member.lastReadAt } },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { id: true },
+    }),
+  ])
   const hasMore = rows.length > take
-  return { ok: true, messages: rows.slice(0, take).reverse().map(toDto), hasMore }
+  return { ok: true, messages: rows.slice(0, take).reverse().map(toDto), hasMore, firstUnreadId: firstUnread?.id ?? null }
 }
 
 export async function listThread(args: { userId: string; rootId: string }):

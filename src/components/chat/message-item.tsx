@@ -2,7 +2,7 @@
 import { Fragment, useState, type ReactNode } from 'react'
 import { Avatar } from '@/components/ui/avatar'
 import { avatarHue } from '@/lib/avatar'
-import { humanTime, clockTime, dayLabel } from '@/lib/humanize'
+import { humanTime, clockTime } from '@/lib/humanize'
 
 // Client-side mirror of the server MessageDto (message-service is `server-only`,
 // so we redeclare the shape here rather than import it into a client bundle).
@@ -20,6 +20,10 @@ export type Msg = {
   attachments: { id: string; path: string; name: string; mime: string; size: number }[]
   mentionUserIds: string[]
   mentionsChannel: boolean
+  // Client-only optimistic marker: set on a temp (`tmp-`) message whose POST
+  // failed, so the row can surface an inline "Not delivered · Retry". Never sent
+  // by the server; absent/false on every persisted message.
+  sendFailed?: boolean
 }
 
 type Names = Map<string, string>
@@ -69,9 +73,12 @@ type Props = {
   // Task 9 (unread) passes this to force a leading (un-grouped) row for the
   // first-unread message. Defaults false; grouping is otherwise automatic.
   forceLeading?: boolean
+  // Task 9 (optimistic send): re-POST a failed temp message. Only wired for the
+  // main pane; the thread panel leaves it undefined (temps drop on failure there).
+  onRetry?: (m: Msg) => void
 }
 
-export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpdated, onOpenThread, forceLeading = false }: Props) {
+export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpdated, onOpenThread, forceLeading = false, onRetry }: Props) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(msg.body)
   const [showPicker, setShowPicker] = useState(false)
@@ -124,15 +131,11 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
   const tbBtn = 'rounded px-1 text-sm leading-none hover:bg-hover'
 
   return (
-    <>
-      {newDay && (
-        <div className="my-3 flex items-center gap-2 text-2xs font-medium text-subtle">
-          <hr className="flex-1 border-border" />
-          <span>{dayLabel(msg.createdAt, now)}</span>
-          <hr className="flex-1 border-border" />
-        </div>
-      )}
-      <div className={`group relative grid grid-cols-[36px_1fr] gap-2 px-4 py-0.5 hover:bg-hover ${leading ? 'pt-2' : ''}`}>
+    // Day dividers and the "New messages" line are pane-level siblings (rendered
+    // by MessagePane), not part of this row — so a message stays a self-contained
+    // grid cell. A temp (optimistic) row is dimmed to 60% and settles to 100%
+    // once the real message replaces it.
+    <div className={`group relative grid grid-cols-[36px_1fr] gap-2 px-4 py-0.5 transition-opacity duration-200 hover:bg-hover ${leading ? 'pt-2' : ''} ${isTemp ? 'opacity-60' : 'opacity-100'}`}>
         {/* Column 1 — gutter: avatar on leading rows, hover-only clock on grouped rows. */}
         {leading ? (
           <Avatar name={msg.author.name} id={msg.author.id} image={msg.author.image} size={36} />
@@ -218,6 +221,13 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
               {msg.replyCount} {msg.replyCount === 1 ? 'reply' : 'replies'}
             </button>
           )}
+
+          {isTemp && msg.sendFailed && (
+            <p className="mt-0.5 text-xs text-[var(--color-danger)]">
+              Not delivered ·{' '}
+              <button type="button" onClick={() => onRetry?.(msg)} className="font-medium underline">Retry</button>
+            </p>
+          )}
         </div>
 
         {!msg.deleted && !isTemp && !editing && (
@@ -247,6 +257,5 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
           </div>
         )}
       </div>
-    </>
   )
 }
