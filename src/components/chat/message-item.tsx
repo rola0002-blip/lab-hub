@@ -1,10 +1,12 @@
 'use client'
 import { Fragment, useState, type ReactNode } from 'react'
-import { Copy, Check } from 'lucide-react'
+import { Copy, Check, Smile, SmilePlus } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { avatarHue } from '@/lib/avatar'
 import { humanTime, clockTime } from '@/lib/humanize'
 import { tokenizeMessage, type Token } from '@/features/chat/markdown'
+import { EMOJI_MAP } from '@/features/chat/emoji'
+import { EmojiPicker } from './emoji-picker'
 
 // Client-side mirror of the server MessageDto (message-service is `server-only`,
 // so we redeclare the shape here rather than import it into a client bundle).
@@ -30,8 +32,32 @@ export type Msg = {
 
 type Names = Map<string, string>
 
-// Curated reaction set surfaced in the hover emoji picker.
-export const EMOJIS = ['👍', '🙏', '😂', '🎉', '✅', '❌', '👀', '🔥', '💯', '🤔', '😮', '❤️']
+// Reverse of EMOJI_MAP: glyph → a readable, screen-reader-friendly name, so a
+// reaction lozenge's accessible name never collapses to color/glyph alone.
+// Prefers an alphabetic shortname (skip `+1`, `100`, …) and falls back to the
+// glyph itself for anything outside our curated map.
+const GLYPH_TO_NAME: Record<string, string> = (() => {
+  const rev: Record<string, string> = {}
+  for (const [shortname, glyph] of Object.entries(EMOJI_MAP)) {
+    const alpha = /^[a-z]/.test(shortname)
+    if (!(glyph in rev) || (alpha && !/^[a-z]/.test(rev[glyph]))) rev[glyph] = shortname
+  }
+  return rev
+})()
+function emojiLabel(glyph: string): string {
+  const name = GLYPH_TO_NAME[glyph]
+  return name ? name.replace(/_/g, ' ') : glyph
+}
+
+// Human "who reacted" summary for a lozenge tooltip: "Ada", "Ada and Rex",
+// "Ada, Rex and Sam", then "Ada, Rex and N others" beyond three.
+function whoReacted(userIds: string[], names: Names): string {
+  const list = userIds.map((id) => names.get(id) ?? 'Someone')
+  if (list.length <= 1) return list[0] ?? ''
+  if (list.length === 2) return `${list[0]} and ${list[1]}`
+  if (list.length === 3) return `${list[0]}, ${list[1]} and ${list[2]}`
+  return `${list[0]}, ${list[1]} and ${list.length - 2} others`
+}
 
 // Fenced code renders as a scroll-safe block with a copy button. A block-display
 // <span> (not <pre>/<div>) keeps the code valid inside the message <p> wrapper.
@@ -107,7 +133,9 @@ type Props = {
 export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpdated, onOpenThread, forceLeading = false, onRetry }: Props) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(msg.body)
-  const [showPicker, setShowPicker] = useState(false)
+  // Which emoji picker is open, if any: the hover-toolbar face or the reaction
+  // "+" chip. One at a time; both feed the same `react()`.
+  const [pickerAt, setPickerAt] = useState<'toolbar' | 'chip' | null>(null)
   const [confirmDel, setConfirmDel] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -133,7 +161,7 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
     if (r.ok) onUpdated((await r.json()).message)
   }
   async function react(emoji: string) {
-    setShowPicker(false)
+    setPickerAt(null)
     await fetch(`/api/chat/messages/${msg.id}/reactions`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emoji }),
     })
@@ -231,16 +259,30 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
           ))}
 
           {!msg.deleted && msg.reactions.length > 0 && (
-            <div className="mt-1 flex flex-wrap gap-1">
+            <div className="mt-1 flex flex-wrap items-center gap-1">
               {msg.reactions.map((rx) => {
                 const mine = rx.userIds.includes(selfId)
                 return (
-                  <button key={rx.emoji} onClick={() => react(rx.emoji)}
-                    className={`flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs ${mine ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted hover:bg-hover'}`}>
-                    <span>{rx.emoji}</span><span>{rx.userIds.length}</span>
+                  <button key={rx.emoji} type="button" onClick={() => react(rx.emoji)}
+                    aria-pressed={mine}
+                    aria-label={`${emojiLabel(rx.emoji)}, ${rx.userIds.length}, react`}
+                    title={whoReacted(rx.userIds, names)}
+                    className={`inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs tabular-nums ${mine ? 'border-accent bg-accent-subtle font-semibold text-accent' : 'border-border text-muted hover:border-border-strong'}`}>
+                    {/* Keyed by count so an add remounts the glyph and replays the
+                        pop (motion-safe only — skipped under reduced-motion). */}
+                    <span key={rx.userIds.length} aria-hidden className="motion-safe:animate-pop">{rx.emoji}</span>
+                    <span aria-hidden>{rx.userIds.length}</span>
                   </button>
                 )
               })}
+              <div className="relative inline-flex">
+                <button type="button" aria-label="Add reaction" title="Add reaction"
+                  onClick={() => setPickerAt((a) => (a === 'chip' ? null : 'chip'))}
+                  className="inline-flex h-6 items-center rounded-full border border-border px-2 text-muted hover:border-border-strong hover:text-default">
+                  <SmilePlus size={14} aria-hidden />
+                </button>
+                {pickerAt === 'chip' && <EmojiPicker align="left" onPick={react} onClose={() => setPickerAt(null)} />}
+              </div>
             </div>
           )}
 
@@ -259,17 +301,16 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
         </div>
 
         {!msg.deleted && !isTemp && !editing && (
-          <div className="absolute -top-3 right-2 z-10 hidden items-center gap-0.5 rounded-md border border-border bg-surface px-1 py-0.5 shadow-sm group-hover:flex">
-            <button title="React 👍" onClick={() => react('👍')} className={tbBtn}>👍</button>
+          // Kept `flex` (not just group-hover) while a picker is open so moving the
+          // cursor into the popover doesn't collapse the toolbar underneath it.
+          <div className={`absolute -top-3 right-2 z-10 items-center gap-0.5 rounded-md border border-border bg-surface px-1 py-0.5 shadow-sm ${pickerAt === 'toolbar' ? 'flex' : 'hidden group-hover:flex'}`}>
+            <button title="React 👍" aria-label="React 👍" onClick={() => react('👍')} className={tbBtn}>👍</button>
+            <button title="React ✅" aria-label="React ✅" onClick={() => react('✅')} className={tbBtn}>✅</button>
+            <button title="React 👀" aria-label="React 👀" onClick={() => react('👀')} className={tbBtn}>👀</button>
             <div className="relative">
-              <button title="Add reaction" onClick={() => setShowPicker((v) => !v)} className={tbBtn}>😊</button>
-              {showPicker && (
-                <div className="absolute right-0 top-6 z-20 flex w-40 flex-wrap gap-1 rounded-md border border-border bg-surface p-1 shadow-menu">
-                  {EMOJIS.map((e) => (
-                    <button key={e} onClick={() => react(e)} className="rounded px-1 py-0.5 text-base hover:bg-hover">{e}</button>
-                  ))}
-                </div>
-              )}
+              <button title="Add reaction" aria-label="Add reaction" onClick={() => setPickerAt((a) => (a === 'toolbar' ? null : 'toolbar'))}
+                className={`${tbBtn} inline-flex items-center`}><Smile size={16} aria-hidden /></button>
+              {pickerAt === 'toolbar' && <EmojiPicker align="right" onPick={react} onClose={() => setPickerAt(null)} />}
             </div>
             {!msg.parentId && <button title="Reply in thread" onClick={onOpenThread} className={tbBtn}>💬</button>}
             {own && <button title="Edit" onClick={() => { setDraft(msg.body); setEditing(true) }} className={tbBtn}>✏️</button>}

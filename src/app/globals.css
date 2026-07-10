@@ -62,6 +62,16 @@
   --ease-exit:   cubic-bezier(.4,0,1,1);
   --ease-standard:cubic-bezier(.4,0,.2,1);
   --ease-bounce: cubic-bezier(.34,1.56,.64,1); /* delight only */
+
+  /* Reaction pop — the emoji scales 0.6→1.1→1.0 when a reaction is added
+     (replayed via a key-remount in message-item). Applied as `motion-safe:
+     animate-pop`, so reduced-motion users never see it. */
+  --animate-pop: pop var(--motion-standard) var(--ease-bounce);
+  @keyframes pop {
+    0%   { transform: scale(.6); }
+    55%  { transform: scale(1.1); }
+    100% { transform: scale(1); }
+  }
 }
 
 /* ── 2. SEMANTIC TOKENS — LIGHT ───────────────────── */
