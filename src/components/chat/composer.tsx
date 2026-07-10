@@ -1,6 +1,11 @@
 'use client'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Bold, Italic, Strikethrough, Link as LinkIcon, Code, List, Quote, Smile, Send, Paperclip } from 'lucide-react'
+import { IconButton } from '@/components/ui/icon-button'
+import { searchEmoji } from '@/features/chat/emoji'
+import { wrapSelection, detectTrigger } from '@/features/chat/compose-format'
 import { useChat } from './chat-store'
+import { EmojiPicker } from './emoji-picker'
 import type { Msg } from './message-item'
 
 type Props = {
@@ -22,30 +27,40 @@ type Props = {
 }
 
 type Attach = { path: string; name: string; mime: string; size: number }
-type Item = { label: string; token: string }
+// One autocomplete row. `key` is a stable React key (glyphs can repeat across
+// emoji shortnames, so it can't be the token); `token` is the text inserted at
+// the trigger; `label` is what the menu shows.
+type Item = { key: string; label: string; token: string }
 
-// Scan back from the caret for an `@` that starts a mention query. The `@` must sit
-// at a word boundary (start-of-line or after whitespace); the query is the run of
-// id-safe chars between it and the caret.
-function detectMention(value: string, caret: number): { start: number; query: string } | null {
-  let i = caret - 1
-  while (i >= 0 && /[a-zA-Z0-9_-]/.test(value[i])) i--
-  if (i < 0 || value[i] !== '@') return null
-  const before = i === 0 ? '' : value[i - 1]
-  if (before && !/\s/.test(before)) return null
-  return { start: i, query: value.slice(i + 1, caret) }
+// Read the persisted draft for a (conversation, thread) key. Module-level so the
+// storage read stays out of the component's render-purity surface (mirrors the
+// emoji-picker's `loadRecents`). SSR-safe: no `window` on the server → ''.
+function readDraft(key: string): string {
+  if (typeof window === 'undefined') return ''
+  try { return window.sessionStorage.getItem(key) ?? '' } catch { return '' }
 }
 
 // v1 tradeoff (settled in the task brief): the textarea holds RAW token text
 // (`<@id>`, `<!channel>`) directly — autocomplete inserts tokens, and a hint line
 // explains they render as friendly @Name once sent. No rich-text dual buffer.
-export default function Composer({ conversationId, selfRole, memberIds, parentId, onSent, onRemove, onFail, showBroadcast = false, broadcastLabel }: Props) {
+//
+// Thin wrapper: drafts are keyed by conversation + thread, so the body is REMOUNTED
+// whenever that key changes (channel switch, or main-vs-thread composer). Remounting
+// lets the lazy draft-restore initializer re-read sessionStorage for the new
+// conversation — the lint-safe alternative to a set-state-in-effect reset.
+export default function Composer(props: Props) {
+  const draftKey = 'draft:' + props.conversationId + (props.parentId ?? '')
+  return <ComposerBody key={draftKey} draftKey={draftKey} {...props} />
+}
+
+function ComposerBody({ draftKey, conversationId, selfRole, memberIds, parentId, onSent, onRemove, onFail, showBroadcast = false, broadcastLabel }: Props & { draftKey: string }) {
   const { users, selfId } = useChat()
-  const [raw, setRaw] = useState('')
+  const [raw, setRaw] = useState<string>(() => readDraft(draftKey))
   const [broadcast, setBroadcast] = useState(false)
   const [attachments, setAttachments] = useState<Attach[]>([])
   const [menu, setMenu] = useState<{ start: number; items: Item[] } | null>(null)
   const [activeIdx, setActiveIdx] = useState(0)
+  const [emojiOpen, setEmojiOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(0)
@@ -61,20 +76,47 @@ export default function Composer({ conversationId, selfRole, memberIds, parentId
     return users.filter((u) => ids.has(u.id))
   }, [memberIds, users])
 
+  // Persist the draft per (conversation, thread) so it survives a channel switch;
+  // an empty draft removes the key (this is how a successful send clears it). The
+  // effect only touches sessionStorage — never setState — so
+  // `react-hooks/set-state-in-effect` stays satisfied.
+  useEffect(() => {
+    try {
+      if (raw) window.sessionStorage.setItem(draftKey, raw)
+      else window.sessionStorage.removeItem(draftKey)
+    } catch { /* private mode / quota — drafts are best-effort */ }
+  }, [draftKey, raw])
+
+  // Refresh the autocomplete menu from the caret: `@` mentions first, then the
+  // `:emoji:` completion. Both share one trigger scanner (`detectTrigger`) and the
+  // same menu machinery (arrow keys / Enter / click all route through `insert`).
   function updateMenu(value: string, caret: number) {
-    const det = detectMention(value, caret)
-    if (!det) { setMenu(null); return }
-    const q = det.query.toLowerCase()
-    const items: Item[] = []
-    if (selfRole !== 'guest' && 'channel'.startsWith(q)) items.push({ label: '@channel', token: '<!channel>' })
-    for (const u of memberUsers) {
-      if (items.length >= 8) break
-      if (u.name.toLowerCase().includes(q)) items.push({ label: u.name, token: `<@${u.id}>` })
+    const at = detectTrigger(value, caret, '@')
+    if (at) {
+      const q = at.query.toLowerCase()
+      const items: Item[] = []
+      if (selfRole !== 'guest' && 'channel'.startsWith(q)) items.push({ key: '<!channel>', label: '@channel', token: '<!channel>' })
+      for (const u of memberUsers) {
+        if (items.length >= 8) break
+        if (u.name.toLowerCase().includes(q)) items.push({ key: `<@${u.id}>`, label: u.name, token: `<@${u.id}>` })
+      }
+      if (items.length) { setMenu({ start: at.from, items }); setActiveIdx(0); return }
+      setMenu(null); return
     }
-    if (!items.length) { setMenu(null); return }
-    setMenu({ start: det.start, items }); setActiveIdx(0)
+    // `:x` (at least one char after the colon) opens the emoji completion; a lone
+    // `:` is left alone so it never floods the menu with every glyph.
+    const colon = detectTrigger(value, caret, ':')
+    if (colon && colon.query.length >= 1) {
+      const items: Item[] = searchEmoji(colon.query).slice(0, 8).map(({ shortname, glyph }) => ({
+        key: `emoji:${shortname}`, label: `${glyph}  :${shortname}:`, token: glyph,
+      }))
+      if (items.length) { setMenu({ start: colon.from, items }); setActiveIdx(0); return }
+    }
+    setMenu(null)
   }
 
+  // Insert a chosen menu item's token at the trigger, replacing the query text and
+  // appending a trailing space (mentions and emoji glyphs alike).
   function insert(item: Item) {
     if (!menu) return
     const el = taRef.current
@@ -83,6 +125,31 @@ export default function Composer({ conversationId, selfRole, memberIds, parentId
     setRaw(inserted + raw.slice(caret))
     setMenu(null)
     requestAnimationFrame(() => { if (el) { el.focus(); el.setSelectionRange(inserted.length, inserted.length) } })
+  }
+
+  // Formatting toolbar / keyboard shortcuts: wrap the current textarea selection
+  // with `marker` (or a line prefix / link) and restore the useful selection.
+  function applyFormat(marker: string) {
+    const el = taRef.current
+    const start = el ? el.selectionStart : raw.length
+    const end = el ? el.selectionEnd : raw.length
+    const r = wrapSelection(raw, start, end, marker)
+    setRaw(r.value)
+    setMenu(null)
+    requestAnimationFrame(() => { if (el) { el.focus(); el.setSelectionRange(r.selStart, r.selEnd) } })
+  }
+
+  // Emoji BUTTON (picker): drop the glyph in at the caret (no trailing space —
+  // this is a deliberate pick, not an autocompletion).
+  function insertEmoji(glyph: string) {
+    const el = taRef.current
+    const start = el ? el.selectionStart : raw.length
+    const end = el ? el.selectionEnd : raw.length
+    const next = raw.slice(0, start) + glyph + raw.slice(end)
+    setRaw(next)
+    setEmojiOpen(false)
+    const pos = start + glyph.length
+    requestAnimationFrame(() => { if (el) { el.focus(); el.setSelectionRange(pos, pos) } })
   }
 
   function maybeTyping() {
@@ -151,6 +218,12 @@ export default function Composer({ conversationId, selfRole, memberIds, parentId
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    // Formatting shortcuts (before the menu/Enter branches): Cmd/Ctrl+B/I and
+    // Cmd/Ctrl+Shift+C for bold / italic / inline code.
+    const mod = e.metaKey || e.ctrlKey
+    if (mod && !e.shiftKey && (e.key === 'b' || e.key === 'B')) { e.preventDefault(); applyFormat('**'); return }
+    if (mod && !e.shiftKey && (e.key === 'i' || e.key === 'I')) { e.preventDefault(); applyFormat('_'); return }
+    if (mod && e.shiftKey && (e.key === 'c' || e.key === 'C')) { e.preventDefault(); applyFormat('`'); return }
     if (menu) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx((i) => (i + 1) % menu.items.length); return }
       if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIdx((i) => (i - 1 + menu.items.length) % menu.items.length); return }
@@ -160,12 +233,14 @@ export default function Composer({ conversationId, selfRole, memberIds, parentId
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() }
   }
 
+  const canSend = !busy && uploading === 0 && (!!raw.trim() || attachments.length > 0)
+
   return (
     <div className="relative border-t border-gray-200 p-3">
       {menu && (
         <ul className="absolute bottom-full left-3 z-20 mb-1 w-64 overflow-hidden rounded-md border border-gray-200 bg-white shadow-lg">
           {menu.items.map((it, i) => (
-            <li key={it.token}>
+            <li key={it.key}>
               <button type="button" onMouseDown={(e) => { e.preventDefault(); insert(it) }}
                 className={`block w-full px-3 py-1.5 text-left text-sm ${i === activeIdx ? 'bg-accent/10 text-accent' : 'hover:bg-gray-100'}`}>
                 {it.label}
@@ -186,17 +261,37 @@ export default function Composer({ conversationId, selfRole, memberIds, parentId
         </div>
       )}
 
+      {/* Formatting toolbar (lucide icons only; emoji stays content). Each button
+          wraps the textarea selection via wrapSelection, then refocuses. */}
+      <div className="mb-1.5 flex items-center gap-0.5">
+        <IconButton label="Bold (⌘B)" onClick={() => applyFormat('**')}><Bold size={16} aria-hidden /></IconButton>
+        <IconButton label="Italic (⌘I)" onClick={() => applyFormat('_')}><Italic size={16} aria-hidden /></IconButton>
+        <IconButton label="Strikethrough" onClick={() => applyFormat('~')}><Strikethrough size={16} aria-hidden /></IconButton>
+        <IconButton label="Link" onClick={() => applyFormat('[]()')}><LinkIcon size={16} aria-hidden /></IconButton>
+        <IconButton label="Code (⌘⇧C)" onClick={() => applyFormat('`')}><Code size={16} aria-hidden /></IconButton>
+        <IconButton label="Bulleted list" onClick={() => applyFormat('- ')}><List size={16} aria-hidden /></IconButton>
+        <IconButton label="Quote" onClick={() => applyFormat('> ')}><Quote size={16} aria-hidden /></IconButton>
+        <div className="relative">
+          <IconButton label="Emoji" active={emojiOpen} onClick={() => setEmojiOpen((o) => !o)}><Smile size={16} aria-hidden /></IconButton>
+          {emojiOpen && <EmojiPicker align="left" onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />}
+        </div>
+      </div>
+
       <div className="flex items-end gap-2">
         <input ref={fileRef} type="file" multiple hidden onChange={(e) => e.target.files && onFiles(e.target.files)} />
-        <button type="button" onClick={() => fileRef.current?.click()} title="Attach a file"
-          className="rounded-md border border-gray-300 px-2 py-2 text-sm text-gray-500 hover:bg-gray-50">📎</button>
+        <IconButton label="Attach a file" onClick={() => fileRef.current?.click()}><Paperclip size={16} aria-hidden /></IconButton>
         <textarea ref={taRef} value={raw} rows={1} placeholder={parentId ? 'Reply in thread…' : 'Write a message…'}
+          suppressHydrationWarning
           onChange={(e) => { setRaw(e.target.value); updateMenu(e.target.value, e.target.selectionStart); maybeTyping() }}
           onKeyDown={onKeyDown} onBlur={() => setTimeout(() => setMenu(null), 100)}
           className="max-h-40 min-h-[2.5rem] flex-1 resize-none rounded-md border border-gray-300 px-3 py-2 text-sm" />
-        <button type="button" onClick={send} disabled={busy || uploading > 0 || (!raw.trim() && attachments.length === 0)}
-          className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
-          {busy ? 'Sending…' : uploading > 0 ? 'Uploading…' : 'Send'}
+        {/* `disabled` derives from `raw`, which is '' during SSR but restored from a
+            sessionStorage draft on the client — an intentional divergence, like the
+            textarea value above, so the hydration warning is suppressed. */}
+        <button type="button" onClick={send} disabled={!canSend} suppressHydrationWarning
+          aria-label="Send message" title={uploading > 0 ? 'Uploading…' : busy ? 'Sending…' : 'Send message'}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent text-accent-on transition-colors hover:bg-accent-hover disabled:opacity-50">
+          <Send size={16} aria-hidden />
         </button>
       </div>
 
@@ -209,7 +304,7 @@ export default function Composer({ conversationId, selfRole, memberIds, parentId
       )}
 
       <p className="mt-1 text-[11px] text-gray-400">
-        Enter to send · Shift+Enter for a newline · mentions insert as tokens (they render as @Name once sent).
+        Enter to send · Shift+Enter for a newline · mentions and :emoji: autocomplete (they render once sent).
       </p>
       {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
     </div>
