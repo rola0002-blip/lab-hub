@@ -3,6 +3,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowDown } from 'lucide-react'
 import { dayLabel } from '@/lib/humanize'
 import { Avatar } from '@/components/ui/avatar'
+import { useGlobalHotkey } from '@/components/hooks/use-global-hotkey'
 import { useChat, dmName } from './chat-store'
 import MessageItem, { type Msg } from './message-item'
 import Composer from './composer'
@@ -149,8 +150,12 @@ export default function MessagePane({ conversationId, conversationType, channelN
         if (m.parentId) {
           // A reply never appears in the root list. Only a brand-new reply bumps
           // the root's replyCount; edits, reactions and deletes of an existing
-          // reply must not inflate it.
-          if (isNew) setMessages((prev) => prev.map((x) => (x.id === m.parentId ? { ...x, replyCount: x.replyCount + 1 } : x)))
+          // reply must not inflate it. Then refetch the root so its facepile
+          // (replyParticipants + lastReplyAt) reflects the new reply live.
+          if (isNew) {
+            setMessages((prev) => prev.map((x) => (x.id === m.parentId ? { ...x, replyCount: x.replyCount + 1 } : x)))
+            void fetch(`/api/chat/messages/${m.parentId}`).then(async (r2) => { if (r2.ok) upsert((await r2.json()).message) })
+          }
           return
         }
         upsert(m); markRead()
@@ -192,6 +197,14 @@ export default function MessagePane({ conversationId, conversationType, channelN
     setNewCount(0)
     markRead()
   }, [markRead])
+
+  // Pane-scoped `r` = reply-in-thread on the focused message. useGlobalHotkey
+  // already ignores keypresses while an input/textarea is focused; we resolve the
+  // focused row via its data-attributes and only open a thread for a root message.
+  useGlobalHotkey('r', () => {
+    const el = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('[data-msg-id]')
+    if (el?.dataset.root === 'true' && el.dataset.msgId) setThreadRoot(el.dataset.msgId)
+  })
 
   async function loadEarlier() {
     if (!messages.length) return
@@ -261,8 +274,8 @@ export default function MessagePane({ conversationId, conversationType, channelN
           : <Composer conversationId={conversationId} selfRole={selfRole} memberIds={memberIds} onSent={upsert} onRemove={remove} onFail={markFailed} />}
       </div>
       {threadRoot && (
-        <ThreadPanel rootId={threadRoot} conversationId={conversationId} names={names} memberIds={memberIds} selfId={selfId} selfRole={selfRole}
-          onClose={() => setThreadRoot(null)} />
+        <ThreadPanel rootId={threadRoot} conversationId={conversationId} conversationType={conversationType} channelName={channelName}
+          names={names} memberIds={memberIds} selfId={selfId} selfRole={selfRole} onClose={() => setThreadRoot(null)} />
       )}
     </div>
   )

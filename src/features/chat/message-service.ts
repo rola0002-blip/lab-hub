@@ -13,12 +13,22 @@ export type MessageDto = {
   author: { id: string; name: string; image: string | null }
   body: string; deleted: boolean; editedAt: string | null; createdAt: string
   replyCount: number
+  // Thread facepile (root messages only): the distinct authors of replies, newest
+  // first and capped at 5, plus the time of the most recent reply. Replies carry
+  // an empty list / null lastReplyAt (single-level threads have no grandchildren).
+  replyParticipants: { id: string; name: string; image: string | null }[]
+  lastReplyAt: string | null
   reactions: { emoji: string; userIds: string[] }[]
   attachments: { id: string; path: string; name: string; mime: string; size: number }[]
   mentionUserIds: string[]; mentionsChannel: boolean
 }
 export type SendInput = {
   userId: string; conversationId: string; body: string; parentId?: string
+  // "Also send to #channel": a thread reply with broadcast=true additionally posts
+  // a root-level copy into the channel timeline (a thread_broadcast-style copy),
+  // so members not watching the thread still see it. No schema change — the copy
+  // is just another root Message.
+  broadcast?: boolean
   attachments?: { path: string; name: string; mime: string; size: number }[]
 }
 export type SendResult = { ok: true; message: MessageDto } | { ok: false; error: 'forbidden' | 'rate_limited' | 'invalid'; message: string }
@@ -28,6 +38,13 @@ const MSG_INCLUDE = {
   reactions: true,
   attachments: true,
   _count: { select: { replies: true } },
+  // Slim reply projection (author + time only), newest first, so a root DTO can
+  // build its facepile. Threads are single-level, so on a reply this relation is
+  // always empty — the extra include is a no-op there.
+  replies: {
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    select: { createdAt: true, user: { select: { id: true, name: true, image: true } } },
+  },
 } satisfies P.MessageInclude
 
 type Loaded = P.MessageGetPayload<{ include: typeof MSG_INCLUDE }>
@@ -35,12 +52,24 @@ type Loaded = P.MessageGetPayload<{ include: typeof MSG_INCLUDE }>
 function toDto(m: Loaded): MessageDto {
   const grouped = new Map<string, string[]>()
   for (const r of m.reactions) grouped.set(r.emoji, [...(grouped.get(r.emoji) ?? []), r.userId])
+  // Distinct reply authors, newest-first (m.replies is ordered createdAt desc),
+  // capped at 5 for the facepile. lastReplyAt is the most recent reply's time.
+  const seen = new Set<string>()
+  const replyParticipants: MessageDto['replyParticipants'] = []
+  for (const rep of m.replies) {
+    if (seen.has(rep.user.id)) continue
+    seen.add(rep.user.id)
+    replyParticipants.push({ id: rep.user.id, name: rep.user.name, image: rep.user.image })
+    if (replyParticipants.length === 5) break
+  }
   return {
     id: m.id, conversationId: m.conversationId, parentId: m.parentId,
     author: { id: m.user.id, name: m.user.name, image: m.user.image },
     body: m.deletedAt ? '' : m.body, deleted: !!m.deletedAt,
     editedAt: m.editedAt?.toISOString() ?? null, createdAt: m.createdAt.toISOString(),
     replyCount: m._count.replies,
+    replyParticipants,
+    lastReplyAt: m.replies.length > 0 ? m.replies[0].createdAt.toISOString() : null,
     reactions: [...grouped.entries()].map(([emoji, userIds]) => ({ emoji, userIds })),
     attachments: m.attachments.map((a) => ({ id: a.id, path: a.path, name: a.name, mime: a.mime, size: a.size })),
     mentionUserIds: m.mentionUserIds, mentionsChannel: m.mentionsChannel,
@@ -87,6 +116,21 @@ export async function sendMessage(input: SendInput): Promise<SendResult> {
   })
   await emitEvent({ t: 'msg', cid: input.conversationId, mid: created.id })
   void fanoutMessage({ message: created, conversation: convo, senderName: sender.name })
+
+  // "Also send to #channel": mirror a thread reply into the channel as its own
+  // root message so members not watching the thread still see it. Purely additive
+  // (no schema change) — the copy is an ordinary root that fans out like any send.
+  if (input.parentId && input.broadcast && body) {
+    const copy = await prisma.message.create({
+      data: {
+        conversationId: input.conversationId, userId: input.userId, body,
+        parentId: null, mentionUserIds, mentionsChannel,
+      },
+      include: MSG_INCLUDE,
+    })
+    await emitEvent({ t: 'msg', cid: input.conversationId, mid: copy.id })
+    void fanoutMessage({ message: copy, conversation: convo, senderName: sender.name })
+  }
   return { ok: true, message: toDto(created) }
 }
 

@@ -71,6 +71,69 @@ describe('message service', () => {
     expect(list.ok && list.messages.some((m) => m.id === reply.message.id)).toBe(false) // replies not in root list
   })
 
+  it('root DTOs carry replyParticipants (distinct, capped 5) and lastReplyAt (newest reply)', async () => {
+    const { ch, users: [a, b] } = await channelWith('member', 'member')
+    await prisma.user.update({ where: { id: b.id }, data: { image: '/uploads/logo/b.png' } })
+    const root = await sendMessage({ userId: a.id, conversationId: ch.id, body: 'root' })
+    expect(root.ok).toBe(true)
+    if (!root.ok) return
+    const rid = root.message.id
+
+    // A fresh root has no repliers and a null lastReplyAt.
+    expect(root.message.replyParticipants).toEqual([])
+    expect(root.message.lastReplyAt).toBeNull()
+
+    // b replies twice, a replies once → two DISTINCT participants; the newest
+    // reply's createdAt is lastReplyAt.
+    await sendMessage({ userId: b.id, conversationId: ch.id, body: 'r1', parentId: rid })
+    await sendMessage({ userId: b.id, conversationId: ch.id, body: 'r2', parentId: rid })
+    const last = await sendMessage({ userId: a.id, conversationId: ch.id, body: 'r3', parentId: rid })
+    expect(last.ok).toBe(true)
+    if (!last.ok) return
+
+    const list = await listMessages({ userId: a.id, conversationId: ch.id })
+    const r = list.ok ? list.messages.find((m) => m.id === rid) : undefined
+    expect(r).toBeTruthy()
+    if (!r) return
+    expect(r.replyCount).toBe(3) // count is every reply…
+    expect(r.replyParticipants.map((p) => p.id).sort()).toEqual([a.id, b.id].sort()) // …participants are distinct
+    expect(r.replyParticipants).toHaveLength(2)
+    const bp = r.replyParticipants.find((p) => p.id === b.id)
+    expect(bp?.name).toBeTruthy()
+    expect(bp?.image).toBe('/uploads/logo/b.png') // carries {id,name,image}
+    expect(r.lastReplyAt).toBe(last.message.createdAt) // newest reply time
+  })
+
+  it('replyParticipants caps at 5 distinct authors', async () => {
+    const users = await Promise.all(Array.from({ length: 7 }, () => makeUser({ role: 'member' })))
+    const ch = await makeChannel()
+    await Promise.all(users.map((u) => makeMember(ch.id, u.id)))
+    const root = await sendMessage({ userId: users[0].id, conversationId: ch.id, body: 'root' })
+    expect(root.ok).toBe(true)
+    if (!root.ok) return
+    for (const u of users) await sendMessage({ userId: u.id, conversationId: ch.id, body: 'r', parentId: root.message.id })
+
+    const list = await listMessages({ userId: users[0].id, conversationId: ch.id })
+    const r = list.ok ? list.messages.find((m) => m.id === root.message.id) : undefined
+    expect(r?.replyCount).toBe(7) // all seven replies counted
+    expect(r?.replyParticipants).toHaveLength(5) // but the facepile caps at five distinct
+  })
+
+  it('a thread reply with broadcast also posts a copy to the channel timeline', async () => {
+    const { ch, users: [a, b] } = await channelWith('member', 'member')
+    const root = await sendMessage({ userId: a.id, conversationId: ch.id, body: 'root' })
+    expect(root.ok).toBe(true)
+    if (!root.ok) return
+    const reply = await sendMessage({ userId: b.id, conversationId: ch.id, body: 'also to channel', parentId: root.message.id, broadcast: true })
+    expect(reply.ok).toBe(true)
+    // The thread still holds exactly one reply (the broadcast copy is NOT a reply).
+    const thread = await listThread({ userId: a.id, rootId: root.message.id })
+    expect(thread.ok && thread.replies.map((r) => r.body)).toEqual(['also to channel'])
+    // The channel timeline shows the root plus the broadcast copy (both roots).
+    const list = await listMessages({ userId: a.id, conversationId: ch.id })
+    expect(list.ok && list.messages.filter((m) => !m.parentId).map((m) => m.body).sort()).toEqual(['also to channel', 'root'])
+  })
+
   it('listThread denies non-members and rejects a reply used as a root', async () => {
     const { ch, users: [a] } = await channelWith('member')
     const outsider = await makeUser()

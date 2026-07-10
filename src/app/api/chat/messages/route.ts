@@ -7,6 +7,7 @@ const body = z.object({
   conversationId: z.string().min(1),
   body: z.string().max(4000).default(''),
   parentId: z.string().optional(),
+  broadcast: z.boolean().optional(),
   attachments: z.array(z.object({ path: z.string().startsWith('/uploads/chat/'), name: z.string().min(1), mime: z.string(), size: z.number().int().positive() })).max(10).optional(),
 })
 

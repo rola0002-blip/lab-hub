@@ -1,11 +1,14 @@
 'use client'
 import { Fragment, useState, type ReactNode } from 'react'
-import { Copy, Check, Smile, SmilePlus } from 'lucide-react'
+import { Copy, Check, Smile, SmilePlus, MessageSquare, Forward, Bookmark, MoreHorizontal } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
+import { IconButton } from '@/components/ui/icon-button'
+import { Menu } from '@/components/ui/menu'
 import { avatarHue } from '@/lib/avatar'
 import { humanTime, clockTime } from '@/lib/humanize'
 import { tokenizeMessage, type Token } from '@/features/chat/markdown'
 import { EMOJI_MAP } from '@/features/chat/emoji'
+import { useChat } from './chat-store'
 import { EmojiPicker } from './emoji-picker'
 
 // Client-side mirror of the server MessageDto (message-service is `server-only`,
@@ -20,6 +23,10 @@ export type Msg = {
   editedAt: string | null
   createdAt: string
   replyCount: number
+  // Thread facepile source (root messages only): distinct reply authors (≤5,
+  // newest first) + the most recent reply time. Empty / null on replies.
+  replyParticipants: { id: string; name: string; image: string | null }[]
+  lastReplyAt: string | null
   reactions: { emoji: string; userIds: string[] }[]
   attachments: { id: string; path: string; name: string; mime: string; size: number }[]
   mentionUserIds: string[]
@@ -128,15 +135,20 @@ type Props = {
   // Task 9 (optimistic send): re-POST a failed temp message. Only wired for the
   // main pane; the thread panel leaves it undefined (temps drop on failure there).
   onRetry?: (m: Msg) => void
+  // Task 13: rendered as the root INSIDE the thread panel. Suppresses the
+  // thread affordances (facepile + "reply in thread") that are redundant there.
+  inThread?: boolean
 }
 
-export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpdated, onOpenThread, forceLeading = false, onRetry }: Props) {
+export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpdated, onOpenThread, forceLeading = false, onRetry, inThread = false }: Props) {
+  const { online } = useChat()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(msg.body)
   // Which emoji picker is open, if any: the hover-toolbar face or the reaction
   // "+" chip. One at a time; both feed the same `react()`.
   const [pickerAt, setPickerAt] = useState<'toolbar' | 'chip' | null>(null)
   const [confirmDel, setConfirmDel] = useState(false)
+  const [linkCopied, setLinkCopied] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const own = msg.author.id === selfId
@@ -183,18 +195,46 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
     setBusy(false)
     if (r.ok) { setConfirmDel(false); await refresh() }
   }
+  // Copy a deep-link to this message (`/chat/<cid>?msg=<id>`) and flash an inline
+  // "Link copied" confirmation. The global toast system is Task 17's; this is a
+  // self-contained transient state, cleared from an event-handler timer.
+  function copyLink() {
+    void navigator.clipboard?.writeText(`${window.location.origin}/chat/${msg.conversationId}?msg=${msg.id}`)
+    setLinkCopied(true)
+    setTimeout(() => setLinkCopied(false), 1500)
+  }
 
-  const tbBtn = 'rounded px-1 text-sm leading-none hover:bg-hover'
+  // Presence of the message author, mirrored off the store's `online` set (same
+  // source the DM rows/header use). Shown on the leading avatar as a filled dot
+  // (active) / hollow ring (away) — a shape difference, never colour alone, and
+  // paired with an sr-only label.
+  const authorPresence: 'active' | 'away' = online.has(msg.author.id) ? 'active' : 'away'
+
+  // The ⋯ overflow menu. Edit is author-only; Delete is author-or-admin; Copy
+  // link is always available; Pin has no model yet, so it renders disabled.
+  const menuItems = [
+    ...(own ? [{ label: 'Edit', onSelect: () => { setDraft(msg.body); setEditing(true) } }] : []),
+    { label: 'Copy link', onSelect: copyLink },
+    { label: 'Pin', onSelect: () => {}, disabled: true },
+    ...(canDelete ? [{ label: 'Delete', onSelect: () => setConfirmDel(true), danger: true }] : []),
+  ]
 
   return (
     // Day dividers and the "New messages" line are pane-level siblings (rendered
     // by MessagePane), not part of this row — so a message stays a self-contained
     // grid cell. A temp (optimistic) row is dimmed to 60% and settles to 100%
     // once the real message replaces it.
-    <div className={`group relative grid grid-cols-[36px_1fr] gap-2 border-l-2 px-4 py-0.5 transition-opacity duration-200 hover:bg-hover ${leading ? 'pt-2' : ''} ${isTemp ? 'opacity-60' : 'opacity-100'} ${selfMention ? 'border-[var(--accent)] bg-mention' : 'border-transparent'}`}>
+    // `tabIndex`/`data-*` make each row a focus target the pane's `r` hotkey can
+    // resolve to; focus also reveals the toolbar (group-focus-within), so the
+    // toolbar is reachable by keyboard, not hover alone.
+    <div
+      tabIndex={0}
+      data-msg-id={msg.id}
+      data-root={String(!msg.parentId)}
+      className={`group relative grid grid-cols-[36px_1fr] gap-2 border-l-2 px-4 py-0.5 outline-none transition-opacity duration-200 hover:bg-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)] ${leading ? 'pt-2' : ''} ${isTemp ? 'opacity-60' : 'opacity-100'} ${selfMention ? 'border-[var(--accent)] bg-mention' : 'border-transparent'}`}>
         {/* Column 1 — gutter: avatar on leading rows, hover-only clock on grouped rows. */}
         {leading ? (
-          <Avatar name={msg.author.name} id={msg.author.id} image={msg.author.image} size={36} />
+          <Avatar name={msg.author.name} id={msg.author.id} image={msg.author.image} size={36} presence={authorPresence} />
         ) : (
           <time
             aria-hidden
@@ -213,6 +253,7 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
                 style={{ color: `hsl(${avatarHue(msg.author.id)} 45% var(--author-name-l))` }}
               >{msg.author.name}</span>
               <time className="text-xs text-muted" dateTime={msg.createdAt} title={msg.createdAt}>{humanTime(msg.createdAt, now)}</time>
+              <span className="sr-only">{authorPresence === 'active' ? 'Active' : 'Away'}</span>
             </div>
           ) : (
             // Grouped rows hide author + time visually; expose them to screen readers so
@@ -286,9 +327,22 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
             </div>
           )}
 
-          {!msg.parentId && msg.replyCount > 0 && (
-            <button onClick={onOpenThread} className="mt-1 text-xs font-medium text-accent hover:underline">
-              {msg.replyCount} {msg.replyCount === 1 ? 'reply' : 'replies'}
+          {!inThread && !msg.parentId && msg.replyCount > 0 && (
+            <button onClick={onOpenThread}
+              className="mt-1 flex w-fit items-center gap-2 rounded-md py-0.5 pr-2 hover:bg-hover">
+              <span className="flex -space-x-1.5">
+                {msg.replyParticipants.map((p) => (
+                  <span key={p.id} className="rounded-[var(--radius-avatar)] ring-2 ring-[var(--bg-canvas)]">
+                    <Avatar name={p.name} id={p.id} image={p.image} size={20} />
+                  </span>
+                ))}
+              </span>
+              <span className="text-xs font-medium text-accent">
+                {msg.replyCount} {msg.replyCount === 1 ? 'reply' : 'replies'}
+              </span>
+              {msg.lastReplyAt && (
+                <span className="text-2xs text-muted">Last reply {humanTime(msg.lastReplyAt, now)}</span>
+              )}
             </button>
           )}
 
@@ -301,20 +355,30 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
         </div>
 
         {!msg.deleted && !isTemp && !editing && (
-          // Kept `flex` (not just group-hover) while a picker is open so moving the
-          // cursor into the popover doesn't collapse the toolbar underneath it.
-          <div className={`absolute -top-3 right-2 z-10 items-center gap-0.5 rounded-md border border-border bg-surface px-1 py-0.5 shadow-sm ${pickerAt === 'toolbar' ? 'flex' : 'hidden group-hover:flex'}`}>
-            <button title="React 👍" aria-label="React 👍" onClick={() => react('👍')} className={tbBtn}>👍</button>
-            <button title="React ✅" aria-label="React ✅" onClick={() => react('✅')} className={tbBtn}>✅</button>
-            <button title="React 👀" aria-label="React 👀" onClick={() => react('👀')} className={tbBtn}>👀</button>
+          // Lucide icons only (emoji stays content). Reachable on hover OR keyboard
+          // focus (group-focus-within); kept `flex` while the emoji picker is open
+          // so moving the cursor into the popover doesn't collapse the toolbar.
+          <div className={`absolute -top-3 right-2 z-10 items-center gap-0.5 rounded-md border border-border bg-surface px-1 py-0.5 shadow-sm ${pickerAt === 'toolbar' ? 'flex' : 'hidden group-hover:flex group-focus-within:flex'}`}>
             <div className="relative">
-              <button title="Add reaction" aria-label="Add reaction" onClick={() => setPickerAt((a) => (a === 'toolbar' ? null : 'toolbar'))}
-                className={`${tbBtn} inline-flex items-center`}><Smile size={16} aria-hidden /></button>
+              <IconButton label="Add reaction" active={pickerAt === 'toolbar'}
+                onClick={() => setPickerAt((a) => (a === 'toolbar' ? null : 'toolbar'))}>
+                <Smile size={16} aria-hidden />
+              </IconButton>
               {pickerAt === 'toolbar' && <EmojiPicker align="right" onPick={react} onClose={() => setPickerAt(null)} />}
             </div>
-            {!msg.parentId && <button title="Reply in thread" onClick={onOpenThread} className={tbBtn}>💬</button>}
-            {own && <button title="Edit" onClick={() => { setDraft(msg.body); setEditing(true) }} className={tbBtn}>✏️</button>}
-            {canDelete && <button title="Delete" onClick={() => setConfirmDel(true)} className={tbBtn}>🗑️</button>}
+            {!inThread && !msg.parentId && (
+              <IconButton label="Reply in thread" onClick={onOpenThread}><MessageSquare size={16} aria-hidden /></IconButton>
+            )}
+            {/* Forward + Save have no backend yet (like Pin) → present but disabled. */}
+            <IconButton label="Forward (coming soon)" disabled><Forward size={16} aria-hidden /></IconButton>
+            <IconButton label="Save for later (coming soon)" disabled><Bookmark size={16} aria-hidden /></IconButton>
+            <Menu label="More actions" button={<MoreHorizontal size={16} aria-hidden />} items={menuItems} />
+          </div>
+        )}
+
+        {linkCopied && (
+          <div role="status" className="absolute -top-3 right-2 z-30 rounded-md border border-border bg-surface px-2 py-1 text-2xs font-medium text-default shadow-menu">
+            Link copied
           </div>
         )}
 

@@ -15,6 +15,10 @@ type Props = {
   // it, and the draft is cleared. The thread panel omits it, keeping the original
   // behaviour (drop the temp, keep the draft, surface a composer-level error).
   onFail?: (tempId: string) => void
+  // Task 13: the thread composer offers an "Also send to #channel" checkbox that
+  // broadcasts the reply into the channel timeline (broadcast:true on the POST).
+  showBroadcast?: boolean
+  broadcastLabel?: string
 }
 
 type Attach = { path: string; name: string; mime: string; size: number }
@@ -35,9 +39,10 @@ function detectMention(value: string, caret: number): { start: number; query: st
 // v1 tradeoff (settled in the task brief): the textarea holds RAW token text
 // (`<@id>`, `<!channel>`) directly — autocomplete inserts tokens, and a hint line
 // explains they render as friendly @Name once sent. No rich-text dual buffer.
-export default function Composer({ conversationId, selfRole, memberIds, parentId, onSent, onRemove, onFail }: Props) {
+export default function Composer({ conversationId, selfRole, memberIds, parentId, onSent, onRemove, onFail, showBroadcast = false, broadcastLabel }: Props) {
   const { users, selfId } = useChat()
   const [raw, setRaw] = useState('')
+  const [broadcast, setBroadcast] = useState(false)
   const [attachments, setAttachments] = useState<Attach[]>([])
   const [menu, setMenu] = useState<{ start: number; items: Item[] } | null>(null)
   const [activeIdx, setActiveIdx] = useState(0)
@@ -115,11 +120,11 @@ export default function Composer({ conversationId, selfRole, memberIds, parentId
       id: tempId, conversationId, parentId: parentId ?? null,
       author: { id: selfId, name: selfName, image: selfImage },
       body, deleted: false, editedAt: null, createdAt: new Date().toISOString(),
-      replyCount: 0, reactions: [],
+      replyCount: 0, replyParticipants: [], lastReplyAt: null, reactions: [],
       attachments: attachments.map((a, i) => ({ id: `${tempId}-a${i}`, ...a })),
       mentionUserIds: [], mentionsChannel: false,
     }
-    const payload = { conversationId, body, ...(parentId ? { parentId } : {}), ...(attachments.length ? { attachments } : {}) }
+    const payload = { conversationId, body, ...(parentId ? { parentId } : {}), ...(parentId && broadcast ? { broadcast: true } : {}), ...(attachments.length ? { attachments } : {}) }
     onSent(temp)
     setMenu(null); setBusy(true)
     try {
@@ -130,7 +135,7 @@ export default function Composer({ conversationId, selfRole, memberIds, parentId
       if (r.status === 201 && d?.message) {
         onSent(d.message)
         // Clear the draft only once the send is confirmed (201).
-        setRaw(''); setAttachments([])
+        setRaw(''); setAttachments([]); setBroadcast(false)
       } else if (onFail) {
         // Retry-aware pane: keep the temp (flagged failed) as the retry surface and
         // clear the draft, since the message now lives in the timeline.
@@ -194,6 +199,14 @@ export default function Composer({ conversationId, selfRole, memberIds, parentId
           {busy ? 'Sending…' : uploading > 0 ? 'Uploading…' : 'Send'}
         </button>
       </div>
+
+      {showBroadcast && (
+        <label className="mt-1 flex w-fit items-center gap-1.5 text-xs text-muted">
+          <input type="checkbox" checked={broadcast} onChange={(e) => setBroadcast(e.target.checked)}
+            className="h-3.5 w-3.5 rounded border-gray-300 accent-[var(--accent)]" />
+          Also send to {broadcastLabel ?? 'channel'}
+        </label>
+      )}
 
       <p className="mt-1 text-[11px] text-gray-400">
         Enter to send · Shift+Enter for a newline · mentions insert as tokens (they render as @Name once sent).

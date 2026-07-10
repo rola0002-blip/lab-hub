@@ -114,9 +114,12 @@ test('2: thread reply + typing indicator', async ({ browser }) => {
   await threadBox.fill('in thread')
   await threadBox.press('Enter')
 
-  // A sees the live reply count on the root, opens the thread, sees the reply
-  await expect(page.getByText('1 reply')).toBeVisible()
-  await page.getByText('1 reply').click()
+  // A sees the live reply count on the root facepile, opens the thread, sees the reply.
+  // The facepile is now a button (overlapping avatars + "N replies" + last-reply time),
+  // so target it by role/name rather than the bare text node.
+  const facepile = page.getByRole('button', { name: /1 reply/ })
+  await expect(facepile).toBeVisible()
+  await facepile.click()
   await expect(page.getByText('in thread')).toBeVisible()
 
   // Typing indicator: B types in the main composer without sending; A sees it live
@@ -216,23 +219,26 @@ test('5: edit / delete / react round-trips', async ({ browser }) => {
   await send(page, 'tyop')
   await expect(pageB.getByText('tyop')).toBeVisible()
 
-  // A edits the message; B sees the new text + "(edited)" live
+  // A edits the message via the ⋯ overflow menu; B sees the new text + "(edited)" live
   await page.getByText('tyop').hover()
-  await page.getByTitle('Edit').click()
+  await page.getByRole('button', { name: 'More actions' }).click()
+  await page.getByRole('menuitem', { name: 'Edit' }).click()
   const editBox = page.locator('textarea:not([placeholder])')
   await editBox.fill('typo fixed')
   await editBox.press('Enter')
   await expect(pageB.getByText('typo fixed')).toBeVisible()
   await expect(pageB.getByText('(edited)')).toBeVisible()
 
-  // B reacts 👍; A sees the reaction pill with count 1 live
+  // B reacts 👍 via the toolbar emoji picker; A sees the reaction pill with count 1 live
   await pageB.getByText('typo fixed').hover()
-  await pageB.getByTitle('React 👍').click()
+  await pageB.getByTitle('Add reaction').click()
+  await pageB.getByRole('button', { name: 'react 👍' }).click()
   await expect(page.getByRole('button').filter({ hasText: '👍' }).filter({ hasText: '1' })).toBeVisible()
 
-  // A deletes the message; both sides see the tombstone
+  // A deletes the message via the ⋯ overflow menu; both sides see the tombstone
   await page.getByText('typo fixed').hover()
-  await page.getByTitle('Delete').click()
+  await page.getByRole('button', { name: 'More actions' }).click()
+  await page.getByRole('menuitem', { name: 'Delete' }).click()
   await page.getByRole('button', { name: 'Delete', exact: true }).click()
   await expect(page.getByText('message deleted')).toBeVisible()
   await expect(pageB.getByText('message deleted')).toBeVisible()

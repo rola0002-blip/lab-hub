@@ -1,12 +1,14 @@
 'use client'
 import { useCallback, useEffect, useState } from 'react'
 import { useChat } from './chat-store'
-import MessageItem, { renderTokens, type Msg } from './message-item'
+import MessageItem, { type Msg } from './message-item'
 import Composer from './composer'
 
 type Props = {
   rootId: string
   conversationId: string
+  conversationType: 'CHANNEL' | 'DM'
+  channelName: string | null
   names: Map<string, string>
   memberIds: string[]
   selfId: string
@@ -14,7 +16,7 @@ type Props = {
   onClose: () => void
 }
 
-export default function ThreadPanel({ rootId, conversationId, names, memberIds, selfId, selfRole, onClose }: Props) {
+export default function ThreadPanel({ rootId, conversationId, conversationType, channelName, names, memberIds, selfId, selfRole, onClose }: Props) {
   const { registerConversationHandler } = useChat()
   const [root, setRoot] = useState<Msg | null>(null)
   const [replies, setReplies] = useState<Msg[]>([])
@@ -68,7 +70,7 @@ export default function ThreadPanel({ rootId, conversationId, names, memberIds, 
   }, [onClose])
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-l border-border">
+    <aside className="flex w-[22rem] shrink-0 flex-col border-l border-border lg:w-[26rem]">
       <header className="flex items-center justify-between border-b border-border px-3 py-2">
         <h2 className="text-sm font-semibold">Thread</h2>
         <button onClick={onClose} aria-label="Close thread" className="rounded p-1 text-muted hover:bg-hover">✕</button>
@@ -76,32 +78,12 @@ export default function ThreadPanel({ rootId, conversationId, names, memberIds, 
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {root && (
-          <div className="border-b border-border p-3">
-            <div className="flex items-baseline gap-2">
-              <span className="font-semibold text-default">{root.author.name}</span>
-              <time className="text-2xs text-muted">{new Date(root.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</time>
-            </div>
-            {root.deleted ? (
-              <p className="text-base italic text-subtle">message deleted</p>
-            ) : (
-              <p className="mt-0.5 whitespace-pre-wrap break-words text-base text-default">
-                {renderTokens(root.body, names, selfId)}
-                {root.editedAt && <span className="ml-1 text-2xs text-subtle">(edited)</span>}
-              </p>
-            )}
-            {!root.deleted && root.attachments.map((a) => (
-              a.mime.startsWith('image/')
-                ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={a.id} src={a.path} alt={a.name} className="mt-1 max-h-48 rounded-lg border border-border" />
-                ) : (
-                  <a key={a.id} href={a.path} target="_blank" rel="noreferrer" download={a.name}
-                    className="mt-1 flex w-fit items-center gap-2 rounded-md border border-border px-2 py-1 text-xs text-muted hover:bg-hover">
-                    <span>📄</span><span className="max-w-[10rem] truncate">{a.name}</span>
-                  </a>
-                )
-            ))}
-            <p className="mt-2 text-xs font-medium text-subtle">{replies.length} {replies.length === 1 ? 'reply' : 'replies'}</p>
+          // Reuse MessageItem for the root (identical rendering, reactions, edit,
+          // ⋯ menu) — `inThread` drops the redundant facepile + "reply in thread".
+          <div className="border-b border-border py-1">
+            <MessageItem msg={root} names={names} selfId={selfId} selfRole={selfRole}
+              onUpdated={upsertReply} onOpenThread={() => {}} inThread />
+            <p className="px-4 pb-2 pt-1 text-xs font-medium text-subtle">{replies.length} {replies.length === 1 ? 'reply' : 'replies'}</p>
           </div>
         )}
 
@@ -113,7 +95,9 @@ export default function ThreadPanel({ rootId, conversationId, names, memberIds, 
         </div>
       </div>
 
-      <Composer conversationId={conversationId} selfRole={selfRole} memberIds={memberIds} parentId={rootId} onSent={upsertReply} onRemove={removeReply} />
+      <Composer conversationId={conversationId} selfRole={selfRole} memberIds={memberIds} parentId={rootId}
+        onSent={upsertReply} onRemove={removeReply}
+        showBroadcast={conversationType === 'CHANNEL'} broadcastLabel={channelName ? `#${channelName}` : undefined} />
     </aside>
   )
 }
