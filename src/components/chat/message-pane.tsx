@@ -2,7 +2,8 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowDown } from 'lucide-react'
 import { dayLabel } from '@/lib/humanize'
-import { useChat } from './chat-store'
+import { Avatar } from '@/components/ui/avatar'
+import { useChat, dmName } from './chat-store'
 import MessageItem, { type Msg } from './message-item'
 import Composer from './composer'
 import ThreadPanel from './thread-panel'
@@ -47,7 +48,7 @@ function NewMessagesDivider() {
 }
 
 export default function MessagePane({ conversationId, conversationType, channelName, topic, archived, selfRole, manage, memberIds }: Props) {
-  const { users, selfId, registerConversationHandler } = useChat()
+  const { users, online, selfId, registerConversationHandler } = useChat()
   const [messages, setMessages] = useState<Msg[]>([])
   const [hasMore, setHasMore] = useState(false)
   const [threadRoot, setThreadRoot] = useState<string | null>(null)
@@ -200,7 +201,15 @@ export default function MessagePane({ conversationId, conversationType, channelN
     setMessages((prev) => [...d.messages, ...prev]); setHasMore(d.hasMore)
   }
 
-  const title = conversationType === 'DM' ? 'Direct message' : `#${channelName}`
+  // DM headers show the person, not a generic label: their avatar + name (via
+  // dmName, which also handles group DMs) + a live presence line. The peer is the
+  // first member that isn't me, resolved against the shared user list.
+  const isDm = conversationType === 'DM'
+  const peerId = isDm ? memberIds.find((id) => id !== selfId) : undefined
+  const peer = peerId ? users.find((u) => u.id === peerId) : undefined
+  const peerOnline = peerId ? online.has(peerId) : false
+  const dmTitle = dmName({ memberIds }, users, selfId)
+  const title = isDm ? dmTitle : `#${channelName}`
   const names = new Map(users.map((u) => [u.id, u.name]))
   const now = new Date() // viewer-local reference for day-divider labels (client render)
 
@@ -208,9 +217,14 @@ export default function MessagePane({ conversationId, conversationType, channelN
     <div className="flex h-full min-w-0 flex-1">
       <div className="relative flex min-w-0 flex-1 flex-col">
         <header className="flex items-center gap-2 border-b border-border px-4 py-2">
+          {isDm && peerId && (
+            <Avatar size={24} name={dmTitle} id={peerId} image={peer?.image ?? null} presence={peerOnline ? 'active' : 'away'} />
+          )}
           <div className="min-w-0 flex-1">
             <h1 className="truncate font-semibold leading-tight">{title}</h1>
-            {conversationType === 'CHANNEL' && topic && <p className="truncate text-xs text-muted">{topic}</p>}
+            {isDm
+              ? <p className="truncate text-xs text-muted">{peerOnline ? 'Active' : 'Away'}</p>
+              : topic && <p className="truncate text-xs text-muted">{topic}</p>}
           </div>
           <SearchBox />
           <ConversationMenu conversationId={conversationId} conversationType={conversationType}

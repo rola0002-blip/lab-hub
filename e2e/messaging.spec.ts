@@ -171,7 +171,9 @@ test('4: guest isolation, then live add', async ({ browser }) => {
   await pageG.goto('/chat')
   await expect(pageG.getByRole('heading', { name: 'Channels' })).toBeVisible()
   await expect(pageG.getByRole('button', { name: 'Browse or create channels' })).toHaveCount(0)
-  await expect(pageG.getByText('#lab')).toHaveCount(0)
+  // The channel row now renders a Hash icon + bare name (no literal "#"), so assert
+  // the guest has no channel LINK named "lab" rather than the old "#lab" text.
+  await expect(pageG.getByRole('link', { name: 'lab' })).toHaveCount(0)
 
   // Direct URL to a channel the guest is not a member of → app 404
   await pageG.goto('/chat/' + cid)
@@ -192,8 +194,9 @@ test('4: guest isolation, then live add', async ({ browser }) => {
   await page.getByRole('button', { name: 'Gina Guest' }).click()
   await page.getByRole('button', { name: /^Add/ }).click()
 
-  // Channel appears live in the guest's list (member event → refresh) and opens
-  const chan = pageG.getByRole('link', { name: '#lab' })
+  // Channel appears live in the guest's list (member event → refresh) and opens.
+  // List row = Hash icon + bare name, so the link's accessible name is "lab".
+  const chan = pageG.getByRole('link', { name: 'lab' })
   await expect(chan).toBeVisible()
   await chan.click()
   await expect(pageG.getByRole('heading', { name: '#lab' })).toBeVisible()
@@ -265,6 +268,8 @@ test('6: DM with unread badge', async ({ browser }) => {
   // A opens the DM → markRead clears the badge
   await dmRow.click()
   await expect(page.getByText('dm hello')).toBeVisible()
+  // The DM header shows the person (name via dmName), not the literal "Direct message".
+  await expect(page.getByRole('heading', { name: 'Bob Member' })).toBeVisible()
   await expect(page.getByRole('link', { name: /Bob Member/ })).not.toContainText('1')
 
   // B re-opens the DM (establishes its live subscription), then A replies → B sees it live

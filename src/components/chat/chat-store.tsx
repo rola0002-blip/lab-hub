@@ -26,7 +26,7 @@ export function useChat(): ChatState {
   return v
 }
 
-export function dmName(item: ConversationItem, users: ChatUser[], selfId: string): string {
+export function dmName(item: { memberIds: string[] }, users: ChatUser[], selfId: string): string {
   const names = item.memberIds.filter((id) => id !== selfId).map((id) => users.find((u) => u.id === id)?.name ?? 'unknown')
   return names.join(', ') || 'Just you'
 }
