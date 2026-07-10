@@ -38,7 +38,7 @@ export async function createMaintenanceWindow(args: {
       const when = formatRange(v.startsAt, v.endsAt, tz)
       await notify(v.userId, 'booking_cancelled_maintenance',
         { message: `${v.equipment.name} ${when} cancelled for maintenance: ${args.reason.trim()}` },
-        bookingCancelledMaintenanceEmail(org?.name ?? 'LabHub', v.equipment.name, when, args.reason.trim()))
+        bookingCancelledMaintenanceEmail(org?.name ?? 'COLOSSUS', v.equipment.name, when, args.reason.trim()))
     }
   }
   return { ok: true }

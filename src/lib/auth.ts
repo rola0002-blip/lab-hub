@@ -27,7 +27,7 @@ export const auth = betterAuth({
     },
     sendResetPassword: async ({ user, url }) => {
       const org = await prisma.organization.findFirst()
-      const t = resetPasswordEmail(org?.name ?? 'LabHub', url)
+      const t = resetPasswordEmail(org?.name ?? 'COLOSSUS', url)
       await enqueueEmail(user.email, t.subject, t.html)
     },
   },

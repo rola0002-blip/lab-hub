@@ -5,8 +5,8 @@ import type { MetadataRoute } from 'next'
 // registers, so the spec's "iOS support via installed PWA" push path is dead.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'LabHub',
-    short_name: 'LabHub',
+    name: 'COLOSSUS',
+    short_name: 'COLOSSUS',
     description: 'Self-hosted lab platform',
     start_url: '/',
     display: 'standalone',

@@ -27,7 +27,7 @@ export async function deactivateUser(userId: string): Promise<void> {
       await Promise.all(b.equipment.managers.map((m) =>
         notify(m.userId, 'booking_cancelled',
           { message: `${user.name} was deactivated; their booking of ${b.equipment.name} (${when}) was cancelled.` },
-          bookingCancelledUserDeactivatedEmail(org?.name ?? 'LabHub', user.name, b.equipment.name, when)),
+          bookingCancelledUserDeactivatedEmail(org?.name ?? 'COLOSSUS', user.name, b.equipment.name, when)),
       ))
     }
   }

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { db, wipe, runWizard, signIn, ADMIN, latestInviteToken } from './helpers'
+import { db, wipe, runWizard, signIn, signOut, ADMIN, latestInviteToken } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -23,7 +23,7 @@ test('invite → accept → first login as guest', async ({ page }) => {
   await expect(page.getByText('Invitation sent.')).toBeVisible()
 
   const token = await latestInviteToken('fyp@ntu.test')
-  await page.click('text=Sign out')
+  await signOut(page)
   await page.goto(`/accept-invite/${token}`)
   await page.fill('input[name=name]', 'FYP Student')
   await page.fill('input[name=password]', 'GuestPass!1234')
@@ -75,7 +75,7 @@ test('guest booking goes to approval; admin approves; guest sees CONFIRMED', asy
   // before reading its token straight from the DB (avoids a read-before-write race).
   await expect(page.getByText('Invitation sent.')).toBeVisible()
   const token = await latestInviteToken('guest@x.test')
-  await page.click('text=Sign out')
+  await signOut(page)
   await page.goto(`/accept-invite/${token}`)
   await page.fill('input[name=name]', 'Guest')
   await page.fill('input[name=password]', 'GuestPass!1234')
@@ -89,14 +89,14 @@ test('guest booking goes to approval; admin approves; guest sees CONFIRMED', asy
   expect(r.status()).toBe(201)
   expect((await r.json()).pending).toBe(true)
 
-  await page.click('text=Sign out')
+  await signOut(page)
   await signIn(page, ADMIN.email, ADMIN.password)
   await page.goto('/approvals')
   await expect(page.getByText('CVD Furnace')).toBeVisible()
   await page.click('button:has-text("Approve")')
   await expect(page.getByText('Nothing pending')).toBeVisible()
 
-  await page.click('text=Sign out')
+  await signOut(page)
   await signIn(page, 'guest@x.test', 'GuestPass!1234')
   await page.goto('/bookings')
   await expect(page.getByText('confirmed')).toBeVisible()

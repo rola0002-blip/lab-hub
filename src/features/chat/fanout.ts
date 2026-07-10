@@ -27,7 +27,7 @@ export async function fanoutMessage(
     const names = new Map(members.map((x) => [x.user.id, x.user.name]))
     const preview = (m.body ? renderBody(m.body, names) : '(attachment)').slice(0, 120)
     const org = await prisma.organization.findFirst()
-    const orgName = org?.name ?? 'LabHub'
+    const orgName = org?.name ?? 'COLOSSUS'
     const where = c.type === 'DM' ? 'a direct message' : `#${c.name ?? 'channel'}`
     const url = `/chat/${c.id}`
 

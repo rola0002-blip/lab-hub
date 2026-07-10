@@ -23,7 +23,7 @@ function isDuplicateInviteError(e: unknown): boolean {
 
 async function sendInvite(email: string, token: string) {
   const org = await prisma.organization.findFirst()
-  const t = inviteEmail(org?.name ?? 'LabHub', `${env.APP_URL}/accept-invite/${token}`)
+  const t = inviteEmail(org?.name ?? 'COLOSSUS', `${env.APP_URL}/accept-invite/${token}`)
   await enqueueEmail(email, t.subject, t.html)
 }
 

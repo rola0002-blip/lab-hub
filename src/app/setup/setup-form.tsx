@@ -29,7 +29,7 @@ export default function SetupForm() {
   const input = 'w-full rounded-md border border-gray-300 px-3 py-2'
   return (
     <form onSubmit={onSubmit} className="mt-6 space-y-4">
-      <label className="block text-sm">Organisation name<input name="orgName" required defaultValue="TAY LABS" className={input} /></label>
+      <label className="block text-sm">Organisation name<input name="orgName" required defaultValue="COLOSSUS" className={input} /></label>
       <label className="block text-sm">Accent colour<input name="accentColor" type="color" defaultValue="#0d9488" className="h-10 w-20 rounded-md border border-gray-300" /></label>
       <label className="block text-sm">Timezone<select name="timezone" defaultValue="Asia/Singapore" className={input}>{TIMEZONES.map((t) => <option key={t}>{t}</option>)}</select></label>
       <label className="block text-sm">Logo (optional, PNG/JPEG/WebP ≤ 2 MB)<input name="logo" type="file" accept="image/png,image/jpeg,image/webp" className={input} /></label>

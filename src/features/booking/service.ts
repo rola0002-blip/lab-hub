@@ -32,7 +32,7 @@ export function isOverlapError(e: unknown): boolean {
 
 async function orgInfo() {
   const org = await prisma.organization.findFirst()
-  return { name: org?.name ?? 'LabHub', tz: org?.timezone ?? 'Asia/Singapore' }
+  return { name: org?.name ?? 'COLOSSUS', tz: org?.timezone ?? 'Asia/Singapore' }
 }
 
 export async function buildPolicyInput(

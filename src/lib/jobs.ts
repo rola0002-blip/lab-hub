@@ -35,7 +35,7 @@ export async function sendBookingReminders(now: Date = new Date()): Promise<numb
   for (const b of soon) {
     const when = formatRange(b.startsAt, b.endsAt, tz)
     await notify(b.userId, 'booking_reminder', { message: `Upcoming: ${b.equipment.name} ${when}` },
-      bookingReminderEmail(org?.name ?? 'LabHub', b.equipment.name, when))
+      bookingReminderEmail(org?.name ?? 'COLOSSUS', b.equipment.name, when))
     await prisma.booking.update({ where: { id: b.id }, data: { reminderSentAt: now } })
   }
   return soon.length

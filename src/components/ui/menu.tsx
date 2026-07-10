@@ -1,9 +1,14 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 
-export function Menu({ button, label, items }: {
+// Default trigger is a 28px icon button; pass `buttonClassName` to render a
+// wider custom trigger (e.g. the sidebar's full-width workspace header).
+const ICON_TRIGGER = 'flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-default'
+
+export function Menu({ button, label, items, buttonClassName }: {
   button: React.ReactNode; label: string
   items: { label: string; onSelect: () => void; danger?: boolean }[]
+  buttonClassName?: string
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -17,7 +22,7 @@ export function Menu({ button, label, items }: {
   return (
     <div ref={ref} className="relative">
       <button type="button" aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}
-        className="flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-default">{button}</button>
+        className={buttonClassName ?? ICON_TRIGGER}>{button}</button>
       {open && (
         <div role="menu" className="absolute right-0 z-40 mt-1 min-w-44 rounded-lg bg-surface p-1 shadow-menu">
           {items.map((it) => (

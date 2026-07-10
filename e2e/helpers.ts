@@ -25,12 +25,20 @@ export const ADMIN = { email: 'pi@lab.test', password: 'Str0ngPass!123', name: '
 
 export async function runWizard(page: Page) {
   await page.goto('/setup')
-  await page.fill('input[name=orgName]', 'TAY LABS')
+  await page.fill('input[name=orgName]', 'COLOSSUS')
   await page.fill('input[name=adminName]', ADMIN.name)
   await page.fill('input[name=adminEmail]', ADMIN.email)
   await page.fill('input[name=adminPassword]', ADMIN.password)
   await page.click('button:has-text("Finish setup")')
   await page.waitForURL('**/sign-in')
+}
+
+// Sign out via the sidebar workspace-header menu (the standalone header button
+// was replaced by the grouped sidebar in the COLOSSUS redesign): open the menu,
+// then click the "Sign out" item.
+export async function signOut(page: Page) {
+  await page.getByRole('button', { name: 'Workspace menu' }).click()
+  await page.getByRole('menuitem', { name: 'Sign out' }).click()
 }
 
 export async function signIn(page: Page, email: string, password: string) {
