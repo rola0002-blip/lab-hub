@@ -113,25 +113,25 @@ export default function MessagePane({ conversationId, conversationType, channelN
   return (
     <div className="flex h-full min-w-0 flex-1">
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-2 border-b border-gray-200 px-4 py-2">
+        <header className="flex items-center gap-2 border-b border-border px-4 py-2">
           <div className="min-w-0 flex-1">
             <h1 className="truncate font-semibold leading-tight">{title}</h1>
-            {conversationType === 'CHANNEL' && topic && <p className="truncate text-xs text-gray-500">{topic}</p>}
+            {conversationType === 'CHANNEL' && topic && <p className="truncate text-xs text-muted">{topic}</p>}
           </div>
           <SearchBox />
           <ConversationMenu conversationId={conversationId} conversationType={conversationType}
             channelName={channelName} archived={archived} manage={manage} />
         </header>
         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
-          {hasMore && <button onClick={loadEarlier} className="mx-auto my-2 block rounded-md border border-gray-300 px-3 py-1 text-xs text-gray-600">Load earlier</button>}
+          {hasMore && <button onClick={loadEarlier} className="mx-auto my-2 block rounded-md border border-border px-3 py-1 text-xs text-muted">Load earlier</button>}
           {messages.map((m, i) => (
             <MessageItem key={m.id} msg={m} prev={messages[i - 1]} names={names} selfId={selfId} selfRole={selfRole}
               onUpdated={upsert} onOpenThread={() => setThreadRoot(m.id)} />
           ))}
-          {typing && <p className="px-2 py-1 text-xs italic text-gray-400">{typing} is typing…</p>}
+          {typing && <p className="px-4 py-1 text-xs italic text-subtle">{typing} is typing…</p>}
         </div>
         {archived
-          ? <p className="border-t border-gray-200 p-3 text-sm text-gray-500">This conversation is archived.</p>
+          ? <p className="border-t border-border p-3 text-sm text-muted">This conversation is archived.</p>
           : <Composer conversationId={conversationId} selfRole={selfRole} memberIds={memberIds} onSent={upsert} onRemove={remove} />}
       </div>
       {threadRoot && (

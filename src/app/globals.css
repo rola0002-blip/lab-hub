@@ -74,6 +74,9 @@
   --text-default:var(--color-neutral-900); --text-muted:var(--color-neutral-600);
   --text-subtle:var(--color-neutral-500);  --text-inverse:var(--color-neutral-0);
   --text-link:var(--color-teal-700);       --text-accent:var(--color-teal-700);
+  /* Per-author message-name hue lightness. Kept dark on the light canvas so any
+     hue at 45% S clears AA (≥4.5:1); the dark theme lifts it (see below). */
+  --author-name-l:32%;
 
   --border-default:rgb(29 28 29 / .13);    /* Slack's exact border */
   --border-strong: rgb(29 28 29 / .24);    --border-focus:var(--color-teal-600);
@@ -97,6 +100,7 @@
 
   --text-default:#d1d2d3; --text-muted:#ababad; --text-subtle:#8d8f92;
   --text-inverse:#1a1d21; --text-link:var(--color-teal-300); --text-accent:var(--color-teal-300);
+  --author-name-l:72%; /* lifted so per-author hues clear AA on the dark canvas */
 
   --border-default:rgb(255 255 255 / .10); --border-strong:rgb(255 255 255 / .18);
   --border-focus:var(--color-teal-400);

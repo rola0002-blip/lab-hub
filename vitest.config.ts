@@ -1,6 +1,13 @@
 import { defineConfig } from 'vitest/config'
 import path from 'node:path'
 
+// Pin the unit-test process timezone to UTC. Chat's humanized timestamps
+// (`src/lib/humanize.ts`) resolve "today"/"yesterday" from LOCAL calendar
+// components, so their expected output is host-timezone dependent; forked
+// workers inherit this env, giving deterministic results on any dev box (this
+// one is UTC+8). Existing tz-aware tests pass explicit zones and are unaffected.
+process.env.TZ = 'UTC'
+
 export default defineConfig({
   resolve: {
     alias: {
