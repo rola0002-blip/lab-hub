@@ -10,7 +10,10 @@ export type TokenType =
   | 'code' | 'codeblock' | 'quote' | 'listitem'
   | 'mention' | 'channel' | 'link' | 'emoji'
 
-export type Token = { type: TokenType; value: string; userId?: string }
+// `label` is the visible text of a markdown `[text](url)` link (the href lives
+// in `value`); it is undefined for a bare-URL link (which renders its url).
+// Additive-only: existing consumers read `type`/`value`/`userId` unchanged.
+export type Token = { type: TokenType; value: string; userId?: string; label?: string }
 
 // ── Regexes ──────────────────────────────────────────────────────────────────
 // All patterns are backtracking-safe: negated character classes with a single
@@ -25,8 +28,18 @@ const FENCE = /```([\s\S]*?)```/g
 const INLINE_CODE = /`([^`\n]+)`/g
 // Mentions (id-safe alphabet, matching mentions.ts) and the channel token.
 const MENTION = /<@([a-zA-Z0-9_-]+)>|<!channel>/g
-// Bare URLs (identical to the previous renderTokens behavior).
-const LINK = /https?:\/\/[^\s]+/g
+// Markdown links `[text](url)`: label is any run without `]`, url any run
+// without `)`/whitespace. Backtracking-safe (one `*`/`+` per negated class).
+// Scheme validation happens in the tokenizer, not the regex (see HTTP below).
+const MDLINK = /\[([^\]]*)\]\(([^)\s]+)\)/g
+// Only http/https destinations may become an href — mirrors the bare-URL
+// scheme-lock so a `javascript:`/`data:`/relative url can never be linkified.
+const HTTP = /^https?:\/\//
+// Bare URLs. The trailing char class excludes sentence punctuation so
+// `(see https://x.com)` links to `https://x.com`, not `…com)`. The final atom
+// is a single char (a subset of the preceding run), so the engine backtracks at
+// most once per trailing punct — linear, no nested unbounded quantifier.
+const LINK = /https?:\/\/[^\s]*[^\s.,;:!?)]/g
 const BOLD = /\*\*([^*\n]+)\*\*/g
 // Italic underscores must sit on non-word boundaries so `snake_case` is left alone.
 const ITALIC = /(?<![\w])_([^_\n]+)_(?![\w])/g
@@ -66,7 +79,9 @@ const plain: Sub = (s) => (s === '' ? [] : [{ type: 'text', value: s }])
 
 // Inline pipeline (order matters): inline code protects its contents first, then
 // mentions/channel (higher priority than emphasis so `**<@u>**` keeps the mention),
-// then links, emphasis, emoji shortnames, and finally raw unicode emoji.
+// then markdown `[text](url)` links (BEFORE bare-URL autolinking, so a link's
+// `(url)` is not re-scanned), then bare links, emphasis, emoji shortnames, and
+// finally raw unicode emoji.
 const rawEmoji: Sub = (s) => split(s, RAW_EMOJI, (m) => ({ type: 'emoji', value: m[0] }), plain)
 const shortcodes: Sub = (s) => split(s, SHORTCODE, (m) => {
   const g = emojiFor(m[1])
@@ -76,9 +91,17 @@ const strike: Sub = (s) => split(s, STRIKE, (m) => ({ type: 'strike', value: m[1
 const italic: Sub = (s) => split(s, ITALIC, (m) => ({ type: 'italic', value: m[1] }), strike)
 const bold: Sub = (s) => split(s, BOLD, (m) => ({ type: 'bold', value: m[1] }), italic)
 const links: Sub = (s) => split(s, LINK, (m) => ({ type: 'link', value: m[0] }), bold)
+// Markdown `[text](url)` runs BEFORE the bare-URL pass so a link's `(url)` is
+// never re-scanned. Scheme-locked: a non-http(s) url (javascript:/data:/
+// relative/empty) returns null, leaving the whole marker as literal text
+// (re-parsed by `links`), so it can never become an href. An empty label falls
+// back to the url as its visible text (`label` undefined → renderer shows url).
+const mdLinks: Sub = (s) => split(s, MDLINK, (m) =>
+  HTTP.test(m[2]) ? { type: 'link', value: m[2], label: m[1] || undefined } : null,
+  links)
 const mentions: Sub = (s) => split(s, MENTION, (m) =>
   m[0] === '<!channel>' ? { type: 'channel', value: 'channel' } : { type: 'mention', value: m[1], userId: m[1] },
-  links)
+  mdLinks)
 const inline: Sub = (s) => split(s, INLINE_CODE, (m) => ({ type: 'code', value: m[1] }), mentions)
 
 // Line-level pass over a non-fenced segment: `> ` → quote, `- `/`* ` → list item,

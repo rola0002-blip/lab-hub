@@ -95,7 +95,10 @@ function renderToken(t: Token, key: number, names: Names, selfId: string | undef
     case 'codeblock': return <CodeBlock key={key} value={t.value} />
     case 'quote': return <span key={key} className="my-0.5 block border-l-2 border-border pl-2 text-muted">{t.value}</span>
     case 'listitem': return <span key={key} className="block pl-1">• {t.value}</span>
-    case 'link': return <a key={key} href={t.value} target="_blank" rel="noreferrer" className="text-link underline">{t.value}</a>
+    // href is scheme-locked to http(s) at tokenize time (markdown.ts), so a
+    // non-http(s) url never reaches here. `label` is the visible text of a
+    // markdown link; a bare-URL link (label undefined) shows its url.
+    case 'link': return <a key={key} href={t.value} target="_blank" rel="noreferrer" className="text-link hover:underline">{t.label ?? t.value}</a>
     case 'channel': return <span key={key} className="rounded bg-accent-subtle px-1 font-medium text-accent">@channel</span>
     case 'mention': {
       const isSelf = !!selfId && t.userId === selfId

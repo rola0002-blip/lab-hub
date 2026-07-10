@@ -52,6 +52,50 @@ describe('tokenizeMessage — mentions & links (subsumes renderTokens)', () => {
   })
 })
 
+describe('tokenizeMessage — markdown [text](url) links (Task 14 fix)', () => {
+  it('parses a scheme-locked [text](url) link carrying href + label', () => {
+    const t = tokenizeMessage('[docs](https://x.com)')
+    expect(types(t)).toEqual(['link'])
+    expect(t.find((x) => x.type === 'link')).toMatchObject({ value: 'https://x.com', label: 'docs' })
+    // The greedy bare-URL swallow is gone: no leftover literal ")".
+    expect(t.some((x) => x.value.includes(')'))).toBe(false)
+  })
+
+  it('falls back to the url as text when the label is empty', () => {
+    const t = tokenizeMessage('[](https://x.com)')
+    expect(types(t)).toEqual(['link'])
+    const link = t.find((x) => x.type === 'link')!
+    expect(link.value).toBe('https://x.com')
+    expect(link.label ?? link.value).toBe('https://x.com')
+  })
+
+  it('does NOT emit a link for a javascript: scheme markdown link (XSS guard)', () => {
+    const t = tokenizeMessage('[x](javascript:alert(1))')
+    // Security: never a link token, never a javascript: href.
+    expect(t.find((x) => x.type === 'link')).toBeUndefined()
+    expect(t.some((x) => x.type === 'link' && /^javascript:/i.test(x.value))).toBe(false)
+    // The whole marker survives as literal, React-escaped text.
+    expect(t.map((x) => x.value).join('')).toBe('[x](javascript:alert(1))')
+  })
+
+  it('does NOT emit a link for a relative-path markdown link', () => {
+    const t = tokenizeMessage('[home](/dashboard)')
+    expect(t.find((x) => x.type === 'link')).toBeUndefined()
+    expect(t.map((x) => x.value).join('')).toBe('[home](/dashboard)')
+  })
+
+  it('trims a trailing ) from a bare URL so it is not swallowed', () => {
+    const t = tokenizeMessage('(see https://x.com)')
+    expect(t.find((x) => x.type === 'link')?.value).toBe('https://x.com')
+    expect(t.map((x) => x.value).join('')).toBe('(see https://x.com)')
+  })
+
+  it('trims trailing sentence punctuation from a bare URL', () => {
+    expect(tokenizeMessage('read https://x.com.').find((x) => x.type === 'link')?.value).toBe('https://x.com')
+    expect(tokenizeMessage('read https://x.com, ok').find((x) => x.type === 'link')?.value).toBe('https://x.com')
+  })
+})
+
 describe('tokenizeMessage — code fences extracted first', () => {
   it('extracts a single-line fence as one codeblock token', () => {
     const t = tokenizeMessage('```code```')
