@@ -1,17 +1,21 @@
 import Image from 'next/image'
 import { requireSetup } from '@/lib/org'
 import { requireUser } from '@/lib/session'
+import { prisma } from '@/lib/db'
 import { totalUnread } from '@/features/chat/conversation-service'
 import Sidebar, { type NavItem } from '@/components/sidebar'
 import Bell from '@/components/bell'
 import PushOptIn from '@/components/push-optin'
 import SignOutButton from '@/components/sign-out'
-import { ThemeToggle } from '@/components/theme-toggle'
+import { ThemeToggle, ThemeSync } from '@/components/theme-toggle'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const org = await requireSetup()
   const user = await requireUser()
   const chatUnread = await totalUnread(user.id)
+  // Read the saved per-user theme directly (not part of the session contract);
+  // ThemeSync applies it on the device only when localStorage has no choice yet.
+  const pref = await prisma.user.findUnique({ where: { id: user.id }, select: { themePreference: true } })
 
   const items: NavItem[] = [
     { href: '/dashboard', label: 'Dashboard' },
@@ -31,6 +35,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen">
+      <ThemeSync initial={pref?.themePreference ?? null} />
       <style>{`:root{--accent:${org.accentColor}}`}</style>
       <aside className="w-56 shrink-0 border-r border-gray-200">
         <div className="flex items-center gap-2 p-4">

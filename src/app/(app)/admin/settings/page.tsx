@@ -1,5 +1,6 @@
 import { requireAdmin } from '@/lib/session'
 import { getOrg } from '@/lib/org'
+import { ThemeToggle } from '@/components/theme-toggle'
 import SettingsForm from './settings-form'
 
 export default async function SettingsPage() {
@@ -11,6 +12,14 @@ export default async function SettingsPage() {
       <p className="text-sm font-medium text-gray-400">04 — Settings</p>
       <h1 className="mt-1 text-2xl font-semibold">Organisation settings</h1>
       <SettingsForm initial={{ name: org.name, accentColor: org.accentColor, timezone: org.timezone }} />
+
+      <section className="mt-8 max-w-md rounded-lg border border-border p-4">
+        <h2 className="text-sm font-semibold text-default">Appearance</h2>
+        <div className="mt-3 flex items-center justify-between gap-4">
+          <p className="text-sm text-muted">Theme — Light or dark. Your choice follows you across devices.</p>
+          <ThemeToggle />
+        </div>
+      </section>
     </div>
   )
 }
