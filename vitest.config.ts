@@ -12,7 +12,10 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    // Colocated pure-module tests under src/, plus standalone unit tests under
+    // tests/unit/ (e.g. the roving-focus helper). Integration tests live in
+    // tests/integration/ and run via vitest.integration.config.ts.
+    include: ['src/**/*.test.ts', 'tests/unit/**/*.test.ts'],
     // src/lib/env.ts eagerly parses process.env at import time; supply the
     // required vars so unit modules import without a real .env present.
     env: {
