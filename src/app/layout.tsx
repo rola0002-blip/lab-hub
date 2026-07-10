@@ -1,5 +1,13 @@
 import type { Metadata, Viewport } from "next";
+import { Lato } from "next/font/google";
 import "./globals.css";
+
+const lato = Lato({
+  weight: ["400", "700", "900"],
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-lato",
+});
 
 // Every page is per-request (session + org lookups); force-dynamic stops Next
 // from prerendering pages at build time, which would query a database that
@@ -27,7 +35,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full antialiased">
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${lato.variable} h-full antialiased`}
+    >
+      <head>
+        <script
+          // Static string only — the sole sanctioned dangerouslySetInnerHTML in the app.
+          // Applies the saved/OS theme before first paint to avoid a flash.
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('theme');if(t!=='light'&&t!=='dark'){t=document.documentElement.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}document.documentElement.dataset.theme=t}catch(e){}})()`,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

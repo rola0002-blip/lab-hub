@@ -6,6 +6,7 @@ import Sidebar, { type NavItem } from '@/components/sidebar'
 import Bell from '@/components/bell'
 import PushOptIn from '@/components/push-optin'
 import SignOutButton from '@/components/sign-out'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const org = await requireSetup()
@@ -41,6 +42,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-end gap-2 border-b border-gray-200 px-6 py-3">
           <PushOptIn />
+          <ThemeToggle />
           <Bell />
           <span className="text-sm text-gray-600">{user.name}</span>
           <SignOutButton />

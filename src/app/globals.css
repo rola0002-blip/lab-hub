@@ -1,14 +1,142 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
+/* ── 1. STATIC SCALES ─────────────────────────────── */
+@theme {
+  /* Type — Slack ships Lato; load via next/font, Inter fallback */
+  --font-sans: var(--font-lato), -apple-system, BlinkMacSystemFont, "Segoe UI",
+               "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --text-2xs:  11px; --text-2xs--line-height: 14px; /* badge counts, micro labels */
+  --text-xs:   12px; --text-xs--line-height: 16px;  /* timestamps, meta */
+  --text-sm:   13px; --text-sm--line-height: 18px;  /* section headers, UI */
+  --text-base: 15px; --text-base--line-height: 22px;/* MESSAGE BODY (Slack 15/1.46) */
+  --text-md:   15px; --text-md--line-height: 22px;  /* channel names */
+  --text-lg:   18px; --text-lg--line-height: 24px;  /* channel title, page header */
+  --text-xl:   22px; --text-xl--line-height: 28px;
+  --text-2xl:  28px; --text-2xl--line-height: 34px; /* empty states, dashboards */
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 700;  /* Slack "bold" is 700, not 600 */
+  --font-weight-black: 900;
+
+  --spacing: 4px;               /* 4px base; p-2=8, p-3=12, p-5=20 */
+
+  --radius-xs: 3px;  --radius-sm: 4px;  --radius-md: 6px;
+  --radius-lg: 8px;  --radius-xl: 12px; --radius-full: 9999px;
+  --radius-avatar: 6px;         /* avatars are rounded SQUARES, ~20%, never circles */
+
+  --shadow-xs:      0 1px 2px 0 rgb(0 0 0 / .04);
+  --shadow-sm:      0 1px 3px 0 rgb(0 0 0 / .08);
+  --shadow-menu:    0 0 0 1px rgb(29 28 29 / .13), 0 4px 12px 0 rgb(0 0 0 / .12);
+  --shadow-modal:   0 0 0 1px rgb(29 28 29 / .10), 0 18px 48px 0 rgb(0 0 0 / .26);
+  --shadow-composer:0 0 0 1px rgb(29 28 29 / .13), 0 1px 3px 0 rgb(0 0 0 / .08);
+
+  /* Teal ramp — 600 = brand #0d9488 */
+  --color-teal-50:#f0fdfa; --color-teal-100:#ccfbf1; --color-teal-200:#99f6e4;
+  --color-teal-300:#5eead4; --color-teal-400:#2dd4bf; --color-teal-500:#14b8a6;
+  --color-teal-600:#0d9488; --color-teal-700:#0f766e; --color-teal-800:#115e59;
+  --color-teal-900:#134e4a; --color-teal-950:#042f2e;
+
+  /* Neutral ramp — WARM near-black like Slack (#1d1c1d), not pure gray */
+  --color-neutral-0:#ffffff;  --color-neutral-25:#fbfbfa;  --color-neutral-50:#f8f8f7;
+  --color-neutral-100:#f4f3f2;--color-neutral-150:#ededec; --color-neutral-200:#e2e1e0;
+  --color-neutral-300:#cfcecd;--color-neutral-400:#a6a5a3; --color-neutral-500:#868684;
+  --color-neutral-600:#616160;--color-neutral-700:#454345; --color-neutral-800:#2c2b2e;
+  --color-neutral-900:#1d1c1d;--color-neutral-950:#121012;
+
+  /* Status */
+  --color-success:#007a5a;  /* Slack green — approved/available */
+  --color-warning:#e8912d;
+  --color-danger: #e01e5a;  /* Slack raspberry */
+  --color-info:   #1264a3;
+
+  /* Presence (Slack's real values) */
+  --color-presence-active:#2eb67d;              /* filled dot */
+  --color-presence-away:  rgb(29 28 29 / .40);  /* hollow ring */
+
+  /* Motion — the four Slack curves */
+  --motion-fast: 100ms; --motion-standard: 200ms;
+  --ease-enter:  cubic-bezier(0,0,.2,1);
+  --ease-exit:   cubic-bezier(.4,0,1,1);
+  --ease-standard:cubic-bezier(.4,0,.2,1);
+  --ease-bounce: cubic-bezier(.34,1.56,.64,1); /* delight only */
+}
+
+/* ── 2. SEMANTIC TOKENS — LIGHT ───────────────────── */
 :root {
-  --accent: #0d9488; /* overridden per-org by (app) layout */
+  --bg-canvas:var(--color-neutral-0); --bg-surface:var(--color-neutral-0);
+  --bg-surface-sunken:var(--color-neutral-50); /* code blocks, quotes */
+  --bg-hover:var(--color-neutral-50); --bg-active:var(--color-neutral-100);
+  --bg-selected:#eaf6f4; --bg-mention:#fdf3d5; /* @you row tint */
+
+  --text-default:var(--color-neutral-900); --text-muted:var(--color-neutral-600);
+  --text-subtle:var(--color-neutral-500);  --text-inverse:var(--color-neutral-0);
+  --text-link:var(--color-teal-700);       --text-accent:var(--color-teal-700);
+
+  --border-default:rgb(29 28 29 / .13);    /* Slack's exact border */
+  --border-strong: rgb(29 28 29 / .24);    --border-focus:var(--color-teal-600);
+
+  --accent:var(--color-teal-600); --accent-hover:var(--color-teal-700);
+  --accent-active:var(--color-teal-800); --accent-subtle:#eaf6f4;
+  --accent-on:var(--color-neutral-0); --ring-focus:var(--color-teal-500);
+
+  /* Sidebar rail — aubergine's slot, in teal-slate */
+  --sidebar-bg:#0c3b37; --sidebar-bg-raised:#0e433f;
+  --sidebar-text:rgb(255 255 255 / .72); --sidebar-text-strong:#ffffff;
+  --sidebar-muted:rgb(255 255 255 / .55); --sidebar-hover:rgb(255 255 255 / .08);
+  --sidebar-active-bg:var(--color-teal-600); --sidebar-active-text:#ffffff;
+  --sidebar-border:rgb(255 255 255 / .10); --sidebar-badge:var(--color-danger);
 }
 
+/* ── 3. SEMANTIC TOKENS — DARK ────────────────────── */
+[data-theme="dark"] {
+  --bg-canvas:#1a1d21; --bg-surface:#1a1d21; --bg-surface-sunken:#141619;
+  --bg-hover:#22262b; --bg-active:#26292e; --bg-selected:#0f2c2a; --bg-mention:#3a3320;
+
+  --text-default:#d1d2d3; --text-muted:#ababad; --text-subtle:#8d8f92;
+  --text-inverse:#1a1d21; --text-link:var(--color-teal-300); --text-accent:var(--color-teal-300);
+
+  --border-default:rgb(255 255 255 / .10); --border-strong:rgb(255 255 255 / .18);
+  --border-focus:var(--color-teal-400);
+
+  --accent:var(--color-teal-500); --accent-hover:var(--color-teal-400);
+  --accent-active:var(--color-teal-300); --accent-subtle:rgb(20 184 166 / .16);
+  --accent-on:#06231f; --ring-focus:var(--color-teal-400);
+
+  --sidebar-bg:#121417; --sidebar-bg-raised:#17191d;
+  --sidebar-text:rgb(255 255 255 / .70); --sidebar-text-strong:#ffffff;
+  --sidebar-muted:rgb(255 255 255 / .50); --sidebar-hover:rgb(255 255 255 / .06);
+  --sidebar-active-bg:var(--color-teal-600); --sidebar-active-text:#ffffff;
+  --sidebar-border:rgb(255 255 255 / .08);
+
+  --shadow-menu: 0 0 0 1px rgb(255 255 255 / .10), 0 4px 12px 0 rgb(0 0 0 / .44);
+  --shadow-modal:0 0 0 1px rgb(255 255 255 / .08), 0 18px 48px 0 rgb(0 0 0 / .6);
+}
+
+/* ── 4. MAP SEMANTICS → TAILWIND UTILITIES ────────── */
 @theme inline {
-  --color-accent: var(--accent);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  --color-canvas:var(--bg-canvas); --color-surface:var(--bg-surface);
+  --color-surface-sunken:var(--bg-surface-sunken); --color-hover:var(--bg-hover);
+  --color-active:var(--bg-active); --color-selected:var(--bg-selected);
+  --color-mention:var(--bg-mention);
+  --color-default:var(--text-default); --color-muted:var(--text-muted);
+  --color-subtle:var(--text-subtle); --color-inverse:var(--text-inverse);
+  --color-link:var(--text-link);
+  --color-accent:var(--accent); --color-accent-hover:var(--accent-hover);
+  --color-accent-subtle:var(--accent-subtle); --color-accent-on:var(--accent-on);
+  --color-border:var(--border-default); --color-border-strong:var(--border-strong);
+  --color-ring:var(--ring-focus);
+  --color-sidebar:var(--sidebar-bg); --color-sidebar-raised:var(--sidebar-bg-raised);
+  --color-sidebar-fg:var(--sidebar-text); --color-sidebar-fg-strong:var(--sidebar-text-strong);
+  --color-sidebar-muted:var(--sidebar-muted); --color-sidebar-hover:var(--sidebar-hover);
+  --color-sidebar-active:var(--sidebar-active-bg);
 }
 
-body {
-  @apply bg-white text-gray-900 antialiased;
+/* ── 5. APP-LEVEL BASE RULES ──────────────────────── */
+body { background: var(--bg-canvas); color: var(--text-default); font-size: var(--text-base); line-height: var(--text-base--line-height); }
+:focus-visible { outline: 2px solid var(--ring-focus); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }
