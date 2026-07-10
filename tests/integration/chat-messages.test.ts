@@ -20,6 +20,15 @@ describe('message service', () => {
     return { ch, users }
   }
 
+  it('threads the author image through message DTOs (send + list)', async () => {
+    const { ch, users: [u] } = await channelWith('member')
+    await prisma.user.update({ where: { id: u.id }, data: { image: '/uploads/logo/fake.png' } })
+    const r = await sendMessage({ userId: u.id, conversationId: ch.id, body: 'hi' })
+    expect(r.ok && r.message.author.image).toBe('/uploads/logo/fake.png')
+    const list = await listMessages({ userId: u.id, conversationId: ch.id })
+    expect(list.ok && list.messages[0].author.image).toBe('/uploads/logo/fake.png')
+  })
+
   it('members send; non-members are forbidden; archived channels reject', async () => {
     const { ch, users: [a] } = await channelWith('member')
     const outsider = await makeUser()

@@ -10,7 +10,7 @@ import { fanoutMessage } from './fanout'
 
 export type MessageDto = {
   id: string; conversationId: string; parentId: string | null
-  author: { id: string; name: string }
+  author: { id: string; name: string; image: string | null }
   body: string; deleted: boolean; editedAt: string | null; createdAt: string
   replyCount: number
   reactions: { emoji: string; userIds: string[] }[]
@@ -24,7 +24,7 @@ export type SendInput = {
 export type SendResult = { ok: true; message: MessageDto } | { ok: false; error: 'forbidden' | 'rate_limited' | 'invalid'; message: string }
 
 const MSG_INCLUDE = {
-  user: { select: { id: true, name: true } },
+  user: { select: { id: true, name: true, image: true } },
   reactions: true,
   attachments: true,
   _count: { select: { replies: true } },
@@ -37,7 +37,7 @@ function toDto(m: Loaded): MessageDto {
   for (const r of m.reactions) grouped.set(r.emoji, [...(grouped.get(r.emoji) ?? []), r.userId])
   return {
     id: m.id, conversationId: m.conversationId, parentId: m.parentId,
-    author: { id: m.user.id, name: m.user.name },
+    author: { id: m.user.id, name: m.user.name, image: m.user.image },
     body: m.deletedAt ? '' : m.body, deleted: !!m.deletedAt,
     editedAt: m.editedAt?.toISOString() ?? null, createdAt: m.createdAt.toISOString(),
     replyCount: m._count.replies,

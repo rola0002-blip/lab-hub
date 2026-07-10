@@ -43,7 +43,9 @@ export default function Composer({ conversationId, selfRole, memberIds, parentId
   const fileRef = useRef<HTMLInputElement>(null)
   const lastTyping = useRef(0)
 
-  const selfName = users.find((u) => u.id === selfId)?.name ?? 'You'
+  const self = users.find((u) => u.id === selfId)
+  const selfName = self?.name ?? 'You'
+  const selfImage = self?.image ?? null
   const memberUsers = useMemo(() => {
     const ids = new Set(memberIds)
     return users.filter((u) => ids.has(u.id))
@@ -106,7 +108,7 @@ export default function Composer({ conversationId, selfRole, memberIds, parentId
     const tempId = 'tmp-' + Date.now()
     const temp: Msg = {
       id: tempId, conversationId, parentId: parentId ?? null,
-      author: { id: selfId, name: selfName },
+      author: { id: selfId, name: selfName, image: selfImage },
       body, deleted: false, editedAt: null, createdAt: new Date().toISOString(),
       replyCount: 0, reactions: [],
       attachments: attachments.map((a, i) => ({ id: `${tempId}-a${i}`, ...a })),

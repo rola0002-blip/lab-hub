@@ -7,6 +7,7 @@ export type ConvResult = { ok: true; conversationId: string } | { ok: false; mes
 export type ConversationListItem = {
   id: string; type: 'CHANNEL' | 'DM'; name: string | null; topic: string; isPrivate: boolean
   archived: boolean; muted: boolean; memberIds: string[]
+  members: { id: string; image: string | null }[]
   unread: number; mentions: number; lastMessageAt: string | null
 }
 
@@ -155,7 +156,7 @@ export async function accessibleConversationIds(userId: string): Promise<string[
 export async function listConversations(userId: string): Promise<ConversationListItem[]> {
   const memberships = await prisma.conversationMember.findMany({
     where: { userId },
-    include: { conversation: { include: { members: { select: { userId: true } } } } },
+    include: { conversation: { include: { members: { select: { userId: true, user: { select: { image: true } } } } } } },
   })
   const items = await Promise.all(
     memberships.map(async (m) => {
@@ -169,6 +170,7 @@ export async function listConversations(userId: string): Promise<ConversationLis
         id: m.conversationId, type: m.conversation.type, name: m.conversation.name, topic: m.conversation.topic,
         isPrivate: m.conversation.isPrivate, archived: !!m.conversation.archivedAt, muted: m.muted,
         memberIds: m.conversation.members.map((x) => x.userId),
+        members: m.conversation.members.map((x) => ({ id: x.userId, image: x.user.image })),
         unread, mentions, lastMessageAt: last?.createdAt.toISOString() ?? null,
       }
     }),

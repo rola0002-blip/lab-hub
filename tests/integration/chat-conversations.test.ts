@@ -157,6 +157,21 @@ describe('conversation service', () => {
     expect(c.events.filter((e) => e.t === 'member').length).toBe(memberCountAfterCreate)
   })
 
+  it('listConversations exposes the DM peer image on the row', async () => {
+    const me = await makeUser()
+    const peer = await makeUser()
+    await prisma.user.update({ where: { id: peer.id }, data: { image: '/uploads/logo/peer.png' } })
+    const dm = await getOrCreateDm({ userIds: [me.id, peer.id], byId: me.id })
+    if (!dm.ok) throw new Error('setup')
+    const list = await listConversations(me.id)
+    const row = list.find((c) => c.id === dm.conversationId)
+    const peerEntry = row?.members.find((m) => m.id === peer.id)
+    expect(peerEntry?.image).toBe('/uploads/logo/peer.png')
+    // a member without an avatar surfaces as null (not undefined/missing)
+    const selfEntry = row?.members.find((m) => m.id === me.id)
+    expect(selfEntry?.image).toBeNull()
+  })
+
   it('listConversations returns unread and mention counts from lastReadAt', async () => {
     const me = await makeUser()
     const other = await makeUser()

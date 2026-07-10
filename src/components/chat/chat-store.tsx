@@ -2,10 +2,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useEvents, type ClientEvent } from '@/components/use-events'
 
-export type ChatUser = { id: string; name: string; role: string }
+export type ChatUser = { id: string; name: string; role: string; image: string | null }
 export type ConversationItem = {
   id: string; type: 'CHANNEL' | 'DM'; name: string | null; topic: string; isPrivate: boolean
   archived: boolean; muted: boolean; memberIds: string[]
+  members: { id: string; image: string | null }[]
   unread: number; mentions: number; lastMessageAt: string | null
 }
 

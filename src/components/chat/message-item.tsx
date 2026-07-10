@@ -7,7 +7,7 @@ export type Msg = {
   id: string
   conversationId: string
   parentId: string | null
-  author: { id: string; name: string }
+  author: { id: string; name: string; image: string | null }
   body: string
   deleted: boolean
   editedAt: string | null
