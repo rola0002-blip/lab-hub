@@ -85,7 +85,7 @@ export default function ThreadPanel({ rootId, conversationId, names, memberIds, 
               <p className="text-base italic text-subtle">message deleted</p>
             ) : (
               <p className="mt-0.5 whitespace-pre-wrap break-words text-base text-default">
-                {renderTokens(root.body, names)}
+                {renderTokens(root.body, names, selfId)}
                 {root.editedAt && <span className="ml-1 text-2xs text-subtle">(edited)</span>}
               </p>
             )}
