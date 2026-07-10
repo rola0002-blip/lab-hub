@@ -12,8 +12,8 @@ export default async function PeoplePage() {
   ])
   return (
     <div>
-      <p className="text-sm font-medium text-gray-400">02 — People</p>
-      <h1 className="mt-1 text-2xl font-semibold">People</h1>
+      <p className="text-sm font-medium text-subtle">02 — People</p>
+      <h1 className="mt-1 text-2xl font-semibold text-default">People</h1>
       <PeopleClient users={users} invitations={invitations.map((i) => ({ id: i.id, email: i.email, role: i.role }))} isAdmin={user.role === 'admin'} selfId={user.id} />
     </div>
   )

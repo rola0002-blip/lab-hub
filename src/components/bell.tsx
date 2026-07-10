@@ -62,17 +62,17 @@ export default function Bell() {
 
   return (
     <div className="relative" ref={ref}>
-      <button onClick={toggle} aria-label="Notifications" className="relative rounded-full p-2 hover:bg-gray-100">
+      <button onClick={toggle} aria-label="Notifications" className="relative rounded-full p-2 text-muted transition-colors hover:bg-hover hover:text-default">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0" /></svg>
-        {unread > 0 && <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white">{unread}</span>}
+        {unread > 0 && <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-accent-on">{unread}</span>}
       </button>
       {open && (
-        <div className="absolute right-0 z-20 mt-2 w-80 rounded-xl border border-gray-200 bg-white p-2 shadow-lg">
-          {items.length === 0 && <p className="p-3 text-sm text-gray-500">No notifications yet.</p>}
+        <div className="absolute right-0 z-20 mt-2 w-80 rounded-xl border border-border bg-surface p-2 shadow-menu">
+          {items.length === 0 && <p className="p-3 text-sm text-muted">No notifications yet.</p>}
           {items.map((i) => (
-            <div key={i.id} className={`rounded-lg p-3 text-sm ${i.readAt ? 'text-gray-500' : 'font-medium'}`}>
+            <div key={i.id} className={`rounded-lg p-3 text-sm ${i.readAt ? 'text-muted' : 'font-medium text-default'}`}>
               <p>{LABEL[i.type] ?? i.type}</p>
-              {typeof i.payload?.message === 'string' && <p className="mt-0.5 font-normal text-gray-600">{i.payload.message}</p>}
+              {typeof i.payload?.message === 'string' && <p className="mt-0.5 font-normal text-muted">{i.payload.message}</p>}
             </div>
           ))}
         </div>

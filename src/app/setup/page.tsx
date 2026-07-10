@@ -7,8 +7,8 @@ export default async function SetupPage() {
   if (org?.setupComplete) redirect('/sign-in')
   return (
     <main className="mx-auto max-w-lg p-8">
-      <p className="text-sm font-medium text-gray-400">01 — Welcome</p>
-      <h1 className="mt-1 text-2xl font-semibold">Set up your organisation</h1>
+      <p className="text-sm font-medium text-subtle">01 — Welcome</p>
+      <h1 className="mt-1 text-2xl font-semibold text-default">Set up your organisation</h1>
       <SetupForm />
     </main>
   )

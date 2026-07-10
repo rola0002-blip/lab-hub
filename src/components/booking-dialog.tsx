@@ -71,28 +71,28 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, i
 
   return (
     <Modal title="Book this slot" onClose={() => { if (!busy) onClose() }}>
-        <p className="mt-1 text-sm text-gray-600">{when} ({(durationMinutes / 60).toFixed(1)} h)</p>
+        <p className="mt-1 text-sm text-muted">{when} ({(durationMinutes / 60).toFixed(1)} h)</p>
 
-        <label className="mt-4 block text-sm">Purpose
+        <label className="mt-4 block text-sm text-default">Purpose
           <input value={purpose} onChange={(e) => setPurpose(e.target.value)} maxLength={500}
-            placeholder="e.g. hBN growth run" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
+            placeholder="e.g. hBN growth run" className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2" />
         </label>
 
         {allowRecurring && (
-          <div className="mt-3 rounded-lg border border-gray-200 p-3 text-sm">
+          <div className="mt-3 rounded-lg border border-border p-3 text-sm text-default">
             <label className="flex items-center gap-2"><input type="checkbox" checked={recurring} onChange={(e) => setRecurring(e.target.checked)} />Repeat weekly (whole series needs approval)</label>
             {recurring && (
               <div className="mt-2 space-y-2">
                 <div className="flex flex-wrap gap-2">
                   {WEEKDAYS.map((w, i) => (
-                    <label key={w} className={`rounded-md border px-2 py-1 ${days.includes(i) ? 'border-accent bg-accent/10' : 'border-gray-200'}`}>
+                    <label key={w} className={`cursor-pointer rounded-md border px-2 py-1 transition-colors ${days.includes(i) ? 'border-accent bg-accent/10 text-accent' : 'border-border hover:bg-hover'}`}>
                       <input type="checkbox" className="hidden" checked={days.includes(i)}
                         onChange={(e) => setDays(e.target.checked ? [...days, i] : days.filter((d) => d !== i))} />{w}
                     </label>
                   ))}
                 </div>
                 <label className="block">Until (inclusive)
-                  <input type="date" value={until} onChange={(e) => setUntil(e.target.value)} className="mt-1 rounded-md border border-gray-300 px-2 py-1" />
+                  <input type="date" value={until} onChange={(e) => setUntil(e.target.value)} className="mt-1 rounded-md border border-border bg-surface px-2 py-1" />
                 </label>
               </div>
             )}
@@ -100,24 +100,24 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, i
         )}
 
         {verdict && (
-          <p className={`mt-3 rounded-md p-2 text-sm ${verdict.kind === 'blocked' ? 'bg-red-50 text-red-700' : verdict.kind === 'approval' ? 'bg-amber-50 text-amber-800' : 'bg-green-50 text-green-800'}`}>
+          <p className={`mt-3 rounded-md p-2 text-sm text-default ${verdict.kind === 'blocked' ? 'bg-[var(--color-danger)]/10' : verdict.kind === 'approval' ? 'bg-[var(--color-warning)]/12' : 'bg-[var(--color-success)]/12'}`}>
             {verdict.kind === 'instant' && 'This booking will confirm instantly.'}
             {verdict.kind === 'approval' && (verdict.why === 'recurring' ? 'Recurring series — an equipment manager must approve it.' : verdict.why === 'guest_policy' ? 'Guests need approval on this instrument.' : 'This instrument requires approval for every booking.')}
             {verdict.kind === 'blocked' && verdict.message}
           </p>
         )}
-        {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+        {error && <p className="mt-2 text-sm text-[var(--color-danger)]">{error}</p>}
         {conflicts.length > 0 && (
-          <div className="mt-2 rounded-md bg-red-50 p-2 text-sm text-red-700">
+          <div className="mt-2 rounded-md bg-[var(--color-danger)]/10 p-2 text-sm text-default">
             <p>These occurrences clash — adjust the pattern:</p>
             <ul className="ml-4 list-disc">{conflicts.map((c) => <li key={c}>{c}</li>)}</ul>
           </div>
         )}
 
         <div className="mt-4 flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm">Cancel</button>
+          <button onClick={onClose} className="rounded-md border border-border px-3 py-1.5 text-sm text-default transition-colors hover:bg-hover">Cancel</button>
           <button disabled={busy || verdict?.kind === 'blocked' || (recurring && days.length === 0)} onClick={submit}
-            className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">
+            className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-on transition-colors hover:bg-accent-hover disabled:opacity-50">
             {busy ? 'Booking…' : verdict?.kind === 'approval' ? 'Request booking' : 'Book'}
           </button>
         </div>

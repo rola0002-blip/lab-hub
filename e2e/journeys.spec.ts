@@ -94,7 +94,7 @@ test('guest booking goes to approval; admin approves; guest sees CONFIRMED', asy
   await page.goto('/approvals')
   await expect(page.getByText('CVD Furnace')).toBeVisible()
   await page.click('button:has-text("Approve")')
-  await expect(page.getByText('Nothing pending')).toBeVisible()
+  await expect(page.getByText('Nothing waiting on you')).toBeVisible()
 
   await signOut(page)
   await signIn(page, 'guest@x.test', 'GuestPass!1234')

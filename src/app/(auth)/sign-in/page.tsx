@@ -24,15 +24,15 @@ export default function SignInPage() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="w-full max-w-sm space-y-4 rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
-      <h1 className="text-xl font-semibold">Sign in</h1>
-      <input name="email" type="email" required placeholder="Email" className="w-full rounded-md border border-gray-300 px-3 py-2" />
-      <input name="password" type="password" required placeholder="Password" className="w-full rounded-md border border-gray-300 px-3 py-2" />
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button disabled={busy} className="w-full rounded-md bg-accent px-3 py-2 font-medium text-white disabled:opacity-50">
+    <form onSubmit={onSubmit} className="w-full max-w-sm space-y-4 rounded-xl border border-border bg-surface p-8 shadow-sm">
+      <h1 className="text-xl font-semibold text-default">Sign in</h1>
+      <input name="email" type="email" required placeholder="Email" className="w-full rounded-md border border-border bg-surface px-3 py-2" />
+      <input name="password" type="password" required placeholder="Password" className="w-full rounded-md border border-border bg-surface px-3 py-2" />
+      {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
+      <button disabled={busy} className="w-full rounded-md bg-accent px-3 py-2 font-medium text-accent-on transition-colors hover:bg-accent-hover disabled:opacity-50">
         {busy ? 'Signing in…' : 'Sign in'}
       </button>
-      <Link href="/forgot-password" className="block text-sm text-gray-500 hover:underline">
+      <Link href="/forgot-password" className="block text-sm text-muted hover:underline">
         Forgot password?
       </Link>
     </form>

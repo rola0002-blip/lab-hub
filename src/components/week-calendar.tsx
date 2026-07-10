@@ -59,31 +59,37 @@ export default function WeekCalendar({ equipmentId, timezone, weekStartISO, slot
     }
   }, [drag, finishDrag])
 
+  const todayKey = format(new TZDate(new Date(), timezone), 'yyyy-MM-dd')
+
   return (
-    <div className="select-none overflow-x-auto rounded-xl border border-gray-200">
+    <div className="select-none overflow-x-auto rounded-xl border border-border bg-surface">
       <div className="grid min-w-[720px]" style={{ gridTemplateColumns: '48px repeat(7, 1fr)' }}>
         <div />
-        {Array.from({ length: 7 }, (_, d) => (
-          <div key={d} className="border-b border-l border-gray-200 p-2 text-center text-sm font-medium">
-            {format(addDays(weekStart, d), 'EEE d')}
-          </div>
-        ))}
+        {Array.from({ length: 7 }, (_, d) => {
+          const dayDate = addDays(weekStart, d)
+          const isToday = format(dayDate, 'yyyy-MM-dd') === todayKey
+          return (
+            <div key={d} className={`border-b border-l border-border p-2 text-center text-sm ${isToday ? 'font-semibold text-accent' : 'font-medium text-default'}`}>
+              {format(dayDate, 'EEE d')}
+            </div>
+          )
+        })}
         {/* time gutter */}
         <div className="relative" style={{ height: ROWS * ROW_PX }}>
           {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => (
-            <span key={i} className="absolute right-1 text-[10px] text-gray-400" style={{ top: i * 2 * ROW_PX - 6 }}>
+            <span key={i} className="absolute right-1 text-[10px] text-subtle" style={{ top: i * 2 * ROW_PX - 6 }}>
               {String(START_HOUR + i).padStart(2, '0')}:00
             </span>
           ))}
         </div>
         {Array.from({ length: 7 }, (_, day) => (
-          <div key={day} className="relative border-l border-gray-100" style={{ height: ROWS * ROW_PX }}
+          <div key={day} className="relative border-l border-border" style={{ height: ROWS * ROW_PX }}
             onPointerLeave={() => drag && finishDrag()}>
             {Array.from({ length: ROWS }, (_, row) => {
               const inDrag = drag?.day === day && row >= Math.min(drag.from, drag.to) && row <= Math.max(drag.from, drag.to)
               return (
                 <div key={row}
-                  className={`absolute inset-x-0 ${row % 2 ? '' : 'border-t border-gray-100'} ${inDrag ? 'bg-accent/20' : ''} ${retired ? '' : 'cursor-crosshair'}`}
+                  className={`absolute inset-x-0 transition-colors ${row % 2 ? '' : 'border-t border-border'} ${inDrag ? 'bg-accent/20' : retired ? '' : 'cursor-crosshair hover:bg-hover'}`}
                   style={{ top: row * ROW_PX, height: ROW_PX }}
                   onPointerDown={() => !retired && setDrag({ day, from: row, to: row })}
                   onPointerEnter={() => drag?.day === day && setDrag({ ...drag, to: row })}
@@ -94,11 +100,12 @@ export default function WeekCalendar({ equipmentId, timezone, weekStartISO, slot
               const r = slotRect(s, day)
               if (!r) return null
               const style = s.kind === 'maintenance'
-                ? 'bg-gray-300/70 text-gray-700'
-                : s.status === 'PENDING' ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                : s.own ? 'bg-accent/80 text-white' : 'bg-accent/30 text-gray-800'
+                ? 'bg-active text-muted border border-border'
+                : s.status === 'PENDING' ? 'bg-[var(--color-warning)]/15 text-default border border-[var(--color-warning)]/40'
+                : s.own ? 'bg-accent text-accent-on border border-[var(--accent)]'
+                : 'bg-accent-subtle text-accent border border-[var(--accent)]/30'
               return (
-                <div key={`${s.id}-${day}`} className={`pointer-events-none absolute inset-x-0.5 overflow-hidden rounded px-1 text-[11px] ${style}`}
+                <div key={`${s.id}-${day}`} className={`pointer-events-none absolute inset-x-0.5 overflow-hidden rounded-md px-1 text-[11px] ${style}`}
                   style={{ top: r.top, height: r.height }}>
                   {s.label}{s.status === 'PENDING' ? ' (pending)' : ''}
                 </div>
@@ -107,7 +114,7 @@ export default function WeekCalendar({ equipmentId, timezone, weekStartISO, slot
           </div>
         ))}
       </div>
-      {retired && <p className="p-2 text-sm text-gray-500">This instrument is retired — no new bookings.</p>}
+      {retired && <p className="p-2 text-sm text-muted">This instrument is retired — no new bookings.</p>}
       {dialog && (
         <BookingDialog equipmentId={equipmentId} timezone={timezone} allowRecurring={allowRecurring}
           initialStart={dialog.start} initialEnd={dialog.end} onClose={() => setDialog(null)} />

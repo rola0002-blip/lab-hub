@@ -1,5 +1,12 @@
 export type Chip = { label: 'Book instantly' | 'Approval needed' | 'Certification required' | 'Retired'; tone: 'green' | 'amber' | 'red' | 'gray' }
 
+// Booking.status → <Badge variant>. Name + shape are a contract: Task 17 imports this verbatim.
+export const BOOKING_VARIANT = { CONFIRMED: 'success', PENDING: 'warning', REJECTED: 'danger', CANCELLED: 'neutral', EXPIRED: 'neutral' } as const
+
+// Equipment statusChip tone → <Badge variant>. Preserves the four-way distinction
+// (block=danger vs approval=warning) the chip module already encodes.
+export const CHIP_VARIANT = { green: 'success', amber: 'warning', red: 'danger', gray: 'neutral' } as const
+
 export function statusChip(args: {
   role: 'admin' | 'member' | 'guest'
   isCertified: boolean

@@ -1,13 +1,13 @@
 'use client'
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
+import { CalendarCheck, Clock } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { EmptyState } from '@/components/ui/empty-state'
+import { BOOKING_VARIANT } from '@/features/booking/chip'
 import { cancelMyBookingAction } from './actions'
 
 type Item = { id: string; equipmentName: string; when: string; status: string; recurring: boolean; cancellable: boolean; reason: string | null }
-
-const BADGE: Record<string, string> = {
-  CONFIRMED: 'bg-green-100 text-green-800', PENDING: 'bg-amber-100 text-amber-800',
-  REJECTED: 'bg-red-100 text-red-800', CANCELLED: 'bg-gray-200 text-gray-600', EXPIRED: 'bg-gray-200 text-gray-600',
-}
 
 function Row({ b, onErr }: { b: Item; onErr: (m: string) => void }) {
   const [pending, start] = useTransition()
@@ -17,17 +17,17 @@ function Row({ b, onErr }: { b: Item; onErr: (m: string) => void }) {
     start(async () => { const r = await cancelMyBookingAction(b.id, scope); if (!r.ok) onErr(r.message ?? 'Failed') })
   }
   return (
-    <li className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
-      <span>
+    <li className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm transition-colors hover:bg-hover">
+      <span className="text-default">
         <strong>{b.equipmentName}</strong> · {b.when}{b.recurring && ' · recurring'}
-        {b.reason && <span className="block text-xs text-gray-500">Reason: {b.reason}</span>}
+        {b.reason && <span className="block text-xs text-muted">Reason: {b.reason}</span>}
       </span>
       <span className="flex items-center gap-2">
-        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${BADGE[b.status]}`}>{b.status.toLowerCase()}</span>
+        <Badge variant={BOOKING_VARIANT[b.status as keyof typeof BOOKING_VARIANT]}>{b.status.toLowerCase()}</Badge>
         {b.cancellable && (
           <>
-            <button disabled={pending} onClick={() => cancel('one')} className="text-red-600 hover:underline">Cancel</button>
-            {b.recurring && <button disabled={pending} onClick={() => cancel('future')} className="text-red-600 hover:underline">Cancel series</button>}
+            <button disabled={pending} onClick={() => cancel('one')} className="text-[var(--color-danger)] hover:underline">Cancel</button>
+            {b.recurring && <button disabled={pending} onClick={() => cancel('future')} className="text-[var(--color-danger)] hover:underline">Cancel series</button>}
           </>
         )}
       </span>
@@ -39,17 +39,23 @@ export default function BookingsClient({ upcoming, past }: { upcoming: Item[]; p
   const [msg, setMsg] = useState<string | null>(null)
   return (
     <div className="mt-6 space-y-8">
-      {msg && <p className="text-sm text-red-600">{msg}</p>}
+      {msg && <p className="text-sm text-[var(--color-danger)]">{msg}</p>}
       <section>
-        <h2 className="font-medium">Upcoming</h2>
-        {upcoming.length === 0 ? <p className="mt-2 text-sm text-gray-500">Nothing booked. Head to Booking to reserve an instrument.</p> : (
-          <ul className="mt-2 divide-y divide-gray-100 rounded-xl border border-gray-200">{upcoming.map((b) => <Row key={b.id} b={b} onErr={setMsg} />)}</ul>
+        <h2 className="font-medium text-default">Upcoming</h2>
+        {upcoming.length === 0 ? (
+          <EmptyState icon={CalendarCheck} title="Nothing booked"
+            hint="Head to Booking to reserve an instrument — your upcoming reservations will live here."
+            action={<Link href="/booking" className="text-sm font-medium text-accent hover:underline">Browse equipment →</Link>} />
+        ) : (
+          <ul className="mt-2 divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface shadow-xs">{upcoming.map((b) => <Row key={b.id} b={b} onErr={setMsg} />)}</ul>
         )}
       </section>
       <section>
-        <h2 className="font-medium">Past & closed</h2>
-        {past.length === 0 ? <p className="mt-2 text-sm text-gray-500">No history yet.</p> : (
-          <ul className="mt-2 divide-y divide-gray-100 rounded-xl border border-gray-200">{past.map((b) => <Row key={b.id} b={b} onErr={setMsg} />)}</ul>
+        <h2 className="font-medium text-default">Past &amp; closed</h2>
+        {past.length === 0 ? (
+          <EmptyState icon={Clock} title="No history yet" hint="Your past and closed bookings will collect here over time." />
+        ) : (
+          <ul className="mt-2 divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface shadow-xs">{past.map((b) => <Row key={b.id} b={b} onErr={setMsg} />)}</ul>
         )}
       </section>
     </div>

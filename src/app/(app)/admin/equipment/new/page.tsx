@@ -8,7 +8,7 @@ export default async function NewEquipmentPage() {
   const users = await prisma.user.findMany({ where: { banned: false, role: { not: 'guest' } }, select: { id: true, name: true }, orderBy: { name: 'asc' } })
   return (
     <div>
-      <h1 className="text-2xl font-semibold">Add equipment</h1>
+      <h1 className="text-2xl font-semibold text-default">Add equipment</h1>
       <EquipmentForm action={createEquipmentAction} users={users} />
     </div>
   )

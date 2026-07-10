@@ -14,7 +14,7 @@ export default async function ApprovalsPage() {
     ? undefined
     : (await prisma.equipmentManager.findMany({ where: { userId: me.id }, select: { equipmentId: true } })).map((m) => m.equipmentId)
   if (managedIds && managedIds.length === 0) {
-    return <p className="text-gray-600">You don&apos;t manage any instruments, so there is nothing to approve.</p>
+    return <p className="text-muted">You don&apos;t manage any instruments, so there is nothing to approve.</p>
   }
 
   const pending = await prisma.booking.findMany({
@@ -47,8 +47,8 @@ export default async function ApprovalsPage() {
 
   return (
     <div>
-      <p className="text-sm font-medium text-gray-400">02 — Approvals</p>
-      <h1 className="mt-1 text-2xl font-semibold">Approvals queue</h1>
+      <p className="text-sm font-medium text-subtle">02 — Approvals</p>
+      <h1 className="mt-1 text-2xl font-semibold text-default">Approvals queue</h1>
       <ApprovalsClient items={singles} recurring={recurringItems} />
     </div>
   )

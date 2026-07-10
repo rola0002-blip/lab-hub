@@ -25,8 +25,8 @@ export default async function MyBookingsPage() {
   })
   return (
     <div>
-      <p className="text-sm font-medium text-gray-400">02 — My bookings</p>
-      <h1 className="mt-1 text-2xl font-semibold">My bookings</h1>
+      <p className="text-sm font-medium text-subtle">02 — My bookings</p>
+      <h1 className="mt-1 text-2xl font-semibold text-default">My bookings</h1>
       <BookingsClient upcoming={upcoming.map(shape)} past={past.map(shape)} />
     </div>
   )

@@ -49,13 +49,13 @@ export default async function EquipmentPage({ params, searchParams }: {
 
   return (
     <div>
-      <p className="text-sm font-medium text-gray-400">02 — Booking</p>
+      <p className="text-sm font-medium text-subtle">02 — Booking</p>
       <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">{eq.name}</h1>
+        <h1 className="text-2xl font-semibold text-default">{eq.name}</h1>
         <div className="flex items-center gap-2 text-sm">
-          <Link href={`?week=${prev}`} className="rounded-md border border-gray-300 px-2 py-1">← Prev</Link>
-          <span className="font-medium">{format(weekStart, 'd MMM')} – {format(addDays(weekStart, 6), 'd MMM yyyy')}</span>
-          <Link href={`?week=${next}`} className="rounded-md border border-gray-300 px-2 py-1">Next →</Link>
+          <Link href={`?week=${prev}`} className="rounded-md border border-border px-2 py-1 text-default transition-colors hover:bg-hover">← Prev</Link>
+          <span className="font-medium text-default">{format(weekStart, 'd MMM')} – {format(addDays(weekStart, 6), 'd MMM yyyy')}</span>
+          <Link href={`?week=${next}`} className="rounded-md border border-border px-2 py-1 text-default transition-colors hover:bg-hover">Next →</Link>
           {canManage && <MaintenanceDialogButton equipmentId={equipmentId} />}
         </div>
       </div>
@@ -66,17 +66,17 @@ export default async function EquipmentPage({ params, searchParams }: {
             slots={slots} canManage={canManage} selfId={me.id}
             allowRecurring={eq.allowRecurring} retired={eq.status === 'RETIRED'} />
         </div>
-        <aside className="w-64 shrink-0 rounded-xl border border-gray-200 p-4 text-sm">
-          <h2 className="font-medium">Policy</h2>
-          <ul className="mt-2 space-y-1 text-gray-600">
-            <li>Book up to <strong>{eq.advanceBookingDays} days</strong> ahead</li>
-            <li>Max <strong>{eq.maxDurationMinutes / 60} h</strong> per booking</li>
+        <aside className="w-64 shrink-0 rounded-xl border border-border bg-surface p-4 text-sm shadow-xs">
+          <h2 className="font-medium text-default">Policy</h2>
+          <ul className="mt-2 space-y-1 text-muted">
+            <li>Book up to <strong className="text-default">{eq.advanceBookingDays} days</strong> ahead</li>
+            <li>Max <strong className="text-default">{eq.maxDurationMinutes / 60} h</strong> per booking</li>
             <li>{eq.certificationRequired ? 'Certification required' : 'No certification needed'}</li>
-            <li>Approval: <strong>{eq.approvalPolicy === 'NONE' ? 'instant for everyone' : eq.approvalPolicy === 'GUESTS' ? 'guests need approval' : 'everyone needs approval'}</strong></li>
+            <li>Approval: <strong className="text-default">{eq.approvalPolicy === 'NONE' ? 'instant for everyone' : eq.approvalPolicy === 'GUESTS' ? 'guests need approval' : 'everyone needs approval'}</strong></li>
             <li>{eq.allowRecurring ? 'Recurring allowed (needs approval)' : 'No recurring bookings'}</li>
           </ul>
-          {eq.description && <p className="mt-3 text-gray-600">{eq.description}</p>}
-          {eq.location && <p className="mt-1 text-gray-500">📍 {eq.location}</p>}
+          {eq.description && <p className="mt-3 text-muted">{eq.description}</p>}
+          {eq.location && <p className="mt-1 text-subtle">📍 {eq.location}</p>}
         </aside>
       </div>
     </div>

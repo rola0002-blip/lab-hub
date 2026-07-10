@@ -15,8 +15,8 @@ export default async function CertificationsPage() {
   const editable = me.role === 'admin' ? equipment.map((e) => e.id) : myManaged.map((m) => m.equipmentId)
   return (
     <div>
-      <p className="text-sm font-medium text-gray-400">02 — Certifications</p>
-      <h1 className="mt-1 text-2xl font-semibold">Certification matrix</h1>
+      <p className="text-sm font-medium text-subtle">02 — Certifications</p>
+      <h1 className="mt-1 text-2xl font-semibold text-default">Certification matrix</h1>
       <Matrix users={users} equipment={equipment} certs={certs} editable={editable} />
     </div>
   )

@@ -62,7 +62,7 @@ export default function PushOptIn() {
   if (!show) return null
   return (
     <button onClick={enable} disabled={busy} title="Enable desktop notifications" aria-label="Enable desktop notifications"
-      className="rounded-full p-2 text-gray-500 hover:bg-gray-100 disabled:opacity-50">
+      className="rounded-full p-2 text-muted transition-colors hover:bg-hover disabled:opacity-50">
       <span aria-hidden>🔔</span><span aria-hidden className="text-xs">＋</span>
     </button>
   )

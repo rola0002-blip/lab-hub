@@ -26,20 +26,20 @@ export default function SetupForm() {
     else router.push('/sign-in')
   }
 
-  const input = 'w-full rounded-md border border-gray-300 px-3 py-2'
+  const input = 'w-full rounded-md border border-border bg-surface px-3 py-2'
   return (
     <form onSubmit={onSubmit} className="mt-6 space-y-4">
       <label className="block text-sm">Organisation name<input name="orgName" required defaultValue="COLOSSUS" className={input} /></label>
-      <label className="block text-sm">Accent colour<input name="accentColor" type="color" defaultValue="#0d9488" className="h-10 w-20 rounded-md border border-gray-300" /></label>
+      <label className="block text-sm">Accent colour<input name="accentColor" type="color" defaultValue="#0d9488" className="h-10 w-20 rounded-md border border-border" /></label>
       <label className="block text-sm">Timezone<select name="timezone" defaultValue="Asia/Singapore" className={input}>{TIMEZONES.map((t) => <option key={t}>{t}</option>)}</select></label>
       <label className="block text-sm">Logo (optional, PNG/JPEG/WebP ≤ 2 MB)<input name="logo" type="file" accept="image/png,image/jpeg,image/webp" className={input} /></label>
-      <hr className="my-2" />
-      <p className="text-sm font-medium text-gray-400">02 — Administrator account</p>
+      <hr className="my-2 border-border" />
+      <p className="text-sm font-medium text-subtle">02 — Administrator account</p>
       <label className="block text-sm">Your name<input name="adminName" required className={input} /></label>
       <label className="block text-sm">Email<input name="adminEmail" type="email" required className={input} /></label>
       <label className="block text-sm">Password (min 10 chars)<input name="adminPassword" type="password" minLength={10} required className={input} /></label>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button disabled={busy} className="rounded-md bg-accent px-4 py-2 font-medium text-white disabled:opacity-50">{busy ? 'Setting up…' : 'Finish setup'}</button>
+      {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
+      <button disabled={busy} className="rounded-md bg-accent px-4 py-2 font-medium text-accent-on transition-colors hover:bg-accent-hover disabled:opacity-50">{busy ? 'Setting up…' : 'Finish setup'}</button>
     </form>
   )
 }

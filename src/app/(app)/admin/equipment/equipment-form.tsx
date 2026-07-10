@@ -16,7 +16,7 @@ export default function EquipmentForm({ action, users, initial }: Props) {
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
   const [pending, start] = useTransition()
-  const input = 'w-full rounded-md border border-gray-300 px-3 py-2'
+  const input = 'w-full rounded-md border border-border bg-surface px-3 py-2'
 
   return (
     <form className="mt-6 max-w-lg space-y-4"
@@ -51,8 +51,8 @@ export default function EquipmentForm({ action, users, initial }: Props) {
           {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
       </label>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button disabled={pending} className="rounded-md bg-accent px-4 py-2 font-medium text-white disabled:opacity-50">{pending ? 'Saving…' : 'Save'}</button>
+      {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
+      <button disabled={pending} className="rounded-md bg-accent px-4 py-2 font-medium text-accent-on transition-colors hover:bg-accent-hover disabled:opacity-50">{pending ? 'Saving…' : 'Save'}</button>
     </form>
   )
 }

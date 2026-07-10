@@ -36,38 +36,38 @@ export default async function DayViewPage({ searchParams }: { searchParams: Prom
 
   return (
     <div>
-      <p className="text-sm font-medium text-gray-400">02 — Booking</p>
+      <p className="text-sm font-medium text-subtle">02 — Booking</p>
       <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold">Lab schedule — {format(anchor, 'EEE d MMM yyyy')}</h1>
+        <h1 className="text-2xl font-semibold text-default">Lab schedule — {format(anchor, 'EEE d MMM yyyy')}</h1>
         <div className="flex items-center gap-2 text-sm">
-          <Link href={`?date=${prev}`} className="rounded-md border border-gray-300 px-2 py-1">← Prev</Link>
-          <Link href={`?date=${next}`} className="rounded-md border border-gray-300 px-2 py-1">Next →</Link>
+          <Link href={`?date=${prev}`} className="rounded-md border border-border px-2 py-1 text-default transition-colors hover:bg-hover">← Prev</Link>
+          <Link href={`?date=${next}`} className="rounded-md border border-border px-2 py-1 text-default transition-colors hover:bg-hover">Next →</Link>
         </div>
       </div>
-      <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200">
+      <div className="mt-4 overflow-x-auto rounded-xl border border-border bg-surface">
         <div className="grid min-w-[900px]" style={{ gridTemplateColumns: `48px repeat(${equipment.length}, minmax(140px, 1fr))` }}>
           <div />
           {equipment.map((eq) => (
-            <Link key={eq.id} href={`/booking/${eq.id}`} className="border-b border-l border-gray-200 p-2 text-center text-sm font-medium hover:text-accent">{eq.name}</Link>
+            <Link key={eq.id} href={`/booking/${eq.id}`} className="border-b border-l border-border p-2 text-center text-sm font-medium text-default transition-colors hover:text-accent">{eq.name}</Link>
           ))}
           <div className="relative" style={{ height }}>
             {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => (
-              <span key={i} className="absolute right-1 text-[10px] text-gray-400" style={{ top: i * PX_PER_HOUR - 6 }}>{String(START_HOUR + i).padStart(2, '0')}:00</span>
+              <span key={i} className="absolute right-1 text-[10px] text-subtle" style={{ top: i * PX_PER_HOUR - 6 }}>{String(START_HOUR + i).padStart(2, '0')}:00</span>
             ))}
           </div>
           {equipment.map((eq) => (
-            <div key={eq.id} className="relative border-l border-gray-100" style={{ height }}>
+            <div key={eq.id} className="relative border-l border-border" style={{ height }}>
               {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => (
-                <div key={i} className="absolute inset-x-0 border-t border-gray-100" style={{ top: i * PX_PER_HOUR }} />
+                <div key={i} className="absolute inset-x-0 border-t border-border" style={{ top: i * PX_PER_HOUR }} />
               ))}
               {maintenance.filter((m) => m.equipmentId === eq.id).map((m) => {
                 const r = rect(m.startsAt, m.endsAt)
-                return <div key={m.id} className="absolute inset-x-0.5 rounded bg-gray-300/70 px-1 text-[11px] text-gray-700" style={r}>Maintenance</div>
+                return <div key={m.id} className="absolute inset-x-0.5 rounded-md border border-border bg-active px-1 text-[11px] text-muted" style={r}>Maintenance</div>
               })}
               {bookings.filter((b) => b.equipmentId === eq.id).map((b) => {
                 const r = rect(b.startsAt, b.endsAt)
                 return (
-                  <div key={b.id} className={`absolute inset-x-0.5 overflow-hidden rounded px-1 text-[11px] ${b.status === 'PENDING' ? 'bg-amber-100 text-amber-900' : 'bg-accent/40 text-gray-900'}`} style={r}>
+                  <div key={b.id} className={`absolute inset-x-0.5 overflow-hidden rounded-md px-1 text-[11px] ${b.status === 'PENDING' ? 'border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/15 text-default' : 'border border-[var(--accent)]/30 bg-accent-subtle text-accent'}`} style={r}>
                     {b.user.name}{b.status === 'PENDING' ? ' (pending)' : ''}
                   </div>
                 )

@@ -9,8 +9,8 @@ export default async function SettingsPage() {
   if (!org) return null
   return (
     <div>
-      <p className="text-sm font-medium text-gray-400">04 — Settings</p>
-      <h1 className="mt-1 text-2xl font-semibold">Organisation settings</h1>
+      <p className="text-sm font-medium text-subtle">04 — Settings</p>
+      <h1 className="mt-1 text-2xl font-semibold text-default">Organisation settings</h1>
       <SettingsForm initial={{ name: org.name, accentColor: org.accentColor, timezone: org.timezone }} />
 
       <section className="mt-8 max-w-md rounded-lg border border-border p-4">
