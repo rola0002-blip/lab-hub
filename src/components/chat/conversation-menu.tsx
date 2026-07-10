@@ -107,7 +107,9 @@ export default function ConversationMenu({ conversationId, conversationType, cha
 }
 
 // Members list with names; managers can add active users and remove existing ones.
-function MembersDialog({ conversationId, channelName, manage, onClose }: { conversationId: string; channelName: string | null; manage: boolean; onClose: () => void }) {
+// Exported so the channel-intro "Add people" action (message-pane) can reuse the
+// exact same dialog rather than duplicate the add-members flow.
+export function MembersDialog({ conversationId, channelName, manage, onClose }: { conversationId: string; channelName: string | null; manage: boolean; onClose: () => void }) {
   const { conversations, users, selfId, refresh } = useChat()
   const memberIds = conversations.find((c) => c.id === conversationId)?.memberIds ?? []
   const names = useMemo(() => new Map(users.map((u) => [u.id, u.name])), [users])

@@ -1,10 +1,10 @@
 import { initials, avatarHue } from '@/lib/avatar'
 
-const SIZES = { 36: 'h-9 w-9 text-sm', 24: 'h-6 w-6 text-2xs', 20: 'h-5 w-5 text-2xs' } as const
+const SIZES = { 48: 'h-12 w-12 text-base', 36: 'h-9 w-9 text-sm', 24: 'h-6 w-6 text-2xs', 20: 'h-5 w-5 text-2xs' } as const
 
 export function Avatar({ name, id, image, size = 36, presence = null }: {
   name: string; id: string; image?: string | null
-  size?: 36 | 24 | 20; presence?: 'active' | 'away' | null
+  size?: 48 | 36 | 24 | 20; presence?: 'active' | 'away' | null
 }) {
   const body = image ? (
     // eslint-disable-next-line @next/next/no-img-element -- uploads are served by our own route

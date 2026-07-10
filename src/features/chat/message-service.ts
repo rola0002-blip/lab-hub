@@ -10,6 +10,9 @@ import { fanoutMessage } from './fanout'
 
 export type MessageDto = {
   id: string; conversationId: string; parentId: string | null
+  // 'user' = a person's message; 'system' = an event line (created/joined/…) that
+  // renders centered/muted and never counts as unread or notifies.
+  kind: 'user' | 'system'
   author: { id: string; name: string; image: string | null }
   body: string; deleted: boolean; editedAt: string | null; createdAt: string
   replyCount: number
@@ -64,6 +67,7 @@ function toDto(m: Loaded): MessageDto {
   }
   return {
     id: m.id, conversationId: m.conversationId, parentId: m.parentId,
+    kind: m.kind === 'system' ? 'system' : 'user',
     author: { id: m.user.id, name: m.user.name, image: m.user.image },
     body: m.deletedAt ? '' : m.body, deleted: !!m.deletedAt,
     editedAt: m.editedAt?.toISOString() ?? null, createdAt: m.createdAt.toISOString(),
@@ -207,10 +211,11 @@ export async function listMessages(args: { userId: string; conversationId: strin
       take: take + 1,
       include: MSG_INCLUDE,
     }),
-    // Oldest root message the reader hasn't seen yet (createdAt strictly after
-    // their lastReadAt). Conversation-wide, independent of the page cursor.
+    // Oldest root USER message the reader hasn't seen yet (createdAt strictly
+    // after their lastReadAt). System rows (created/joined lines) never anchor the
+    // New-messages line. Conversation-wide, independent of the page cursor.
     prisma.message.findFirst({
-      where: { conversationId: args.conversationId, parentId: null, createdAt: { gt: member.lastReadAt } },
+      where: { conversationId: args.conversationId, parentId: null, kind: 'user', createdAt: { gt: member.lastReadAt } },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       select: { id: true },
     }),

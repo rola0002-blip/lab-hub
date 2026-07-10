@@ -17,6 +17,10 @@ export type Msg = {
   id: string
   conversationId: string
   parentId: string | null
+  // 'system' rows (created/joined event lines) render as a centered muted line in
+  // the pane, never through MessageItem. Absent on optimistic temps → treated as
+  // 'user'. Always present on server DTOs.
+  kind?: 'user' | 'system'
   author: { id: string; name: string; image: string | null }
   body: string
   deleted: boolean

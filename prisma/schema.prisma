@@ -297,6 +297,7 @@ model Message {
   userId          String
   user            User                     @relation("ChatAuthor", fields: [userId], references: [id])
   body            String
+  kind            String                   @default("user") // 'user' | 'system' — system rows are event lines, never counted unread / never notified
   parentId        String?
   parent          Message?                 @relation("Thread", fields: [parentId], references: [id])
   replies         Message[]                @relation("Thread")

@@ -187,7 +187,7 @@ test('4: guest isolation, then live add', async ({ browser }) => {
   const search = pageG.getByPlaceholder('Search messages…')
   await search.click()
   await search.fill('cryostat')
-  await expect(pageG.getByText('No matches.')).toBeVisible()
+  await expect(pageG.getByText('No matches')).toBeVisible() // no-results empty state
   await search.press('Escape')
 
   // Admin adds the guest via the Members… dialog
@@ -195,7 +195,9 @@ test('4: guest isolation, then live add', async ({ browser }) => {
   await page.getByRole('button', { name: 'Conversation menu' }).click()
   await page.getByRole('button', { name: 'Members' }).click()
   await page.getByRole('button', { name: 'Gina Guest' }).click()
-  await page.getByRole('button', { name: /^Add/ }).click()
+  // Scope the Add to the dialog: the channel-intro also renders an "Add people"
+  // button, so an unscoped /^Add/ would match two buttons.
+  await page.getByRole('dialog').getByRole('button', { name: /^Add/ }).click()
 
   // Channel appears live in the guest's list (member event → refresh) and opens.
   // List row = Hash icon + bare name, so the link's accessible name is "lab".

@@ -16,6 +16,16 @@ async function activeNonGuest(userId: string): Promise<boolean> {
   return !!u && !u.banned && u.role !== 'guest'
 }
 
+// Insert a system/event row (kind:'system') authored by the actor and announce it
+// live. System rows carry their text in `body` ("Roland created this channel"),
+// render centered/muted in the pane, and — because message-service/fanout gate on
+// kind:'user' — never count as unread and never notify. No fanout call is made
+// here, so no one is notified for a create/join/add.
+async function emitSystemRow(conversationId: string, userId: string, body: string): Promise<void> {
+  const msg = await prisma.message.create({ data: { conversationId, userId, kind: 'system', body } })
+  await emitEvent({ t: 'msg', cid: conversationId, mid: msg.id })
+}
+
 export async function createChannel(args: { name: string; topic?: string; isPrivate: boolean; createdById: string }): Promise<ConvResult> {
   if (!(await activeNonGuest(args.createdById))) return { ok: false, message: 'Guests cannot create channels.' }
   const name = args.name.trim()
@@ -32,6 +42,8 @@ export async function createChannel(args: { name: string; topic?: string; isPriv
     },
   })
   await emitEvent({ t: 'member', cid: convo.id, uid: args.createdById }) // creator's live list picks up the new channel
+  const creator = await prisma.user.findUnique({ where: { id: args.createdById }, select: { name: true } })
+  await emitSystemRow(convo.id, args.createdById, `${creator?.name ?? 'Someone'} created this channel`)
   return { ok: true, conversationId: convo.id }
 }
 
@@ -72,13 +84,17 @@ export async function addMembers(args: { conversationId: string; userIds: string
   const convo = await prisma.conversation.findUnique({ where: { id: args.conversationId } })
   if (!convo || convo.type !== 'CHANNEL' || convo.archivedAt) return { ok: false, message: 'Channel not found.' }
   if (!(await canManage(args.byId, args.conversationId))) return { ok: false, message: 'Only admins or the channel creator manage members.' }
-  const users = await prisma.user.findMany({ where: { id: { in: args.userIds }, banned: false }, select: { id: true } })
+  const users = await prisma.user.findMany({ where: { id: { in: args.userIds }, banned: false }, select: { id: true, name: true } })
   const existing = new Set(
     (await prisma.conversationMember.findMany({ where: { conversationId: args.conversationId }, select: { userId: true } })).map((m) => m.userId),
   )
+  const nameById = new Map(users.map((u) => [u.id, u.name]))
   const fresh = users.map((u) => u.id).filter((id) => !existing.has(id))
   await prisma.conversationMember.createMany({ data: fresh.map((userId) => ({ conversationId: args.conversationId, userId })) })
-  for (const userId of fresh) await emitEvent({ t: 'member', cid: args.conversationId, uid: userId })
+  for (const userId of fresh) {
+    await emitEvent({ t: 'member', cid: args.conversationId, uid: userId })
+    await emitSystemRow(args.conversationId, userId, `${nameById.get(userId) ?? 'Someone'} was added to #${convo.name ?? 'channel'}`)
+  }
   return { ok: true }
 }
 
@@ -97,11 +113,17 @@ export async function joinPublicChannel(args: { conversationId: string; userId: 
   if (!(await activeNonGuest(args.userId))) return { ok: false, message: 'Guests join channels by invitation only.' }
   const convo = await prisma.conversation.findUnique({ where: { id: args.conversationId } })
   if (!convo || convo.type !== 'CHANNEL' || convo.isPrivate || convo.archivedAt) return { ok: false, message: 'Channel is not joinable.' }
+  const already = await isMember(args.userId, args.conversationId)
   await prisma.conversationMember.upsert({
     where: { conversationId_userId: { conversationId: args.conversationId, userId: args.userId } },
     update: {}, create: { conversationId: args.conversationId, userId: args.userId },
   })
   await emitEvent({ t: 'member', cid: args.conversationId, uid: args.userId })
+  // Only announce a genuinely new join (re-joining is a no-op — no duplicate row).
+  if (!already) {
+    const u = await prisma.user.findUnique({ where: { id: args.userId }, select: { name: true } })
+    await emitSystemRow(args.conversationId, args.userId, `${u?.name ?? 'Someone'} joined #${convo.name ?? 'channel'}`)
+  }
   return { ok: true }
 }
 
@@ -160,7 +182,10 @@ export async function listConversations(userId: string): Promise<ConversationLis
   })
   const items = await Promise.all(
     memberships.map(async (m) => {
-      const base = { conversationId: m.conversationId, deletedAt: null, userId: { not: userId }, createdAt: { gt: m.lastReadAt } }
+      // System rows (created/joined lines) never count as unread or mentions —
+      // gate them out with kind:'user'. lastMessageAt (below) still includes them
+      // so a brand-new channel (only a system row) sorts sensibly, not to null.
+      const base = { conversationId: m.conversationId, kind: 'user', deletedAt: null, userId: { not: userId }, createdAt: { gt: m.lastReadAt } }
       const [unread, mentions, last] = await Promise.all([
         prisma.message.count({ where: base }),
         prisma.message.count({ where: { ...base, OR: [{ mentionUserIds: { has: userId } }, { mentionsChannel: true }] } }),
@@ -186,7 +211,7 @@ export async function totalUnread(userId: string): Promise<number> {
   const counts = await Promise.all(
     memberships.map((m) =>
       prisma.message.count({
-        where: { conversationId: m.conversationId, deletedAt: null, userId: { not: userId }, createdAt: { gt: m.lastReadAt } },
+        where: { conversationId: m.conversationId, kind: 'user', deletedAt: null, userId: { not: userId }, createdAt: { gt: m.lastReadAt } },
       }),
     ),
   )

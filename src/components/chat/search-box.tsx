@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { SearchX } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { useChat } from './chat-store'
 import { renderBody } from '@/features/chat/mentions'
 
@@ -56,7 +58,10 @@ export default function SearchBox({ align = 'right' }: { align?: 'left' | 'right
       {open && q.trim().length > 0 && (
         <div className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} z-30 mt-1 max-h-80 w-80 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg`}>
           {error && <p className="p-3 text-sm text-red-600">{error}</p>}
-          {!error && hits.length === 0 && <p className="p-3 text-sm text-gray-500">No matches.</p>}
+          {!error && hits.length === 0 && (
+            <EmptyState icon={SearchX} title="No matches"
+              hint={`Nothing matches “${q.trim()}”. Try a different word or check the spelling.`} />
+          )}
           {hits.map((h) => (
             <button key={h.id} onClick={() => go(h)}
               className="block w-full border-b border-gray-100 px-3 py-2 text-left last:border-0 hover:bg-gray-50">

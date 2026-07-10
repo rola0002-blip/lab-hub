@@ -17,6 +17,9 @@ export async function fanoutMessage(
   seams: Seams = {},
 ): Promise<void> {
   try {
+    // System rows (created/joined event lines) never notify anyone. conversation-
+    // service never calls fanout for them; this guard makes that invariant explicit.
+    if (args.message.kind === 'system') return
     const hasLive = seams.hasLive ?? hasLiveConnection
     const push = seams.push ?? sendPush
     const { message: m, conversation: c } = args

@@ -72,6 +72,15 @@
     55%  { transform: scale(1.1); }
     100% { transform: scale(1); }
   }
+
+  /* Typing indicator — three dots ripple opacity/rise; each dot staggers via an
+     [animation-delay] utility. Applied as `motion-safe:animate-typing-dot`, so
+     reduced-motion users see three static dots and never the loop. */
+  --animate-typing-dot: typing-dot 1.2s var(--ease-standard) infinite;
+  @keyframes typing-dot {
+    0%, 60%, 100% { opacity: .3; transform: translateY(0); }
+    30%           { opacity: 1;  transform: translateY(-2px); }
+  }
 }
 
 /* ── 2. SEMANTIC TOKENS — LIGHT ───────────────────── */

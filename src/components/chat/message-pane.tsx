@@ -1,14 +1,15 @@
 'use client'
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowDown } from 'lucide-react'
+import { ArrowDown, Hash, MessageSquare } from 'lucide-react'
 import { dayLabel } from '@/lib/humanize'
 import { Avatar } from '@/components/ui/avatar'
+import { EmptyState } from '@/components/ui/empty-state'
 import { useGlobalHotkey } from '@/components/hooks/use-global-hotkey'
 import { useChat, dmName } from './chat-store'
 import MessageItem, { type Msg } from './message-item'
 import Composer from './composer'
 import ThreadPanel from './thread-panel'
-import ConversationMenu from './conversation-menu'
+import ConversationMenu, { MembersDialog } from './conversation-menu'
 import SearchBox from './search-box'
 
 type Props = {
@@ -60,6 +61,8 @@ export default function MessagePane({ conversationId, conversationType, channelN
   const [firstUnreadId, setFirstUnreadId] = useState<string | null>(null)
   const [atBottom, setAtBottom] = useState(true)
   const [newCount, setNewCount] = useState(0)
+  // Channel-intro "Add people" opens the same members dialog the ⋯ menu uses.
+  const [membersOpen, setMembersOpen] = useState(false)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const firstLoad = useRef(true)
@@ -160,8 +163,9 @@ export default function MessagePane({ conversationId, conversationType, channelN
         }
         upsert(m); markRead()
         // A new message from someone else that lands while we're scrolled up feeds
-        // the "N new" pill on the jump button.
-        if (isNew && m.author.id !== selfId && !atBottomRef.current) setNewCount((n) => n + 1)
+        // the "N new" pill on the jump button. System rows (created/joined lines)
+        // never contribute to the unread pill.
+        if (isNew && m.kind !== 'system' && m.author.id !== selfId && !atBottomRef.current) setNewCount((n) => n + 1)
       })
     }
     if (e.t === 'typing') {
@@ -244,22 +248,43 @@ export default function MessagePane({ conversationId, conversationType, channelN
             channelName={channelName} archived={archived} manage={manage} />
         </header>
         <div ref={scroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
-          {hasMore && <button onClick={loadEarlier} className="mx-auto my-2 block rounded-md border border-border px-3 py-1 text-xs text-muted">Load earlier</button>}
+          {/* Top of history: once there's nothing earlier to load, show the intro —
+              the DM peer greeting or the channel welcome — instead of "Load earlier". */}
+          {hasMore ? (
+            <button onClick={loadEarlier} className="mx-auto my-2 block rounded-md border border-border px-3 py-1 text-xs text-muted">Load earlier</button>
+          ) : isDm ? (
+            <DmIntro peerId={peerId} name={dmTitle} image={peer?.image ?? null} />
+          ) : (
+            <ChannelIntro name={channelName} manage={manage} onAddPeople={() => setMembersOpen(true)} />
+          )}
           {messages.map((m, i) => {
             const prev = messages[i - 1]
             const prevDate = prev ? new Date(prev.createdAt) : null
             const dayChanged = !prevDate || new Date(m.createdAt).toDateString() !== prevDate.toDateString()
+            // System rows (created/joined) render as a centered muted line — no
+            // avatar, no toolbar, no reactions, never grouped or leading.
+            if (m.kind === 'system') {
+              return (
+                <Fragment key={m.id}>
+                  {dayChanged && <DayDivider label={dayLabel(m.createdAt, now)} />}
+                  <p className="mx-auto my-1 text-center text-xs italic text-muted">{m.body}</p>
+                </Fragment>
+              )
+            }
             const isFirstUnread = m.id === firstUnreadId
+            // Group only against a preceding USER message; a system row breaks the
+            // run so the next real message renders leading (avatar + name).
+            const groupPrev = prev && prev.kind !== 'system' ? prev : undefined
             return (
               <Fragment key={m.id}>
                 {dayChanged && <DayDivider label={dayLabel(m.createdAt, now)} />}
                 {isFirstUnread && <NewMessagesDivider />}
-                <MessageItem msg={m} prev={prev} names={names} selfId={selfId} selfRole={selfRole}
+                <MessageItem msg={m} prev={groupPrev} names={names} selfId={selfId} selfRole={selfRole}
                   forceLeading={isFirstUnread} onUpdated={upsert} onOpenThread={() => setThreadRoot(m.id)} onRetry={retrySend} />
               </Fragment>
             )
           })}
-          {typing && <p className="px-4 py-1 text-xs italic text-subtle">{typing} is typing…</p>}
+          {typing && <TypingIndicator name={typing} />}
         </div>
         {!atBottom && (
           <button type="button" onClick={jumpToLatest}
@@ -277,6 +302,60 @@ export default function MessagePane({ conversationId, conversationType, channelN
         <ThreadPanel rootId={threadRoot} conversationId={conversationId} conversationType={conversationType} channelName={channelName}
           names={names} memberIds={memberIds} selfId={selfId} selfRole={selfRole} onClose={() => setThreadRoot(null)} />
       )}
+      {membersOpen && (
+        <MembersDialog conversationId={conversationId} channelName={channelName} manage={manage} onClose={() => setMembersOpen(false)} />
+      )}
     </div>
+  )
+}
+
+// Channel intro at the top of history: a warm welcome + one next step (managers
+// get "Add people"). Reuses the shared EmptyState shell (Hash icon).
+function ChannelIntro({ name, manage, onAddPeople }: { name: string | null; manage: boolean; onAddPeople: () => void }) {
+  return (
+    <EmptyState
+      icon={Hash}
+      title={`Welcome to #${name}`}
+      hint={`This is the very beginning of the #${name} channel.`}
+      action={manage
+        ? (
+          <button type="button" onClick={onAddPeople}
+            className="mt-1 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-on transition-colors hover:bg-accent-hover">
+            Add people
+          </button>
+        )
+        : undefined}
+    />
+  )
+}
+
+// DM intro: the peer's 48px avatar (or a fallback glyph for a group DM with no
+// single peer) above a one-line greeting.
+function DmIntro({ peerId, name, image }: { peerId?: string; name: string; image: string | null }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 py-14 text-center">
+      {peerId
+        ? <Avatar name={name} id={peerId} image={image} size={48} />
+        : <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-active text-muted"><MessageSquare size={22} aria-hidden /></span>}
+      <p className="max-w-sm text-sm text-muted">
+        This is the start of your conversation with <span className="font-semibold text-default">{name}</span>. Say hi 👋
+      </p>
+    </div>
+  )
+}
+
+// "{name} is typing" with three staggered dots. The dots are decorative
+// (aria-hidden) and only animate under motion-safe; the text is visual-only and
+// deliberately kept out of any live region so it is never announced.
+function TypingIndicator({ name }: { name: string }) {
+  return (
+    <p className="flex items-center gap-1 px-4 py-1 text-xs italic text-subtle">
+      <span>{name} is typing</span>
+      <span aria-hidden className="ml-0.5 inline-flex items-end gap-0.5">
+        <span className="h-1 w-1 rounded-full bg-current motion-safe:animate-typing-dot" />
+        <span className="h-1 w-1 rounded-full bg-current motion-safe:animate-typing-dot [animation-delay:150ms]" />
+        <span className="h-1 w-1 rounded-full bg-current motion-safe:animate-typing-dot [animation-delay:300ms]" />
+      </span>
+    </p>
   )
 }

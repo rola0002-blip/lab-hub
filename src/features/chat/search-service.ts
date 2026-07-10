@@ -27,6 +27,7 @@ export async function searchMessages(args: { userId: string; query: string; conv
     JOIN "user" u ON u.id = m."userId"
     WHERE m.search @@ websearch_to_tsquery('english', ${query})
       AND m."deletedAt" IS NULL
+      AND m."kind" = 'user'
       AND m."conversationId" IN (${Prisma.join(ids)})
     ORDER BY rank DESC, m."createdAt" DESC
     LIMIT ${take}

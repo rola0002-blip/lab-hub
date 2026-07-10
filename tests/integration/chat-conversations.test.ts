@@ -7,6 +7,7 @@ import {
   archiveChannel, renameChannel, setChannelTopic, isMember, canManage,
   accessibleConversationIds, listConversations, listPublicChannels,
 } from '@/features/chat/conversation-service'
+import { listMessages, sendMessage } from '@/features/chat/message-service'
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 function collector() {
@@ -125,6 +126,53 @@ describe('conversation service', () => {
     expect(await getOrCreateDm({ userIds: [a.id, b.id], byId: outsider.id }))
       .toMatchObject({ ok: false, message: 'You must be part of the DM.' })
     expect(await prisma.conversation.count({ where: { type: 'DM' } })).toBe(0) // nothing created
+  })
+
+  it('create/join emit kind:system rows that list but never count as unread', async () => {
+    const creator = await makeUser({ name: 'Roland' })
+    const joiner = await makeUser({ name: 'Wei' })
+    const r = await createChannel({ name: 'general', isPrivate: false, createdById: creator.id })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+
+    // createChannel inserts one system row authored by the creator.
+    const afterCreate = await prisma.message.findMany({ where: { conversationId: r.conversationId } })
+    expect(afterCreate).toHaveLength(1)
+    expect(afterCreate[0].kind).toBe('system')
+    expect(afterCreate[0].userId).toBe(creator.id)
+    expect(afterCreate[0].body).toBe('Roland created this channel')
+
+    // Anchor the creator's lastReadAt in the past so any later row is genuinely
+    // "unread" unless it's excluded for being a system row.
+    await prisma.conversationMember.updateMany({
+      where: { conversationId: r.conversationId, userId: creator.id },
+      data: { lastReadAt: new Date(Date.now() - 60_000) },
+    })
+
+    // Wei joins → a 'Wei joined #general' system row authored by Wei.
+    expect((await joinPublicChannel({ conversationId: r.conversationId, userId: joiner.id })).ok).toBe(true)
+    const sys = await prisma.message.findMany({ where: { conversationId: r.conversationId, kind: 'system' }, orderBy: { createdAt: 'asc' } })
+    expect(sys.map((m) => m.body)).toEqual(['Roland created this channel', 'Wei joined #general'])
+
+    // listMessages RETURNS both system rows to the creator…
+    const list = await listMessages({ userId: creator.id, conversationId: r.conversationId })
+    expect(list.ok).toBe(true)
+    if (!list.ok) return
+    expect(list.messages.filter((m) => m.kind === 'system').map((m) => m.body))
+      .toEqual(['Roland created this channel', 'Wei joined #general'])
+
+    // …but neither the creator's own row nor Wei's join counts as unread, and the
+    // New-messages line never anchors on a system row.
+    const convos = await listConversations(creator.id)
+    expect(convos.find((c) => c.id === r.conversationId)?.unread).toBe(0)
+    expect(list.firstUnreadId).toBeNull()
+
+    // A real user message still counts as unread and anchors firstUnread.
+    expect((await sendMessage({ userId: joiner.id, conversationId: r.conversationId, body: 'hello team' })).ok).toBe(true)
+    const after = await listConversations(creator.id)
+    expect(after.find((c) => c.id === r.conversationId)?.unread).toBe(1)
+    const relist = await listMessages({ userId: creator.id, conversationId: r.conversationId })
+    expect(relist.ok && relist.firstUnreadId).not.toBeNull()
   })
 
   it('createChannel emits a live member event for the creator', async () => {
