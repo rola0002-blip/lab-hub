@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { TZDate } from '@date-fns/tz'
 import { format } from 'date-fns'
+import { Modal } from '@/components/ui/modal'
 
 type Props = {
   equipmentId: string; timezone: string; allowRecurring: boolean
@@ -44,13 +45,6 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, i
     return () => clearTimeout(t)
   }, [equipmentId, initialStart, initialEnd, recurring, days, until, startMinutes, durationMinutes, firstDate])
 
-  // Escape closes the dialog (unless a submit is in flight); matches the backdrop-click close.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy) onClose() }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [busy, onClose])
-
   async function submit() {
     setBusy(true); setError(null); setConflicts([])
     try {
@@ -76,9 +70,7 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, i
   const when = `${format(local, 'EEE d MMM, HH:mm')}–${format(new TZDate(initialEnd, timezone), 'HH:mm')}`
 
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-lg font-semibold">Book this slot</h2>
+    <Modal title="Book this slot" onClose={() => { if (!busy) onClose() }}>
         <p className="mt-1 text-sm text-gray-600">{when} ({(durationMinutes / 60).toFixed(1)} h)</p>
 
         <label className="mt-4 block text-sm">Purpose
@@ -129,7 +121,6 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, i
             {busy ? 'Booking…' : verdict?.kind === 'approval' ? 'Request booking' : 'Book'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

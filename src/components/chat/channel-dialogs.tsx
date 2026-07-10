@@ -1,29 +1,10 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Lock, Plus } from 'lucide-react'
+import { Modal } from '@/components/ui/modal'
+import { IconButton } from '@/components/ui/icon-button'
 import { useChat } from './chat-store'
-
-// Shared modal shell: backdrop click closes, Escape closes. Mirrors booking-dialog.tsx.
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
-  return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{title}</h2>
-          <button onClick={onClose} aria-label="Close" className="rounded p-1 text-gray-400 hover:bg-gray-100">✕</button>
-        </div>
-        {children}
-      </div>
-    </div>
-  )
-}
-
-const triggerCls = 'rounded p-0.5 text-lg leading-none text-gray-400 hover:bg-gray-100 hover:text-gray-700'
 
 type ChannelRow = { id: string; name: string | null; topic: string; memberCount: number; isMember: boolean }
 
@@ -85,7 +66,7 @@ export function BrowseAndCreate() {
 
   return (
     <>
-      <button onClick={() => setOpen(true)} aria-label="Browse or create channels" className={triggerCls}>+</button>
+      <IconButton label="Browse or create channels" onClick={() => setOpen(true)}><Plus size={18} /></IconButton>
       {open && (
         <Modal title={mode === 'browse' ? 'Channels' : 'New channel'} onClose={close}>
           {mode === 'browse' ? (
@@ -126,7 +107,7 @@ export function BrowseAndCreate() {
               </label>
               <label className="mt-3 flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
-                Private (invitation only) 🔒
+                <span className="inline-flex items-center gap-1">Private (invitation only) <Lock size={13} aria-hidden /></span>
               </label>
               {createErr && <p className="mt-2 text-sm text-red-600">{createErr}</p>}
               <div className="mt-4 flex justify-between">
@@ -186,7 +167,7 @@ export function NewDmButton() {
 
   return (
     <>
-      <button onClick={() => setOpen(true)} aria-label="New direct message" className={triggerCls}>+</button>
+      <IconButton label="New direct message" onClick={() => setOpen(true)}><Plus size={18} /></IconButton>
       {open && (
         <Modal title="New message" onClose={close}>
           <p className="mt-1 text-xs text-gray-500">Pick up to 7 people ({picked.size} selected).</p>
