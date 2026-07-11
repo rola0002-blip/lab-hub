@@ -29,7 +29,7 @@ import { POST as movePOST } from '@/app/api/issues/[id]/move/route'
 import { GET as searchGET } from '@/app/api/issues/search/route'
 import { POST as attachPOST } from '@/app/api/issues/attachments/route'
 import {
-  createIssueAction, setStatusAction, createProjectAction, deleteProjectAction,
+  createIssueAction, setStatusAction, createProjectAction, deleteProjectAction, attachIssueFilesAction,
 } from '@/app/(app)/issues/actions'
 
 const sessOf = (u: { id: string; name: string; email: string }, role: string) => ({ id: u.id, name: u.name, email: u.email, role })
@@ -148,6 +148,21 @@ describe('issue server actions', () => {
     const m = await makeUser({ role: 'member' }); session.current = sessOf(m, 'member')
     const res = await setStatusAction('missing-id', 'DONE')
     expect(res).toEqual({ ok: false, message: expect.any(String) })
+  })
+
+  it('attachIssueFilesAction accepts route-uploaded issues paths but rejects foreign uploads-tree paths', async () => {
+    const m = await makeUser({ role: 'member' }); session.current = sessOf(m, 'member')
+    const iss = await makeIssue(m.id, { rank: 'V' })
+    // End-to-end happy path: upload through the real route, attach its returned meta.
+    const form = new FormData(); form.set('file', new File([new Uint8Array(32)], 'data.pdf', { type: 'application/pdf' }))
+    const uploaded = await (await attachPOST(new Request('http://x', { method: 'POST', body: form }))).json()
+    const ok = await attachIssueFilesAction(iss.id, [uploaded])
+    expect(ok.ok).toBe(true)
+    // A client-fabricated foreign path (another feature's upload) is rejected by the
+    // service (PolicyError 'invalid' → ok:false), closing the file-reference IDOR.
+    const denied = await attachIssueFilesAction(iss.id, [{ path: '/uploads/chat/other-user.pdf', name: 'o.pdf', mime: 'application/pdf', size: 8 }])
+    expect(denied.ok).toBe(false)
+    expect(await prisma.issueAttachment.count({ where: { issueId: iss.id } })).toBe(1) // only the real upload persisted
   })
 
   it('project actions: member creates, delete is admin-only', async () => {

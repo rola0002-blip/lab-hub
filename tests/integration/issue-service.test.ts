@@ -149,13 +149,38 @@ describe('issue-service', () => {
   it('attaches files and surfaces them via getIssueDetail; empty attach is a no-op', async () => {
     const me = await makeUser({ role: 'member' })
     const iss = await createIssue({ actorId: me.id, role: 'member', title: 'With files' })
-    await attachIssueFiles({ actorId: me.id, role: 'member', issueId: iss.id, files: [{ path: 'up/a.pdf', name: 'a.pdf', mime: 'application/pdf', size: 10 }] })
+    // Happy path: a server-generated issues upload path (saveUpload output shape).
+    await attachIssueFiles({ actorId: me.id, role: 'member', issueId: iss.id, files: [{ path: '/uploads/issues/1f2e3d4c-0000-4000-8000-000000000001.pdf', name: 'a.pdf', mime: 'application/pdf', size: 10 }] })
     const detail = await getIssueDetail(iss.id)
     expect(detail?.attachments.map((f) => f.name)).toEqual(['a.pdf'])
     expect(detail?.issue.id).toBe(iss.id)
     const after = await attachIssueFiles({ actorId: me.id, role: 'member', issueId: iss.id, files: [] }) // no-op branch
     expect(after.id).toBe(iss.id)
     expect(await getIssueDetail('missing')).toBeNull()
+  })
+
+  it('rejects non-issues upload paths in attachIssueFiles (cross-feature file-reference IDOR)', async () => {
+    const me = await makeUser({ role: 'member' })
+    const iss = await createIssue({ actorId: me.id, role: 'member', title: 'Hardened' })
+    // A foreign uploads-tree path (another feature's file) must not be attachable.
+    await expect(attachIssueFiles({
+      actorId: me.id, role: 'member', issueId: iss.id,
+      files: [{ path: '/uploads/chat/x.pdf', name: 'x.pdf', mime: 'application/pdf', size: 5 }],
+    })).rejects.toMatchObject({ name: 'PolicyError', code: 'invalid' })
+    // Traversal is rejected even under the issues prefix (belt-and-braces).
+    await expect(attachIssueFiles({
+      actorId: me.id, role: 'member', issueId: iss.id,
+      files: [{ path: '/uploads/issues/../avatars/victim.png', name: 'v.png', mime: 'image/png', size: 5 }],
+    })).rejects.toMatchObject({ name: 'PolicyError', code: 'invalid' })
+    // One bad path poisons the whole batch: nothing is persisted.
+    await expect(attachIssueFiles({
+      actorId: me.id, role: 'member', issueId: iss.id,
+      files: [
+        { path: '/uploads/issues/ok-0000-4000-8000-000000000002.pdf', name: 'ok.pdf', mime: 'application/pdf', size: 5 },
+        { path: '/uploads/avatars/victim.png', name: 'v.png', mime: 'image/png', size: 5 },
+      ],
+    })).rejects.toMatchObject({ name: 'PolicyError', code: 'invalid' })
+    expect(await prisma.issueAttachment.count({ where: { issueId: iss.id } })).toBe(0)
   })
 
   it('no-op status / assignee changes short-circuit without a new activity', async () => {

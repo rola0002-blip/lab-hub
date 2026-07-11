@@ -330,6 +330,15 @@ export async function attachIssueFiles(args: {
   actorId: string; role: Role; issueId: string; files: { path: string; name: string; mime: string; size: number }[]
 }): Promise<IssueDto> {
   assertCanMutate(args.role)
+  // Only server-generated issues uploads may be referenced (saveUpload emits
+  // /uploads/issues/<uuid>.<ext>). Rejecting any other uploads-tree path closes a
+  // cross-feature file-reference IDOR — e.g. attaching another user's chat upload
+  // or avatar to an issue. The '..' check is belt-and-braces (paths are UUIDs).
+  for (const f of args.files) {
+    if (!f.path.startsWith('/uploads/issues/') || f.path.includes('..')) {
+      throw new PolicyError('invalid', 'Attachments must be issue uploads.')
+    }
+  }
   const issue = await loadOrThrow(args.issueId)
   if (args.files.length) {
     await prisma.issueAttachment.createMany({
