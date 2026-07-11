@@ -1,6 +1,7 @@
 'use client'
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowDown, Hash, MessageSquare } from 'lucide-react'
+import { messageToPlainText } from '@/features/chat/markdown'
 import { dayLabel } from '@/lib/humanize'
 import { Avatar } from '@/components/ui/avatar'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -87,6 +88,11 @@ export default function MessagePane({ conversationId, conversationType, channelN
   // handler can read the live value without re-subscribing.
   const unreadCapturedRef = useRef<string | null>(null)
   const atBottomRef = useRef(true)
+  // Live snapshot of id→name so the SSE handler can resolve `<@id>` mentions to
+  // readable names when flattening an inbound body for the #live-msgs region,
+  // without re-subscribing the handler on every roster change.
+  const namesRef = useRef<Map<string, string>>(new Map())
+  useEffect(() => { namesRef.current = new Map(users.map((u) => [u.id, u.name])) }, [users])
 
   const markRead = useCallback(() => void fetch(`/api/chat/conversations/${conversationId}/read`, { method: 'POST' }), [conversationId])
 
@@ -182,15 +188,19 @@ export default function MessagePane({ conversationId, conversationType, channelN
         // A genuinely-new inbound message (this handler already filters to the
         // current conversation and this branch drops our own echo + system rows,
         // and backfill never routes through here) is announced to assistive tech
-        // via the app-shell #live-msgs region, and — when we're scrolled up — feeds
-        // the "N new" pill on the jump button. We announce ARRIVAL + author, not the
-        // body: the body already lives in the (role="log") message list, so echoing
-        // it here would both double-announce and duplicate the text node.
+        // via the app-shell #live-msgs region as "{author}: {body}", and — when
+        // we're scrolled up — feeds the "N new" pill on the jump button. The
+        // visible message list is aria-live="off", so this sr-only region is the
+        // SINGLE announcer of the body: there is no double-announcement. We flatten
+        // markdown/mention syntax to a readable line and cap very long bodies.
         if (isNew && m.kind !== 'system' && m.author.id !== selfId) {
           const live = document.getElementById('live-msgs')
           if (live) {
+            const flat = messageToPlainText(m.body, (id) => namesRef.current.get(id))
+            const body = flat.length > 200 ? `${flat.slice(0, 200).trimEnd()}…` : flat
             const p = document.createElement('p')
-            p.textContent = `New message from ${m.author.name}`
+            // Attachment-only / empty-body messages still announce their arrival.
+            p.textContent = body ? `${m.author.name}: ${body}` : `New message from ${m.author.name}`
             live.appendChild(p)
             while (live.childElementCount > 20) live.firstElementChild?.remove()
           }

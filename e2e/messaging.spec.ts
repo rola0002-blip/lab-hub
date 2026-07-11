@@ -80,6 +80,13 @@ async function send(page: Page, text: string) {
   await box.press('Enter')
 }
 
+// The visible message list is role="log" aria-label="Messages". The sr-only
+// #live-msgs announcer is ALSO role="log" (unnamed) and now carries the inbound
+// body as "{author}: {body}", so an unscoped getByText(body) on the RECEIVING
+// side matches twice. Scope inbound-body assertions to the visible list so they
+// still prove the body rendered there (and stay strict-mode single-match).
+const logMsg = (page: Page, text: string) => page.getByRole('log', { name: 'Messages' }).getByText(text)
+
 test('1: channel create + two-context live messaging', async ({ browser }) => {
   test.setTimeout(90_000)
   const page = await admin(browser)
@@ -88,10 +95,10 @@ test('1: channel create + two-context live messaging', async ({ browser }) => {
   await joinChannel(pageB, cid, 'lab')
 
   await send(page, 'hello from A')
-  await expect(pageB.getByText('hello from A')).toBeVisible() // live via SSE, no reload
+  await expect(logMsg(pageB, 'hello from A')).toBeVisible() // live via SSE, no reload
 
   await send(pageB, 'hi from B')
-  await expect(page.getByText('hi from B')).toBeVisible() // live via SSE, no reload
+  await expect(logMsg(page, 'hi from B')).toBeVisible() // live via SSE, no reload
 
   await pageB.context().close()
   await page.context().close()
@@ -105,10 +112,10 @@ test('2: thread reply + typing indicator', async ({ browser }) => {
   await joinChannel(pageB, cid, 'lab')
 
   await send(page, 'thread root')
-  await expect(pageB.getByText('thread root')).toBeVisible()
+  await expect(logMsg(pageB, 'thread root')).toBeVisible()
 
   // B opens the thread on the root message and replies
-  await pageB.getByText('thread root').hover()
+  await logMsg(pageB, 'thread root').hover()
   await pageB.getByTitle('Reply in thread').click()
   const threadBox = pageB.getByPlaceholder('Reply in thread…')
   await threadBox.fill('in thread')
@@ -219,7 +226,7 @@ test('5: edit / delete / react round-trips', async ({ browser }) => {
   await joinChannel(pageB, cid, 'lab')
 
   await send(page, 'tyop')
-  await expect(pageB.getByText('tyop')).toBeVisible()
+  await expect(logMsg(pageB, 'tyop')).toBeVisible()
 
   // A edits the message via the ⋯ overflow menu; B sees the new text + "(edited)" live
   await page.getByText('tyop').hover()
@@ -284,7 +291,7 @@ test('6: DM with unread badge', async ({ browser }) => {
   await pageB.goto('/chat/' + dmId)
   await expect(pageB.getByText('dm hello')).toBeVisible()
   await send(page, 'reply from A')
-  await expect(pageB.getByText('reply from A')).toBeVisible()
+  await expect(logMsg(pageB, 'reply from A')).toBeVisible()
 
   await pageB.context().close()
   await page.context().close()

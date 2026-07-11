@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tokenizeMessage, type Token } from '@/features/chat/markdown'
+import { tokenizeMessage, messageToPlainText, type Token } from '@/features/chat/markdown'
 
 const types = (ts: Token[]) => ts.map((t) => t.type)
 
@@ -143,5 +143,38 @@ describe('tokenizeMessage — plain text is unchanged', () => {
   })
   it('returns an empty array for an empty body', () => {
     expect(tokenizeMessage('')).toEqual([])
+  })
+})
+
+describe('messageToPlainText — screen-reader flattening', () => {
+  it('returns plain text unchanged (trimmed)', () => {
+    expect(messageToPlainText('hello from A')).toBe('hello from A')
+  })
+  it('strips emphasis / inline-code markers, keeping the inner text', () => {
+    expect(messageToPlainText('a **b** _c_ ~d~ `e`')).toBe('a b c d e')
+  })
+  it('collapses newlines into a single spoken line', () => {
+    expect(messageToPlainText('line1\nline2')).toBe('line1 line2')
+  })
+  it('speaks a code fence body without the backticks', () => {
+    expect(messageToPlainText('```js\nconst x = 1\n```')).toBe('const x = 1')
+  })
+  it('announces a link by its label, never the raw href', () => {
+    expect(messageToPlainText('see [docs](https://x.com) now')).toBe('see docs now')
+  })
+  it('announces a bare URL as its url text', () => {
+    expect(messageToPlainText('read https://x.com/a')).toBe('read https://x.com/a')
+  })
+  it('resolves a user mention to a readable @name', () => {
+    expect(messageToPlainText('hi <@u1> there', (id) => (id === 'u1' ? 'Bob' : undefined))).toBe('hi @Bob there')
+  })
+  it('falls back to a generic @mention when the user is unknown', () => {
+    expect(messageToPlainText('hi <@u1>')).toBe('hi @mention')
+  })
+  it('renders a channel mention as @channel', () => {
+    expect(messageToPlainText('heads up <!channel>')).toBe('heads up @channel')
+  })
+  it('returns an empty string for an empty or attachment-only body', () => {
+    expect(messageToPlainText('')).toBe('')
   })
 })

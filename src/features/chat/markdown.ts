@@ -147,3 +147,26 @@ export function tokenizeMessage(body: string): Token[] {
   if (last < body.length) out.push(...tokenizeText(body.slice(last)))
   return out
 }
+
+// Flatten a message body to a single human-readable line for screen-reader
+// announcement (the #live-msgs region). Reuses the same token stream the visible
+// message renders from, then drops the syntax noise a sighted reader never sees:
+// markdown markers (`**`, `` ` ``, fences), a link's URL in favour of its label,
+// and the `<@id>` mention/`<!channel>` syntax in favour of a readable @name.
+// `resolveMention` maps a userId to a display name (falls back to a generic
+// "mention" when the user isn't known yet). Collapses whitespace/newlines so a
+// multi-line body announces as one utterance.
+export function messageToPlainText(body: string, resolveMention?: (userId: string) => string | undefined): string {
+  return tokenizeMessage(body)
+    .map((t) => {
+      switch (t.type) {
+        case 'mention': return `@${resolveMention?.(t.value) ?? 'mention'}`
+        case 'channel': return '@channel'
+        case 'link': return t.label ?? t.value // spoken text is the visible label, never the raw href
+        default: return t.value // text/bold/italic/strike/code/codeblock/quote/listitem/emoji
+      }
+    })
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
