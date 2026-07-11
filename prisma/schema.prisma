@@ -18,6 +18,7 @@ model User {
   banReason     String?
   banExpires    DateTime?
   themePreference String? // 'light' | 'dark' — per-user theme, applied SSR when device localStorage is empty
+  accentPreference String? // accent slug (src/lib/accents.ts); applied SSR when device localStorage is empty
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

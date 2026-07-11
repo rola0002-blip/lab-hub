@@ -43,9 +43,10 @@ export default function RootLayout({
       <head>
         <script
           // Static string only — the sole sanctioned dangerouslySetInnerHTML in the app.
-          // Applies the saved/OS theme before first paint to avoid a flash.
+          // Applies the saved/OS theme AND saved accent before first paint to avoid a
+          // flash. An unknown accent is a harmless no-op (CSS falls back to teal).
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('theme');if(t!=='light'&&t!=='dark'){t=document.documentElement.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}document.documentElement.dataset.theme=t}catch(e){}})()`,
+            __html: `(function(){try{var t=localStorage.getItem('theme');if(t!=='light'&&t!=='dark'){t=document.documentElement.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}document.documentElement.dataset.theme=t;var a=localStorage.getItem('accent');if(a){document.documentElement.dataset.accent=a}}catch(e){}})()`,
           }}
         />
       </head>

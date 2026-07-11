@@ -8,3 +8,10 @@ export type Theme = 'light' | 'dark'
 export async function setThemePreference(userId: string, theme: Theme) {
   await prisma.user.update({ where: { id: userId }, data: { themePreference: theme } })
 }
+
+// Persist a user's accent choice (a slug validated by isAccentSlug at the route
+// boundary). Additive, nullable column; applied SSR only when the device has no
+// localStorage choice (see AccentSync).
+export async function setAccentPreference(userId: string, accent: string) {
+  await prisma.user.update({ where: { id: userId }, data: { accentPreference: accent } })
+}

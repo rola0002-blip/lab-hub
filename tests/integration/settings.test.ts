@@ -57,4 +57,19 @@ describe('PATCH /api/me', () => {
     const row = await prisma.user.findUnique({ where: { id: u.id }, select: { themePreference: true } })
     expect(row?.themePreference).toBe('dark')
   })
+
+  it('400 for an unknown accent slug', async () => {
+    const u = await makeUser({ role: 'member' })
+    mockUser.current = { ...u, role: u.role }
+    expect((await meRoute(jreq({ accentPreference: 'chartreuse' }))).status).toBe(400)
+  })
+
+  it('200 persists a valid accent slug', async () => {
+    const u = await makeUser({ role: 'member' })
+    mockUser.current = { ...u, role: u.role }
+    const res = await meRoute(jreq({ accentPreference: 'crimson' }))
+    expect(res.status).toBe(200)
+    const row = await prisma.user.findUnique({ where: { id: u.id }, select: { accentPreference: true } })
+    expect(row?.accentPreference).toBe('crimson')
+  })
 })

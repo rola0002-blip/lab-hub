@@ -6,6 +6,7 @@ import { Sidebar } from '@/components/sidebar'
 import Bell from '@/components/bell'
 import PushOptIn from '@/components/push-optin'
 import { ThemeToggle, ThemeSync } from '@/components/theme-toggle'
+import { AccentSync } from '@/components/accent-picker'
 import { ChatProvider } from '@/components/chat/chat-store'
 import { CommandPalette } from '@/components/command-palette'
 import { ToastHost } from '@/components/ui/toast'
@@ -17,7 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Read the saved per-user theme + avatar directly (not part of the session
   // contract); ThemeSync applies the theme on the device only when localStorage
   // has no choice yet.
-  const pref = await prisma.user.findUnique({ where: { id: user.id }, select: { themePreference: true, image: true } })
+  const pref = await prisma.user.findUnique({ where: { id: user.id }, select: { themePreference: true, accentPreference: true, image: true } })
 
   return (
     // ChatProvider is lifted to the app shell (was chat-only) so the global ⌘K
@@ -25,6 +26,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <ChatProvider selfId={user.id}>
       <div className="flex min-h-screen">
         <ThemeSync initial={pref?.themePreference ?? null} />
+        <AccentSync initial={pref?.accentPreference ?? null} />
         <style>{`:root{--accent:${org.accentColor}}`}</style>
         <Sidebar
           org={{ name: org.name, logoPath: org.logoPath }}
