@@ -52,9 +52,10 @@
   --color-danger: #e01e5a;  /* Slack raspberry */
   --color-info:   #1264a3;
 
-  /* Presence (Slack's real values) */
+  /* Presence — active dot is theme-independent; the away ring is theme-flipped
+     in the semantic blocks below (§2/§3) so it clears the 3:1 non-text bar on
+     BOTH canvases (a fixed dark-ink ring vanished on the dark theme). */
   --color-presence-active:#2eb67d;              /* filled dot */
-  --color-presence-away:  rgb(29 28 29 / .40);  /* hollow ring */
 
   /* Motion — the four Slack curves */
   --motion-fast: 100ms; --motion-standard: 200ms;
@@ -122,10 +123,14 @@
 
   --border-default:rgb(29 28 29 / .13);    /* Slack's exact border */
   --border-strong: rgb(29 28 29 / .24);    --border-focus:var(--color-teal-600);
+  --color-presence-away:var(--color-neutral-500); /* hollow away ring — 3.6:1 on the light canvas */
 
   --accent:var(--color-teal-600); --accent-hover:var(--color-teal-700);
   --accent-active:var(--color-teal-800); --accent-subtle:#eaf6f4;
-  --accent-on:var(--color-neutral-0); --ring-focus:var(--color-teal-500);
+  /* ring-focus is teal-600 (not -500): teal-500 on the white canvas is only
+     ~2.2:1, below the 3:1 non-text bar; teal-600 clears it at ~3.7:1 and matches
+     the teal accent-preset ring. */
+  --accent-on:var(--color-neutral-0); --ring-focus:var(--color-teal-600);
 
   /* Sidebar rail — aubergine's slot, in teal-slate */
   --sidebar-bg:#0c3b37; --sidebar-bg-raised:#0e433f;
@@ -146,6 +151,7 @@
 
   --border-default:rgb(255 255 255 / .10); --border-strong:rgb(255 255 255 / .18);
   --border-focus:var(--color-teal-400);
+  --color-presence-away:#8d8f92; /* theme-flipped: a light-grey ring that clears 3:1 on the dark canvas */
 
   --accent:var(--color-teal-500); --accent-hover:var(--color-teal-400);
   --accent-active:var(--color-teal-300); --accent-subtle:rgb(20 184 166 / .16);

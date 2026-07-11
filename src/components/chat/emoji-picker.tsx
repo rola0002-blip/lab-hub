@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { searchEmoji } from '@/features/chat/emoji'
 
 // Shared, searchable emoji popover. Reused by the message hover toolbar, the
@@ -45,6 +45,19 @@ export function EmojiPicker({ onPick, onClose, align = 'left' }: {
 }) {
   const [query, setQuery] = useState('')
   const [recents, setRecents] = useState<string[]>(loadRecents)
+  // The control that had focus when the picker opened. Captured in a lazy
+  // initializer, which runs during render — BEFORE the search input's autoFocus
+  // moves focus into the popover — so this is the trigger button, not the input.
+  const [opener] = useState<HTMLElement | null>(() =>
+    typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null)
+
+  // Restore focus to the opener when the picker closes (Escape, outside-click, or
+  // a pick) — the popover analogue of use-focus-trap's `prev?.focus()`. A layout
+  // cleanup runs during commit, before any consumer's rAF-based refocus, so a
+  // composer that returns focus to its textarea after inserting still wins while a
+  // reaction "+" chip or composer emoji button simply regains focus. focus() on a
+  // now-hidden control is a silent no-op, so this never throws.
+  useLayoutEffect(() => () => { opener?.focus() }, [opener])
 
   // Escape-to-close via a document listener (the shared Menu pattern). The effect
   // body only add/removes a listener — it never calls setState synchronously —

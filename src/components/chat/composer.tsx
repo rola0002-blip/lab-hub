@@ -236,13 +236,13 @@ function ComposerBody({ draftKey, conversationId, selfRole, memberIds, parentId,
   const canSend = !busy && uploading === 0 && (!!raw.trim() || attachments.length > 0)
 
   return (
-    <div className="relative border-t border-gray-200 p-3">
+    <div className="relative border-t border-border p-3">
       {menu && (
-        <ul className="absolute bottom-full left-3 z-20 mb-1 w-64 overflow-hidden rounded-md border border-gray-200 bg-white shadow-lg">
+        <ul className="absolute bottom-full left-3 z-20 mb-1 w-64 overflow-hidden rounded-md border border-border bg-surface shadow-menu">
           {menu.items.map((it, i) => (
             <li key={it.key}>
               <button type="button" onMouseDown={(e) => { e.preventDefault(); insert(it) }}
-                className={`block w-full px-3 py-1.5 text-left text-sm ${i === activeIdx ? 'bg-accent/10 text-accent' : 'hover:bg-gray-100'}`}>
+                className={`block w-full px-3 py-1.5 text-left text-sm ${i === activeIdx ? 'bg-accent-subtle text-accent' : 'text-default hover:bg-hover'}`}>
                 {it.label}
               </button>
             </li>
@@ -253,9 +253,9 @@ function ComposerBody({ draftKey, conversationId, selfRole, memberIds, parentId,
       {attachments.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-2">
           {attachments.map((a, i) => (
-            <span key={a.path} className="flex items-center gap-1 rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-xs text-gray-700">
+            <span key={a.path} className="flex items-center gap-1 rounded-md border border-border bg-surface-sunken px-2 py-1 text-xs text-muted">
               <span className="max-w-[10rem] truncate">📎 {a.name}</span>
-              <button onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))} className="text-gray-400 hover:text-gray-700" aria-label="Remove attachment">✕</button>
+              <button onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))} className="text-subtle hover:text-default" aria-label="Remove attachment">✕</button>
             </span>
           ))}
         </div>
@@ -281,10 +281,11 @@ function ComposerBody({ draftKey, conversationId, selfRole, memberIds, parentId,
         <input ref={fileRef} type="file" multiple hidden onChange={(e) => e.target.files && onFiles(e.target.files)} />
         <IconButton label="Attach a file" onClick={() => fileRef.current?.click()}><Paperclip size={16} aria-hidden /></IconButton>
         <textarea ref={taRef} value={raw} rows={1} placeholder={parentId ? 'Reply in thread…' : 'Write a message…'}
+          aria-label={parentId ? 'Reply in thread' : 'Write a message'}
           suppressHydrationWarning
           onChange={(e) => { setRaw(e.target.value); updateMenu(e.target.value, e.target.selectionStart); maybeTyping() }}
           onKeyDown={onKeyDown} onBlur={() => setTimeout(() => setMenu(null), 100)}
-          className="max-h-40 min-h-[2.5rem] flex-1 resize-none rounded-md border border-gray-300 px-3 py-2 text-sm" />
+          className="max-h-40 min-h-[2.5rem] flex-1 resize-none rounded-md border border-border bg-surface px-3 py-2 text-sm text-default placeholder:text-subtle focus-visible:border-[var(--border-focus)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
         {/* `disabled` derives from `raw`, which is '' during SSR but restored from a
             sessionStorage draft on the client — an intentional divergence, like the
             textarea value above, so the hydration warning is suppressed. */}
@@ -298,15 +299,15 @@ function ComposerBody({ draftKey, conversationId, selfRole, memberIds, parentId,
       {showBroadcast && (
         <label className="mt-1 flex w-fit items-center gap-1.5 text-xs text-muted">
           <input type="checkbox" checked={broadcast} onChange={(e) => setBroadcast(e.target.checked)}
-            className="h-3.5 w-3.5 rounded border-gray-300 accent-[var(--accent)]" />
+            className="h-3.5 w-3.5 rounded border-border accent-[var(--accent)]" />
           Also send to {broadcastLabel ?? 'channel'}
         </label>
       )}
 
-      <p className="mt-1 text-[11px] text-gray-400">
+      <p className="mt-1 text-[11px] text-muted">
         Enter to send · Shift+Enter for a newline · mentions and :emoji: autocomplete (they render once sent).
       </p>
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      {error && <p className="mt-1 text-xs text-[var(--color-danger)]">{error}</p>}
     </div>
   )
 }

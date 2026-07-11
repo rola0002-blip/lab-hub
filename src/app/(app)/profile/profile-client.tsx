@@ -79,7 +79,7 @@ export default function ProfileClient({ user }: { user: ProfileUser }) {
               </button>
             )}
           </div>
-          <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={onPickFile} />
+          <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" aria-label="Upload profile photo" className="sr-only" onChange={onPickFile} />
         </div>
         <p className="mt-2 text-xs text-muted">PNG, JPG, or WebP up to 5 MB.</p>
       </section>
