@@ -182,7 +182,7 @@ export function MembersDialog({ conversationId, channelName, manage, onClose }: 
           </div>
           <div className="mt-2 flex justify-end">
             <button onClick={addMembers} disabled={busy || picked.size === 0}
-              className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">
+              className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-on disabled:opacity-50">
               {busy ? 'Adding…' : `Add${picked.size ? ` ${picked.size}` : ''}`}
             </button>
           </div>
@@ -233,7 +233,7 @@ function EditChannelDialog({ conversationId, initialName, initialTopic, onClose 
       <div className="mt-4 flex justify-end gap-2">
         <button onClick={onClose} className="rounded-md border border-border px-3 py-1.5 text-sm">Cancel</button>
         <button onClick={save} disabled={busy || !name.trim()}
-          className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">
+          className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-on disabled:opacity-50">
           {busy ? 'Saving…' : 'Save'}
         </button>
       </div>

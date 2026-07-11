@@ -85,14 +85,14 @@ export function BrowseAndCreate() {
                     {c.isMember
                       ? <span className="shrink-0 text-xs font-medium text-subtle">Joined</span>
                       : <button onClick={() => join(c.id)} disabled={busy === c.id}
-                          className="shrink-0 rounded-md bg-accent px-3 py-1 text-xs font-medium text-white disabled:opacity-50">
+                          className="shrink-0 rounded-md bg-accent px-3 py-1 text-xs font-medium text-accent-on disabled:opacity-50">
                           {busy === c.id ? 'Joining…' : 'Join'}
                         </button>}
                   </div>
                 ))}
               </div>
               <div className="mt-4 flex justify-end">
-                <button onClick={() => { setMode('create'); setError(null) }} className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white">New channel</button>
+                <button onClick={() => { setMode('create'); setError(null) }} className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-on">New channel</button>
               </div>
             </>
           ) : (
@@ -113,7 +113,7 @@ export function BrowseAndCreate() {
               <div className="mt-4 flex justify-between">
                 <button onClick={() => { setMode('browse'); setCreateErr(null) }} className="rounded-md border border-border px-3 py-1.5 text-sm">Back</button>
                 <button onClick={create} disabled={creating || !name.trim()}
-                  className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">
+                  className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-on disabled:opacity-50">
                   {creating ? 'Creating…' : 'Create channel'}
                 </button>
               </div>
@@ -190,7 +190,7 @@ export function NewDmButton() {
           <div className="mt-4 flex justify-end gap-2">
             <button onClick={close} className="rounded-md border border-border px-3 py-1.5 text-sm">Cancel</button>
             <button onClick={start} disabled={busy || picked.size === 0}
-              className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">
+              className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-on disabled:opacity-50">
               {busy ? 'Starting…' : 'Start'}
             </button>
           </div>

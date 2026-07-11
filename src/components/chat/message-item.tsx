@@ -282,7 +282,7 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
                 }}
                 className="w-full rounded-md border border-strong bg-surface px-2 py-1 text-base text-default" />
               <div className="mt-1 flex items-center gap-2 text-xs">
-                <button onClick={saveEdit} disabled={busy} className="rounded bg-accent px-2 py-0.5 font-medium text-white disabled:opacity-50">Save</button>
+                <button onClick={saveEdit} disabled={busy} className="rounded bg-accent px-2 py-0.5 font-medium text-accent-on disabled:opacity-50">Save</button>
                 <button onClick={() => setEditing(false)} className="rounded border border-border px-2 py-0.5">Cancel</button>
                 <span className="text-subtle">Enter to save · Esc to cancel</span>
               </div>

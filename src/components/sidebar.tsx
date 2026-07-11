@@ -73,7 +73,7 @@ export function Sidebar({ org, user, unread, role }: {
               // eslint-disable-next-line @next/next/no-img-element -- uploads are served by our own route
               <img src={org.logoPath} alt="" className="h-6 w-6 rounded-md object-cover" />
             ) : (
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent text-2xs font-black text-white">{org.name[0]}</span>
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent text-2xs font-black text-accent-on">{org.name[0]}</span>
             )}
             <span className="truncate text-md font-semibold">{org.name}</span>
             <ChevronDown size={14} className="ml-auto shrink-0 text-sidebar-muted" aria-hidden />
