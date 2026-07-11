@@ -60,4 +60,27 @@ describe('comment-service', () => {
     const iss = await createIssue({ actorId: a.id, role: 'member', title: 'Y' })
     await expect(createComment({ actorId: g.id, role: 'guest', issueId: iss.id, body: 'hi' })).rejects.toBeInstanceOf(PolicyError)
   })
+
+  it('author demoted to guest gets forbidden on edit AND delete of their own comment', async () => {
+    const author = await makeUser({ role: 'member' })
+    const iss = await createIssue({ actorId: author.id, role: 'member', title: 'Z' })
+    const c = await createComment({ actorId: author.id, role: 'member', issueId: iss.id, body: 'mine' })
+    // The role gate is blanket: guests are read-only even on their OWN comments.
+    await expect(editComment({ actorId: author.id, role: 'guest', commentId: c.id, body: 'still mine' }))
+      .rejects.toMatchObject({ name: 'PolicyError', code: 'forbidden' })
+    await expect(deleteComment({ actorId: author.id, role: 'guest', commentId: c.id }))
+      .rejects.toMatchObject({ name: 'PolicyError', code: 'forbidden' })
+    // Comment untouched: no edit applied, no tombstone.
+    const row = await prisma.issueComment.findUnique({ where: { id: c.id } })
+    expect(row?.body).toBe('mine')
+    expect(row?.deletedAt).toBeNull()
+  })
+
+  it('guest probing a ghost comment id gets forbidden, never a not_found existence leak', async () => {
+    const g = await makeUser({ role: 'guest' })
+    await expect(editComment({ actorId: g.id, role: 'guest', commentId: 'ghost-id', body: 'x' }))
+      .rejects.toMatchObject({ name: 'PolicyError', code: 'forbidden' })
+    await expect(deleteComment({ actorId: g.id, role: 'guest', commentId: 'ghost-id' }))
+      .rejects.toMatchObject({ name: 'PolicyError', code: 'forbidden' })
+  })
 })

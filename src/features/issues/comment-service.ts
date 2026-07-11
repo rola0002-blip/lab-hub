@@ -52,6 +52,10 @@ export async function createComment(args: { actorId: string; role: Role; issueId
 }
 
 export async function editComment(args: { actorId: string; role: Role; commentId: string; body: string }): Promise<CommentDto> {
+  // Assert-then-load (issue-service contract): the blanket role gate runs before
+  // any DB read, so guests get `forbidden` even for their own or missing comments
+  // (no not_found existence leak); ownership then narrows it further.
+  assertCanMutate(args.role)
   const c = await prisma.issueComment.findUnique({ where: { id: args.commentId } })
   if (!c || c.deletedAt) throw new PolicyError('not_found', 'Comment not found.')
   if (!canEditComment(args.role, c.userId, args.actorId)) throw new PolicyError('forbidden', 'You can only edit your own comments.')
@@ -65,6 +69,7 @@ export async function editComment(args: { actorId: string; role: Role; commentId
 }
 
 export async function deleteComment(args: { actorId: string; role: Role; commentId: string }): Promise<void> {
+  assertCanMutate(args.role) // blanket role gate before load, same as editComment
   const c = await prisma.issueComment.findUnique({ where: { id: args.commentId } })
   if (!c || c.deletedAt) throw new PolicyError('not_found', 'Comment not found.')
   if (!canDeleteComment(args.role, c.userId, args.actorId)) throw new PolicyError('forbidden', 'You can only delete your own comments.')
