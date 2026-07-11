@@ -38,6 +38,21 @@ describe('project-service', () => {
     await expect(updateProject({ actorId: admin.id, role: 'admin', id: 'nope', name: 'x' })).rejects.toMatchObject({ code: 'not_found' })
   })
 
+  it('excludes CANCELED issues from the progress denominator (Linear semantics)', async () => {
+    const admin = await makeUser({ role: 'admin' })
+    const p = await createProject({ actorId: admin.id, role: 'admin', name: 'Cancel-aware' })
+    await makeIssue(admin.id, { projectId: p.id, status: 'DONE', rank: 'V' })
+    await makeIssue(admin.id, { projectId: p.id, status: 'CANCELED', rank: 'k' })
+    // {DONE, CANCELED} → canceled drops out of the denominator → 100%
+    const [afterCancel] = await listProjects()
+    expect(afterCancel.progress).toEqual({ done: 1, total: 1, percent: 100 })
+    await makeIssue(admin.id, { projectId: p.id, status: 'TODO', rank: 'z' })
+    // {DONE, TODO, CANCELED} → 1 of 2 counted issues done → 50%, on both paths
+    const [afterTodo] = await listProjects()
+    expect(afterTodo.progress).toEqual({ done: 1, total: 2, percent: 50 })
+    expect((await getProject(p.id))?.progress).toEqual({ done: 1, total: 2, percent: 50 })
+  })
+
   it('getProject returns a dto with computed progress, null for a missing id', async () => {
     const admin = await makeUser({ role: 'admin' })
     const p = await createProject({ actorId: admin.id, role: 'admin', name: 'Fetch', leadId: admin.id })

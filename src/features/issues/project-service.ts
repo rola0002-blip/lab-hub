@@ -30,9 +30,11 @@ function toDto(p: LoadedProject, done: number, total: number): ProjectDto {
   }
 }
 
+// Linear semantics (adjudicated 2026-07-12): CANCELED issues are excluded from
+// the denominator — progress = count(DONE) ÷ count(status ≠ CANCELED).
 async function progressFor(projectId: string): Promise<{ done: number; total: number }> {
   const [total, done] = await Promise.all([
-    prisma.issue.count({ where: { projectId } }),
+    prisma.issue.count({ where: { projectId, status: { not: 'CANCELED' } } }),
     prisma.issue.count({ where: { projectId, status: 'DONE' } }),
   ])
   return { done, total }
@@ -40,8 +42,9 @@ async function progressFor(projectId: string): Promise<{ done: number; total: nu
 
 export async function listProjects(): Promise<ProjectDto[]> {
   const projects = await prisma.project.findMany({ orderBy: { createdAt: 'desc' }, include: { lead: LEAD_SELECT } })
-  // Two grouped counts instead of N per-project queries.
-  const totals = await prisma.issue.groupBy({ by: ['projectId'], _count: { _all: true }, where: { projectId: { not: null } } })
+  // Two grouped counts instead of N per-project queries. CANCELED issues are
+  // excluded from the denominator (same Linear semantics as progressFor).
+  const totals = await prisma.issue.groupBy({ by: ['projectId'], _count: { _all: true }, where: { projectId: { not: null }, status: { not: 'CANCELED' } } })
   const dones = await prisma.issue.groupBy({ by: ['projectId'], _count: { _all: true }, where: { projectId: { not: null }, status: 'DONE' } })
   const totalBy = new Map(totals.map((t) => [t.projectId, t._count._all]))
   const doneBy = new Map(dones.map((d) => [d.projectId, d._count._all]))
