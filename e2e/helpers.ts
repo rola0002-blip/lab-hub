@@ -13,12 +13,15 @@ export const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: T
 
 export async function wipe() {
   await db.$executeRawUnsafe(`
-    TRUNCATE TABLE "Conversation","ConversationMember","Message","Reaction",
+    TRUNCATE TABLE "IssueActivity","IssueAttachment","IssueComment","IssueLabel",
+      "Label","Issue","Project",
+      "Conversation","ConversationMember","Message","Reaction",
       "ChatAttachment","PushSubscription",
       "Notification","EmailOutbox","Booking","RecurrenceRule",
       "MaintenanceWindow","Certification","EquipmentManager","Equipment",
       "Invitation","Organization","session","account","verification","user" CASCADE
   `)
+  await db.$executeRawUnsafe(`ALTER SEQUENCE "issue_number_seq" RESTART WITH 1`)
 }
 
 export const ADMIN = { email: 'pi@lab.test', password: 'Str0ngPass!123', name: 'Roland' }

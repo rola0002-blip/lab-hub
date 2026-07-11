@@ -3,12 +3,15 @@ import { randomUUID } from 'node:crypto'
 
 export async function resetDb() {
   await prisma.$executeRawUnsafe(`
-    TRUNCATE TABLE "Conversation","ConversationMember","Message","Reaction",
+    TRUNCATE TABLE "IssueActivity","IssueAttachment","IssueComment","IssueLabel",
+      "Label","Issue","Project",
+      "Conversation","ConversationMember","Message","Reaction",
       "ChatAttachment","PushSubscription",
       "Notification","EmailOutbox","Booking","RecurrenceRule",
       "MaintenanceWindow","Certification","EquipmentManager","Equipment",
       "Invitation","Organization","session","account","verification","user" CASCADE
   `)
+  await prisma.$executeRawUnsafe(`ALTER SEQUENCE "issue_number_seq" RESTART WITH 1`)
 }
 
 export async function makeUser(over: { role?: string; name?: string; banned?: boolean } = {}) {
@@ -59,4 +62,20 @@ export async function makeMember(conversationId: string, userId: string, over: R
 
 export async function makeMessage(conversationId: string, userId: string, over: Record<string, unknown> = {}) {
   return prisma.message.create({ data: { conversationId, userId, body: `msg ${randomUUID().slice(0, 6)}`, ...over } })
+}
+
+export async function makeProject(over: Record<string, unknown> = {}) {
+  return prisma.project.create({ data: { name: `Project ${randomUUID().slice(0, 6)}`, ...over } })
+}
+
+export async function makeLabel(over: Record<string, unknown> = {}) {
+  return prisma.label.create({ data: { name: `label-${randomUUID().slice(0, 6)}`, color: '--status-todo', ...over } })
+}
+
+export async function makeIssue(creatorId: string, over: Record<string, unknown> = {}) {
+  return prisma.issue.create({ data: { title: `Issue ${randomUUID().slice(0, 6)}`, creatorId, rank: 'V', ...over } })
+}
+
+export async function makeIssueComment(issueId: string, userId: string, over: Record<string, unknown> = {}) {
+  return prisma.issueComment.create({ data: { issueId, userId, body: `note ${randomUUID().slice(0, 6)}`, ...over } })
 }
