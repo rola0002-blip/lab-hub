@@ -19,15 +19,19 @@ const IMAGE_MAX = 2 * 1024 * 1024
 const CHAT_MAX = 25 * 1024 * 1024
 const AVATAR_MAX = 5 * 1024 * 1024
 
-export type UploadKind = 'logo' | 'equipment' | 'chat' | 'avatars'
+export type UploadKind = 'logo' | 'equipment' | 'chat' | 'avatars' | 'issues'
+
+// Doc-kind uploads (chat + issue attachments) share the 25 MB cap + the wider
+// document MIME allowlist; image kinds (logo/equipment/avatars) stay image-only.
+const DOC_KINDS = new Set<UploadKind>(['chat', 'issues'])
 
 export function uploadsDir() {
   return path.resolve(process.env.UPLOADS_DIR ?? './data/uploads')
 }
 
 export function validateUpload(mime: string, size: number, kind: UploadKind = 'logo'): string {
-  const table = kind === 'chat' ? CHAT_ALLOWED : IMAGE_ALLOWED
-  const max = kind === 'chat' ? CHAT_MAX : kind === 'avatars' ? AVATAR_MAX : IMAGE_MAX
+  const table = DOC_KINDS.has(kind) ? CHAT_ALLOWED : IMAGE_ALLOWED
+  const max = DOC_KINDS.has(kind) ? CHAT_MAX : kind === 'avatars' ? AVATAR_MAX : IMAGE_MAX
   const ext = table[mime]
   if (!ext || size > max || size === 0) throw new Error('invalid_upload')
   return ext
