@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { TZDate } from '@date-fns/tz'
 import { format } from 'date-fns'
 import { Modal } from '@/components/ui/modal'
+import { toast } from '@/components/ui/toast'
 
 type Props = {
   equipmentId: string; timezone: string; allowRecurring: boolean
@@ -61,7 +62,9 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, i
       else setError(body.message ?? 'Booking failed')
       if (r.status === 409 && body.error === 'slot_taken') router.refresh() // show the fresh calendar behind the dialog
     } catch {
-      setError('Booking failed — please try again.')
+      // Transport failure (offline / non-JSON 5xx): nothing actionable inline, so
+      // surface a blameless toast with a one-tap Retry that re-runs the submit.
+      toast("We couldn't reach the server — your booking wasn't saved.", { action: { label: 'Retry', onClick: () => void submit() } })
     } finally {
       setBusy(false)
     }

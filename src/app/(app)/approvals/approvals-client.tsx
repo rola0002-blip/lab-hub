@@ -3,6 +3,7 @@ import { useState, useTransition } from 'react'
 import { ClipboardCheck } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
+import { toast } from '@/components/ui/toast'
 import { approveAction, rejectAction, approveRuleAction, rejectRuleAction } from './actions'
 
 export type ApprovalItem = {
@@ -15,9 +16,31 @@ export type RecurringItem = { ruleId: string; count: number; first: ApprovalItem
 
 export default function ApprovalsClient({ items, recurring }: { items: ApprovalItem[]; recurring: RecurringItem[] }) {
   const [pending, start] = useTransition()
-  const [msg, setMsg] = useState<string | null>(null)
   const [rejecting, setRejecting] = useState<string | null>(null)
   const [reason, setReason] = useState('')
+
+  // Approvals have no inline retry affordance, so a failed decision surfaces a
+  // blameless toast whose Retry re-runs the exact same action (reason captured in
+  // the closure). On a successful reject we close + clear the reason box; on
+  // failure we keep it open so the reviewer can adjust and try again.
+  const approve = (id: string) => start(async () => {
+    const r = await approveAction(id)
+    if (!r.ok) toast(r.message ?? "We couldn't approve this request.", { action: { label: 'Retry', onClick: () => approve(id) } })
+  })
+  const reject = (id: string, why: string) => start(async () => {
+    const r = await rejectAction(id, why)
+    if (!r.ok) { toast(r.message ?? "We couldn't reject this request.", { action: { label: 'Retry', onClick: () => reject(id, why) } }); return }
+    setRejecting(null); setReason('')
+  })
+  const approveRule = (ruleId: string) => start(async () => {
+    const x = await approveRuleAction(ruleId)
+    if (!x.ok) toast(x.message ?? "We couldn't approve the series.", { action: { label: 'Retry', onClick: () => approveRule(ruleId) } })
+  })
+  const rejectRule = (ruleId: string, why: string) => start(async () => {
+    const x = await rejectRuleAction(ruleId, why)
+    if (!x.ok) { toast(x.message ?? "We couldn't reject the series.", { action: { label: 'Retry', onClick: () => rejectRule(ruleId, why) } }); return }
+    setRejecting(null); setReason('')
+  })
 
   if (items.length === 0 && recurring.length === 0) {
     return <EmptyState icon={ClipboardCheck} title="Nothing waiting on you"
@@ -26,7 +49,6 @@ export default function ApprovalsClient({ items, recurring }: { items: ApprovalI
 
   return (
     <ul className="mt-6 space-y-3">
-      {msg && <p className="text-sm text-[var(--color-danger)]">{msg}</p>}
       {recurring.map((r) => (
         <li key={r.ruleId} className="rounded-xl border-2 border-accent/40 bg-surface p-4 shadow-xs">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -36,7 +58,7 @@ export default function ApprovalsClient({ items, recurring }: { items: ApprovalI
               <p className="text-xs text-subtle">One decision covers all {r.count} occurrences.</p>
             </div>
             <div className="flex gap-2">
-              <button disabled={pending} onClick={() => start(async () => { const x = await approveRuleAction(r.ruleId); if (!x.ok) setMsg(x.message ?? 'Failed') })}
+              <button disabled={pending} onClick={() => approveRule(r.ruleId)}
                 className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-on transition-colors hover:bg-accent-hover disabled:opacity-50">Approve all</button>
               <button disabled={pending} onClick={() => setRejecting(rejecting === r.ruleId ? null : r.ruleId)}
                 className="rounded-md border border-border px-3 py-1.5 text-sm text-default transition-colors hover:bg-hover">Reject…</button>
@@ -46,8 +68,7 @@ export default function ApprovalsClient({ items, recurring }: { items: ApprovalI
             <div className="mt-3 flex gap-2">
               <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (required)"
                 className="flex-1 rounded-md border border-border bg-surface px-3 py-1.5 text-sm" />
-              <button disabled={pending || !reason.trim()}
-                onClick={() => start(async () => { const x = await rejectRuleAction(r.ruleId, reason); if (!x.ok) setMsg(x.message ?? 'Failed'); setRejecting(null); setReason('') })}
+              <button disabled={pending || !reason.trim()} onClick={() => rejectRule(r.ruleId, reason)}
                 className="rounded-md bg-[var(--color-danger)] px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50">Confirm reject</button>
             </div>
           )}
@@ -65,7 +86,7 @@ export default function ApprovalsClient({ items, recurring }: { items: ApprovalI
               {i.purpose && <p className="mt-1 text-sm text-muted">“{i.purpose}”</p>}
             </div>
             <div className="flex gap-2">
-              <button disabled={pending} onClick={() => start(async () => { const r = await approveAction(i.id); if (!r.ok) setMsg(r.message ?? 'Failed') })}
+              <button disabled={pending} onClick={() => approve(i.id)}
                 className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-on transition-colors hover:bg-accent-hover disabled:opacity-50">Approve</button>
               <button disabled={pending} onClick={() => setRejecting(rejecting === i.id ? null : i.id)}
                 className="rounded-md border border-border px-3 py-1.5 text-sm text-default transition-colors hover:bg-hover">Reject…</button>
@@ -75,8 +96,7 @@ export default function ApprovalsClient({ items, recurring }: { items: ApprovalI
             <div className="mt-3 flex gap-2">
               <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (required, shown to requester)"
                 className="flex-1 rounded-md border border-border bg-surface px-3 py-1.5 text-sm" />
-              <button disabled={pending || !reason.trim()}
-                onClick={() => start(async () => { const r = await rejectAction(i.id, reason); if (!r.ok) setMsg(r.message ?? 'Failed'); setRejecting(null); setReason('') })}
+              <button disabled={pending || !reason.trim()} onClick={() => reject(i.id, reason)}
                 className="rounded-md bg-[var(--color-danger)] px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50">Confirm reject</button>
             </div>
           )}
