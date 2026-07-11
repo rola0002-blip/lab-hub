@@ -64,7 +64,7 @@ function renderExcerpt(body: string, names: Names, terms: string[]): ReactNode[]
   })
 }
 
-export default function SearchBox({ align = 'left' }: { align?: 'left' | 'right' }) {
+export default function SearchBox({ align = 'left', orgName }: { align?: 'left' | 'right'; orgName?: string }) {
   const router = useRouter()
   const { users } = useChat()
   const [q, setQ] = useState('')
@@ -110,7 +110,7 @@ export default function SearchBox({ align = 'left' }: { align?: 'left' | 'right'
         onChange={(e) => { const v = e.target.value; setQ(v); setOpen(true); if (!v.trim()) { setHits([]); setError(null) } }}
         onFocus={() => setOpen(true)}
         onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false) } }}
-        placeholder="Search messages…" aria-label="Search messages"
+        placeholder={orgName ? `Search ${orgName}` : 'Search messages…'} aria-label="Search messages"
         className="w-full rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-default transition-colors placeholder:text-subtle hover:border-border-strong focus-visible:border-[var(--border-focus)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
       {open && q.trim().length > 0 && (
         <div className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} z-30 mt-1 max-h-96 w-80 overflow-y-auto rounded-lg border border-border bg-surface py-1 shadow-menu`}>
