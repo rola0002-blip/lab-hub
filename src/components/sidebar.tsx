@@ -39,7 +39,10 @@ export const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
 // members add the directory/workflow rows, admins add the admin rows.
 const NON_GUEST = new Set(['/approvals', '/people', '/certifications'])
 const ADMIN_ONLY = new Set(['/admin/equipment', '/admin/settings'])
-function isVisible(href: string, role: Role): boolean {
+// Single source of truth for per-role nav visibility. The ⌘K command palette
+// (command-palette.tsx) imports this so its page destinations are gated
+// identically to the rail — a guest is never offered Admin/People rows anywhere.
+export function isNavVisible(href: string, role: Role): boolean {
   if (ADMIN_ONLY.has(href)) return role === 'admin'
   if (NON_GUEST.has(href)) return role !== 'guest'
   return true
@@ -80,7 +83,7 @@ export function Sidebar({ org, user, unread, role }: {
       />
       <nav aria-label="Primary navigation" className="mt-2 flex-1 overflow-y-auto">
         {NAV_SECTIONS.map((sec) => {
-          const items = sec.items.filter((i) => isVisible(i.href, role))
+          const items = sec.items.filter((i) => isNavVisible(i.href, role))
           if (items.length === 0) return null
           return (
             <div key={sec.title}>
