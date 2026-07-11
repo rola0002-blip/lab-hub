@@ -4,9 +4,15 @@ import { requireUser } from '@/lib/session'
 import { isMember, canManage } from '@/features/chat/conversation-service'
 import MessagePane from '@/components/chat/message-pane'
 
-export default async function ConversationPage({ params }: { params: Promise<{ conversationId: string }> }) {
+export default async function ConversationPage({ params, searchParams }: {
+  params: Promise<{ conversationId: string }>
+  // `?msg=` deep-link target (search result / copy-link). Read here and passed as
+  // a prop so a same-conversation soft-navigation re-triggers the pane's scroll.
+  searchParams: Promise<{ msg?: string }>
+}) {
   const user = await requireUser()
   const { conversationId } = await params
+  const { msg } = await searchParams
   if (!(await isMember(user.id, conversationId))) notFound()
   const convo = await prisma.conversation.findUnique({ where: { id: conversationId } })
   if (!convo) notFound()
@@ -24,6 +30,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ c
       selfRole={user.role}
       manage={manage}
       memberIds={members.map((m) => m.userId)}
+      deepLinkMsgId={msg ?? null}
     />
   )
 }

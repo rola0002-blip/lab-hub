@@ -10,7 +10,7 @@ import MessageItem, { type Msg } from './message-item'
 import Composer from './composer'
 import ThreadPanel from './thread-panel'
 import ConversationMenu, { MembersDialog } from './conversation-menu'
-import SearchBox from './search-box'
+import { Skeleton } from '@/components/ui/skeleton'
 
 type Props = {
   conversationId: string
@@ -21,7 +21,16 @@ type Props = {
   selfRole: string
   manage: boolean
   memberIds: string[]
+  // Deep-link target from `/chat/<cid>?msg=<id>` (search result or a pasted
+  // copy-link). Read server-side from searchParams and passed here so a
+  // same-conversation soft-navigation still re-triggers the scroll (the pane
+  // never remounts). null when there is no `?msg=`.
+  deepLinkMsgId?: string | null
 }
+
+// How many older pages we'll auto-page back through hunting for a deep-link
+// target before giving up (each page is ~50 messages).
+const DEEPLINK_MAX_PAGES = 12
 
 // A message is at the bottom of the scroller when it's within this many pixels of
 // the end; below the threshold we show the jump-to-latest button.
@@ -49,10 +58,13 @@ function NewMessagesDivider() {
   )
 }
 
-export default function MessagePane({ conversationId, conversationType, channelName, topic, archived, selfRole, manage, memberIds }: Props) {
+export default function MessagePane({ conversationId, conversationType, channelName, topic, archived, selfRole, manage, memberIds, deepLinkMsgId = null }: Props) {
   const { users, online, selfId, registerConversationHandler } = useChat()
   const [messages, setMessages] = useState<Msg[]>([])
   const [hasMore, setHasMore] = useState(false)
+  // Initial-load flag so the pane shows skeleton rows (not a blank intro) until
+  // the first fetch resolves, and re-shows them when switching conversations.
+  const [loading, setLoading] = useState(true)
   const [threadRoot, setThreadRoot] = useState<string | null>(null)
   const [typing, setTyping] = useState<string | null>(null)
   // The first-unread anchor is captured once per conversation (before markRead)
@@ -75,10 +87,11 @@ export default function MessagePane({ conversationId, conversationType, channelN
   const markRead = useCallback(() => void fetch(`/api/chat/conversations/${conversationId}/read`, { method: 'POST' }), [conversationId])
 
   const loadLatest = useCallback(async () => {
+    setLoading(true)
     const r = await fetch(`/api/chat/conversations/${conversationId}/messages`)
-    if (!r.ok) return
+    if (!r.ok) { setLoading(false); return }
     const d = await r.json()
-    setMessages(d.messages); setHasMore(d.hasMore)
+    setMessages(d.messages); setHasMore(d.hasMore); setLoading(false)
     // Capture the unread anchor from the FIRST load of this conversation, before
     // markRead advances lastReadAt server-side.
     if (unreadCapturedRef.current !== conversationId) {
@@ -175,12 +188,18 @@ export default function MessagePane({ conversationId, conversationType, channelN
     }
   }), [conversationId, registerConversationHandler, loadLatest, upsert, markRead, selfId])
 
-  useEffect(() => { // first load opens at newest unconditionally; afterwards stick to bottom only when near it
+  useEffect(() => { // first load opens at newest; afterwards stick to bottom only when near it
     const el = scroller.current
     if (!el) return
-    if (firstLoad.current && messages.length) { el.scrollTop = el.scrollHeight; firstLoad.current = false; return }
+    // On first load, open at newest — UNLESS we're deep-linking, in which case the
+    // deep-link effect owns the scroll position (don't yank to bottom first).
+    if (firstLoad.current && messages.length) {
+      firstLoad.current = false
+      if (!deepLinkMsgId) el.scrollTop = el.scrollHeight
+      return
+    }
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) el.scrollTop = el.scrollHeight
-  }, [messages])
+  }, [messages, deepLinkMsgId])
 
   // Track bottom-proximity for the jump button; only re-render on transitions.
   const onScroll = useCallback(() => {
@@ -210,13 +229,39 @@ export default function MessagePane({ conversationId, conversationType, channelN
     if (el?.dataset.root === 'true' && el.dataset.msgId) setThreadRoot(el.dataset.msgId)
   })
 
-  async function loadEarlier() {
+  const loadEarlier = useCallback(async () => {
     if (!messages.length) return
     const r = await fetch(`/api/chat/conversations/${conversationId}/messages?before=${messages[0].id}`)
     if (!r.ok) return
     const d = await r.json()
     setMessages((prev) => [...d.messages, ...prev]); setHasMore(d.hasMore)
-  }
+  }, [conversationId, messages])
+
+  // Deep-link: land ON the `?msg=` target. If it isn't loaded yet, page older
+  // history (bounded) until it is — this effect re-runs as `messages` grows —
+  // then centre it and flash the mention tint (~1.5s). `deepLinkRef` tracks the
+  // current target so we scroll once per link and re-arm on a new target
+  // (including a same-conversation soft-navigation, since the pane never
+  // remounts). No synchronous setState here: pagination goes through
+  // loadEarlier (async), and the flash is a transient CSS class, not React state.
+  const deepLinkRef = useRef<{ id: string | null; tries: number; done: boolean }>({ id: null, tries: 0, done: false })
+  useEffect(() => {
+    if (!deepLinkMsgId) return
+    const st = deepLinkRef.current
+    if (st.id !== deepLinkMsgId) { st.id = deepLinkMsgId; st.tries = 0; st.done = false }
+    if (st.done || loading) return
+    const el = scroller.current?.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(deepLinkMsgId)}"]`)
+    if (el) {
+      st.done = true
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      el.scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' })
+      el.classList.add('msg-flash')
+      setTimeout(() => el.classList.remove('msg-flash'), 1500)
+      return
+    }
+    // Target not in the loaded window yet — page back until found or exhausted.
+    if (hasMore && st.tries < DEEPLINK_MAX_PAGES) { st.tries++; void loadEarlier() }
+  }, [deepLinkMsgId, messages, hasMore, loading, loadEarlier])
 
   // DM headers show the person, not a generic label: their avatar + name (via
   // dmName, which also handles group DMs) + a live presence line. The peer is the
@@ -243,21 +288,23 @@ export default function MessagePane({ conversationId, conversationType, channelN
               ? <p className="truncate text-xs text-muted">{peerOnline ? 'Active' : 'Away'}</p>
               : topic && <p className="truncate text-xs text-muted">{topic}</p>}
           </div>
-          <SearchBox />
           <ConversationMenu conversationId={conversationId} conversationType={conversationType}
             channelName={channelName} archived={archived} manage={manage} />
         </header>
         <div ref={scroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
+          {/* Initial load shows skeleton rows instead of a blank/flash of the wrong
+              intro; it clears as soon as the first fetch resolves. */}
+          {loading && <MessageListSkeleton />}
           {/* Top of history: once there's nothing earlier to load, show the intro —
               the DM peer greeting or the channel welcome — instead of "Load earlier". */}
-          {hasMore ? (
+          {!loading && (hasMore ? (
             <button onClick={loadEarlier} className="mx-auto my-2 block rounded-md border border-border px-3 py-1 text-xs text-muted">Load earlier</button>
           ) : isDm ? (
             <DmIntro peerId={peerId} name={dmTitle} image={peer?.image ?? null} />
           ) : (
             <ChannelIntro name={channelName} manage={manage} onAddPeople={() => setMembersOpen(true)} />
-          )}
-          {messages.map((m, i) => {
+          ))}
+          {!loading && messages.map((m, i) => {
             const prev = messages[i - 1]
             const prevDate = prev ? new Date(prev.createdAt) : null
             const dayChanged = !prevDate || new Date(m.createdAt).toDateString() !== prevDate.toDateString()
@@ -305,6 +352,18 @@ export default function MessagePane({ conversationId, conversationType, channelN
       {membersOpen && (
         <MembersDialog conversationId={conversationId} channelName={channelName} manage={manage} onClose={() => setMembersOpen(false)} />
       )}
+    </div>
+  )
+}
+
+// Initial-load placeholder: a handful of avatar + two-line rows that mirror the
+// message layout so the pane has shape while the first fetch is in flight.
+function MessageListSkeleton() {
+  return (
+    <div className="space-y-4 py-2">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <Skeleton key={i} avatar lines={2} className="px-4" />
+      ))}
     </div>
   )
 }
