@@ -1,8 +1,9 @@
 'use client'
 import { useState, useTransition } from 'react'
 import { inviteAction, revokeInviteAction, resendInviteAction, setRoleAction, deactivateAction, reactivateAction } from './actions'
+import { LocalTime } from '@/components/local-time'
 
-type U = { id: string; name: string; email: string; role: string; banned: boolean }
+type U = { id: string; name: string; email: string; role: string; banned: boolean; title: string | null; timezone: string | null }
 type I = { id: string; email: string; role: string }
 
 export default function PeopleClient({ users, invitations, isAdmin, selfId }: { users: U[]; invitations: I[]; isAdmin: boolean; selfId: string }) {
@@ -54,7 +55,13 @@ export default function PeopleClient({ users, invitations, isAdmin, selfId }: { 
         <ul className="mt-2 divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface shadow-xs">
           {users.map((u) => (
             <li key={u.id} className={`flex items-center justify-between p-3 text-sm text-default transition-colors hover:bg-hover ${u.banned ? 'opacity-50' : ''}`}>
-              <span>{u.name} <span className="text-muted">· {u.email}</span>{u.banned && ' · deactivated'}</span>
+              <span className="min-w-0">
+                <span className="block truncate">{u.name} <span className="text-muted">· {u.email}</span>{u.banned && ' · deactivated'}</span>
+                <span className="flex items-center gap-2">
+                  {u.title && <span className="text-xs text-muted">{u.title}</span>}
+                  <LocalTime timezone={u.timezone} />
+                </span>
+              </span>
               {isAdmin && u.id !== selfId ? (
                 <span className="flex items-center gap-2">
                   <select defaultValue={u.role} onChange={(e) => start(() => setRoleAction(u.id, e.target.value))} className="rounded-md border border-border bg-surface px-2 py-1">

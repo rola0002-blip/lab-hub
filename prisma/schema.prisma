@@ -19,6 +19,8 @@ model User {
   banExpires    DateTime?
   themePreference String? // 'light' | 'dark' — per-user theme, applied SSR when device localStorage is empty
   accentPreference String? // accent slug (src/lib/accents.ts); applied SSR when device localStorage is empty
+  title            String? // free-text role/title, ≤100 chars, shown under the name on People
+  timezone         String? // IANA tz id; drives the member's local time on People
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

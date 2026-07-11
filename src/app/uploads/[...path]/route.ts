@@ -22,6 +22,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
   }
 
   const isChat = path[0].toLowerCase() === 'chat'
+  const isAvatar = path[0].toLowerCase() === 'avatars'
+  const isPrivate = isChat || isAvatar
 
   // Chat attachments are chat reads of potentially confidential lab data, so
   // they go through the ConversationMember gate like every other chat read.
@@ -37,15 +39,22 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
     })
     if (!attachment) return new Response('Not found', { status: 404 })
     if (!(await isMember(user.id, attachment.message.conversationId))) return new Response('Forbidden', { status: 403 })
+  } else if (isAvatar) {
+    // Avatars are user photos: any authenticated session may read them, but they
+    // are not public. The traversal/case-fold guard above already proved path[0]
+    // names the same top-level dir readUpload will open, so no request can evade
+    // this gate by resolving into avatars/ from another prefix.
+    const user = await getSessionUser()
+    if (!user) return new Response('Unauthorized', { status: 401 })
   }
 
   const file = await readUpload(path)
   if (!file) return new Response('Not found', { status: 404 })
   const headers: Record<string, string> = {
     'Content-Type': file.mime,
-    // Chat files are private and must never be retained by shared/proxy caches;
-    // public assets keep the long, shared cache they had in SP1.
-    'Cache-Control': isChat ? 'private, no-store' : 'public, max-age=86400',
+    // Chat files and avatars are private and must never be retained by
+    // shared/proxy caches; SP1 public assets keep the long, shared cache.
+    'Cache-Control': isPrivate ? 'private, no-store' : 'public, max-age=86400',
   }
   if (!file.mime.startsWith('image/')) {
     const name = path[path.length - 1] ?? 'download'

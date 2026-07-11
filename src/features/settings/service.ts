@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db'
+import { removeUpload } from '@/lib/uploads'
 
 export type Theme = 'light' | 'dark'
 
@@ -14,4 +15,30 @@ export async function setThemePreference(userId: string, theme: Theme) {
 // localStorage choice (see AccentSync).
 export async function setAccentPreference(userId: string, accent: string) {
   await prisma.user.update({ where: { id: userId }, data: { accentPreference: accent } })
+}
+
+export async function setName(userId: string, name: string) {
+  await prisma.user.update({ where: { id: userId }, data: { name: name.trim() } })
+}
+
+export async function setTitle(userId: string, title: string) {
+  const t = title.trim()
+  await prisma.user.update({ where: { id: userId }, data: { title: t.length ? t : null } })
+}
+
+export async function setTimezone(userId: string, timezone: string) {
+  // Empty means "Not set" — clear to null, mirroring setTitle.
+  const tz = timezone.trim()
+  await prisma.user.update({ where: { id: userId }, data: { timezone: tz.length ? tz : null } })
+}
+
+export async function setAvatar(userId: string, imagePath: string) {
+  await prisma.user.update({ where: { id: userId }, data: { image: imagePath } })
+}
+
+export async function removeAvatar(userId: string) {
+  const prev = await prisma.user.findUnique({ where: { id: userId }, select: { image: true } })
+  await prisma.user.update({ where: { id: userId }, data: { image: null } })
+  // Best-effort cleanup of the stored file — only ever our own avatars/ path.
+  if (prev?.image?.startsWith('/uploads/avatars/')) await removeUpload(prev.image)
 }

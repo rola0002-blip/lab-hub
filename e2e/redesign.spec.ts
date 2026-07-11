@@ -92,3 +92,31 @@ test('⌘K palette: a guest is never offered Admin/People destinations', async (
   await pageG.context().close()
   await adminPage.context().close()
 })
+
+test('profile: rename + accent switch persist across reload', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+
+  // Open the profile from the top-bar user menu (not a nav item).
+  await page.goto('/dashboard')
+  await page.getByRole('button', { name: 'Your account' }).click()
+  await page.getByRole('menuitem', { name: 'Profile' }).click()
+  await page.waitForURL('**/profile')
+
+  // Rename.
+  const nameInput = page.getByLabel('Full name')
+  await nameInput.fill('Roland Renamed')
+  await page.getByRole('button', { name: 'Save changes' }).click()
+  await expect(page.getByText('Profile saved.')).toBeVisible()
+
+  // Switch accent to Crimson (a radio in the Appearance radiogroup).
+  await page.getByRole('radio', { name: 'Crimson' }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-accent', 'crimson')
+
+  // Reload — both persist (name is server-side; accent via localStorage + account).
+  await page.reload()
+  await expect(page.locator('html')).toHaveAttribute('data-accent', 'crimson')
+  await expect(page.getByLabel('Full name')).toHaveValue('Roland Renamed')
+
+  await page.context().close()
+})

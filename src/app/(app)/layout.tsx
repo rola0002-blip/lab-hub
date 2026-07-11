@@ -9,6 +9,7 @@ import { ThemeToggle, ThemeSync } from '@/components/theme-toggle'
 import { AccentSync } from '@/components/accent-picker'
 import { ChatProvider } from '@/components/chat/chat-store'
 import { CommandPalette } from '@/components/command-palette'
+import { UserMenu } from '@/components/user-menu'
 import { ToastHost } from '@/components/ui/toast'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -41,6 +42,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <PushOptIn />
               <ThemeToggle />
               <Bell />
+              <UserMenu user={{ id: user.id, name: user.name, image: pref?.image ?? null }} />
             </div>
           </header>
           <main className="flex-1 p-6">{children}</main>

@@ -72,4 +72,42 @@ describe('PATCH /api/me', () => {
     const row = await prisma.user.findUnique({ where: { id: u.id }, select: { accentPreference: true } })
     expect(row?.accentPreference).toBe('crimson')
   })
+
+  it('name: 400 when empty/blank, 400 when >80, 200 when valid', async () => {
+    const u = await makeUser({ role: 'member' })
+    mockUser.current = { ...u, role: u.role }
+    expect((await meRoute(jreq({ name: '   ' }))).status).toBe(400)
+    expect((await meRoute(jreq({ name: 'x'.repeat(81) }))).status).toBe(400)
+    expect((await meRoute(jreq({ name: 'Wei Lin' }))).status).toBe(200)
+    const row = await prisma.user.findUnique({ where: { id: u.id }, select: { name: true } })
+    expect(row?.name).toBe('Wei Lin')
+  })
+
+  it('title: 400 when >100, 200 (and stores) when valid', async () => {
+    const u = await makeUser({ role: 'member' })
+    mockUser.current = { ...u, role: u.role }
+    expect((await meRoute(jreq({ title: 'x'.repeat(101) }))).status).toBe(400)
+    expect((await meRoute(jreq({ title: 'PhD candidate' }))).status).toBe(200)
+    const row = await prisma.user.findUnique({ where: { id: u.id }, select: { title: true } })
+    expect(row?.title).toBe('PhD candidate')
+  })
+
+  it('timezone: 400 for an unknown zone, 200 for a valid IANA zone', async () => {
+    const u = await makeUser({ role: 'member' })
+    mockUser.current = { ...u, role: u.role }
+    expect((await meRoute(jreq({ timezone: 'Mars/Phobos' }))).status).toBe(400)
+    expect((await meRoute(jreq({ timezone: 'Europe/Zurich' }))).status).toBe(200)
+    const row = await prisma.user.findUnique({ where: { id: u.id }, select: { timezone: true } })
+    expect(row?.timezone).toBe('Europe/Zurich')
+  })
+
+  it('timezone: an empty value is the "Not set" option and clears it to null', async () => {
+    const u = await makeUser({ role: 'member' })
+    mockUser.current = { ...u, role: u.role }
+    expect((await meRoute(jreq({ timezone: 'Europe/Zurich' }))).status).toBe(200)
+    const res = await meRoute(jreq({ timezone: '' }))
+    expect(res.status).toBe(200)
+    const row = await prisma.user.findUnique({ where: { id: u.id }, select: { timezone: true } })
+    expect(row?.timezone).toBeNull()
+  })
 })
