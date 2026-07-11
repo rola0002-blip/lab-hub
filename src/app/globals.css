@@ -81,6 +81,29 @@
     0%, 60%, 100% { opacity: .3; transform: translateY(0); }
     30%           { opacity: 1;  transform: translateY(-2px); }
   }
+
+  /* Toast slide-in — a toast rises + fades in from just below its resting spot.
+     Applied as `motion-safe:animate-toast-in`, so reduced-motion users get the
+     toast with no travel. */
+  --animate-toast-in: toast-in var(--motion-standard) var(--ease-enter);
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: none; }
+  }
+}
+
+/* Deep-link flash — a search result / copy-link lands on a message and pulses
+   the mention tint, fading back to transparent. Gated on `no-preference` so the
+   universal reduced-motion reset (§5) never has an animation to zero out; under
+   reduced motion the `.msg-flash` class still paints a solid tint that JS clears
+   after ~1.5s. */
+.msg-flash { background-color: var(--bg-mention); }
+@media (prefers-reduced-motion: no-preference) {
+  .msg-flash { animation: msg-flash 1.5s var(--ease-standard) forwards; }
+  @keyframes msg-flash {
+    0%   { background-color: var(--bg-mention); }
+    100% { background-color: transparent; }
+  }
 }
 
 /* ── 2. SEMANTIC TOKENS — LIGHT ───────────────────── */

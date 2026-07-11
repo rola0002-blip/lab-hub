@@ -8,6 +8,7 @@ import PushOptIn from '@/components/push-optin'
 import { ThemeToggle, ThemeSync } from '@/components/theme-toggle'
 import { ChatProvider } from '@/components/chat/chat-store'
 import { CommandPalette } from '@/components/command-palette'
+import { ToastHost } from '@/components/ui/toast'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const org = await requireSetup()
@@ -43,6 +44,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <main className="flex-1 p-6">{children}</main>
         </div>
       </div>
+      {/* Global toast host — mounted once so `toast()` works from any page. */}
+      <ToastHost />
     </ChatProvider>
   )
 }
