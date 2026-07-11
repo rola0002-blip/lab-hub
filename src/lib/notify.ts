@@ -8,6 +8,7 @@ export type NotificationType =
   | 'booking_pending' | 'booking_decided' | 'booking_cancelled_maintenance'
   | 'booking_reminder' | 'booking_expired' | 'booking_cancelled'
   | 'message_mention' | 'message_dm' | 'channel_added'
+  | 'issue_assigned' | 'issue_mention' | 'issue_comment' | 'issue_done'
 
 export async function notify(
   userId: string, type: NotificationType, payload: Record<string, unknown>,

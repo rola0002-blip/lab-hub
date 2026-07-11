@@ -41,3 +41,27 @@ export function dmEmail(orgName: string, senderName: string, preview: string): T
     html: wrap(`<p><strong>${esc(senderName)}</strong> sent you a direct message:</p><p>${esc(preview)}</p><p>Open ${esc(orgName)} to reply.</p>`),
   }
 }
+export function issueAssignedEmail(orgName: string, actorName: string, identifier: string, title: string): Tpl {
+  return {
+    subject: `[${orgName}] ${identifier} assigned to you: ${title}`,
+    html: wrap(`<p><strong>${esc(actorName)}</strong> assigned you <strong>${esc(identifier)}</strong> — ${esc(title)}.</p><p>Open ${esc(orgName)} to view it.</p>`),
+  }
+}
+export function issueMentionEmail(orgName: string, actorName: string, identifier: string, where: string, title: string): Tpl {
+  return {
+    subject: `[${orgName}] ${actorName} mentioned you on ${identifier}`,
+    html: wrap(`<p><strong>${esc(actorName)}</strong> mentioned you in ${esc(where)} on <strong>${esc(identifier)}</strong> — ${esc(title)}.</p><p>Open ${esc(orgName)} to reply.</p>`),
+  }
+}
+export function issueCommentEmail(orgName: string, actorName: string, identifier: string, title: string, preview: string): Tpl {
+  return {
+    subject: `[${orgName}] New comment on ${identifier}: ${title}`,
+    html: wrap(`<p><strong>${esc(actorName)}</strong> commented on <strong>${esc(identifier)}</strong> — ${esc(title)}:</p><p>${esc(preview)}</p><p>Open ${esc(orgName)} to reply.</p>`),
+  }
+}
+export function issueDoneEmail(orgName: string, actorName: string, identifier: string, title: string): Tpl {
+  return {
+    subject: `[${orgName}] ${identifier} completed: ${title}`,
+    html: wrap(`<p><strong>${esc(actorName)}</strong> marked <strong>${esc(identifier)}</strong> — ${esc(title)} as done.</p>`),
+  }
+}
