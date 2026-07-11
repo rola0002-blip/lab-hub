@@ -192,4 +192,20 @@ describe('issue-service', () => {
     // not_found: a member acting on a non-existent issue
     await expect(setStatus({ actorId: owner.id, role: 'member', issueId: 'ghost', status: 'DONE' })).rejects.toBeInstanceOf(PolicyError)
   })
+
+  it('guest probing a NONEXISTENT issue gets forbidden, never not_found (no existence leak)', async () => {
+    const guest = await makeUser({ role: 'guest' })
+    // simpleSet family: permission is asserted BEFORE the issue is loaded, so a
+    // guest cannot distinguish an existing issue from a missing one.
+    await expect(setPriority({ actorId: guest.id, role: 'guest', issueId: 'ghost', priority: 'HIGH' }))
+      .rejects.toMatchObject({ name: 'PolicyError', code: 'forbidden' })
+    await expect(setProject({ actorId: guest.id, role: 'guest', issueId: 'ghost', projectId: null }))
+      .rejects.toMatchObject({ name: 'PolicyError', code: 'forbidden' })
+    await expect(setDueDate({ actorId: guest.id, role: 'guest', issueId: 'ghost', dueDate: null }))
+      .rejects.toMatchObject({ name: 'PolicyError', code: 'forbidden' })
+    // setTitle asserts permission even before title validation (empty title would
+    // otherwise leak an `invalid` 400 to a read-only guest).
+    await expect(setTitle({ actorId: guest.id, role: 'guest', issueId: 'ghost', title: '' }))
+      .rejects.toMatchObject({ name: 'PolicyError', code: 'forbidden' })
+  })
 })

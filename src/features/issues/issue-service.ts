@@ -198,14 +198,16 @@ export async function setAssignee(args: { actorId: string; role: Role; issueId: 
 }
 
 // ── simple field setters (priority / project / dueDate / title) ───────────────
+// Callers assert permission FIRST, then load the issue exactly once and pass it in
+// (assert-then-load): a guest probing a missing id always gets `forbidden`, never a
+// `not_found` existence leak, and the ISSUE_INCLUDE join runs once per mutation.
 async function simpleSet(args: {
-  actorId: string; role: Role; issueId: string; type: 'priority' | 'project' | 'due_date' | 'title'
+  actorId: string; issue: Loaded; type: 'priority' | 'project' | 'due_date' | 'title'
   // Unchecked variant so scalar FK writes (e.g. projectId) are accepted; the
   // checked IssueUpdateInput exposes the `project` relation instead of the scalar.
   data: P.IssueUncheckedUpdateInput; from: unknown; to: unknown
 }): Promise<IssueDto> {
-  assertCanMutate(args.role)
-  const issue = await loadOrThrow(args.issueId)
+  const issue = args.issue
   const updated = await prisma.$transaction(async (tx) => {
     const u = await tx.issue.update({ where: { id: issue.id }, data: args.data, include: ISSUE_INCLUDE })
     await tx.issueActivity.create({ data: { issueId: issue.id, actorId: args.actorId, type: args.type, data: { from: args.from, to: args.to } as P.InputJsonValue } })
@@ -216,22 +218,26 @@ async function simpleSet(args: {
 }
 
 export async function setPriority(args: { actorId: string; role: Role; issueId: string; priority: IssuePriority }): Promise<IssueDto> {
+  assertCanMutate(args.role)
   const issue = await loadOrThrow(args.issueId)
-  return simpleSet({ ...args, type: 'priority', data: { priority: args.priority }, from: issue.priority, to: args.priority })
+  return simpleSet({ actorId: args.actorId, issue, type: 'priority', data: { priority: args.priority }, from: issue.priority, to: args.priority })
 }
 export async function setProject(args: { actorId: string; role: Role; issueId: string; projectId: string | null }): Promise<IssueDto> {
+  assertCanMutate(args.role)
   const issue = await loadOrThrow(args.issueId)
-  return simpleSet({ ...args, type: 'project', data: { projectId: args.projectId }, from: issue.projectId, to: args.projectId })
+  return simpleSet({ actorId: args.actorId, issue, type: 'project', data: { projectId: args.projectId }, from: issue.projectId, to: args.projectId })
 }
 export async function setDueDate(args: { actorId: string; role: Role; issueId: string; dueDate: Date | null }): Promise<IssueDto> {
+  assertCanMutate(args.role)
   const issue = await loadOrThrow(args.issueId)
-  return simpleSet({ ...args, type: 'due_date', data: { dueDate: args.dueDate }, from: issue.dueDate?.toISOString() ?? null, to: args.dueDate?.toISOString() ?? null })
+  return simpleSet({ actorId: args.actorId, issue, type: 'due_date', data: { dueDate: args.dueDate }, from: issue.dueDate?.toISOString() ?? null, to: args.dueDate?.toISOString() ?? null })
 }
 export async function setTitle(args: { actorId: string; role: Role; issueId: string; title: string }): Promise<IssueDto> {
+  assertCanMutate(args.role) // permission before validation, matching createIssue's ordering
   const title = args.title.trim()
   if (title.length < 1 || title.length > 200) throw new PolicyError('invalid', 'Title must be 1–200 characters.')
   const issue = await loadOrThrow(args.issueId)
-  return simpleSet({ ...args, type: 'title', data: { title }, from: issue.title, to: title })
+  return simpleSet({ actorId: args.actorId, issue, type: 'title', data: { title }, from: issue.title, to: title })
 }
 
 // ── labels (replace set; one 'labels' activity) ───────────────────────────────
