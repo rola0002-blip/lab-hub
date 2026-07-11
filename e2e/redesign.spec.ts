@@ -152,6 +152,48 @@ test('theme toggle persists across reload', async ({ browser }) => {
   await page.context().close()
 })
 
+test('grouped message body fills the content column, not the 36px avatar gutter (no hover)', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  await createChannel(page, 'grouping')
+  const box = page.getByPlaceholder('Write a message…')
+
+  // Leading message (has the avatar in column 1).
+  await box.fill('first message in the run')
+  await box.press('Enter')
+  await expect(page.getByText('first message in the run')).toBeVisible()
+  await expect(box).toHaveValue('')
+
+  // Second message from the SAME author within 5 min → renders GROUPED: no avatar,
+  // column 1 holds only a hover-reveal <time>. Make it long + multi-line so a
+  // gutter-trapped body would collapse to a ~one-word-per-line sliver.
+  const l1 = 'This is a deliberately long grouped reply line that must fill the wide content column'
+  const l2 = 'and here is a second physical line of the very same grouped message body'
+  await box.fill(l1)
+  await box.press('Shift+Enter')
+  await box.pressSequentially(l2)
+  await box.press('Enter')
+  await expect(box).toHaveValue('')
+
+  const row = page.locator('[data-msg-id]').last()
+  const body = row.locator('p.whitespace-pre-wrap')
+  await expect(body).toContainText(l1)
+  await expect(body).toContainText(l2) // confirms this is the multi-line grouped body
+
+  // Park the pointer away from the row: the bug only manifests WITHOUT hover (an
+  // accidental hover would reveal the <time>, occupy column 1, and mask it).
+  await page.mouse.move(0, 0)
+  const rowBox = await row.boundingBox()
+  const bodyBox = await body.boundingBox()
+  expect(rowBox).not.toBeNull()
+  expect(bodyBox).not.toBeNull()
+  // Broken code auto-places the body into the 36px gutter track (~a few % of the
+  // pane). The fix pins it to column 2, so it spans most of the row width.
+  expect(bodyBox!.width).toBeGreaterThan(rowBox!.width * 0.6)
+
+  await page.context().close()
+})
+
 test('keyboard-only reply: ↑ into the log, r opens the thread, type + send', async ({ browser }) => {
   test.setTimeout(90_000)
   const page = await admin(browser)

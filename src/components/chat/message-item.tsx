@@ -255,8 +255,11 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
           >{clockTime(msg.createdAt)}</time>
         )}
 
-        {/* Column 2 — content. */}
-        <div className="min-w-0">
+        {/* Column 2 — content. Pinned to grid column 2 explicitly: on a grouped row
+            the column-1 gutter <time> is display:none until hover, and without an
+            explicit column the body would auto-place into the 36px gutter track
+            (wrapping ~one word per line) and only jump to the wide column on hover. */}
+        <div className="col-start-2 min-w-0">
           {leading ? (
             <div className="flex items-baseline gap-1.5">
               <span
