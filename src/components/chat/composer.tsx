@@ -24,6 +24,12 @@ type Props = {
   // broadcasts the reply into the channel timeline (broadcast:true on the POST).
   showBroadcast?: boolean
   broadcastLabel?: string
+  // Task 18 (keyboard model): the MAIN pane composer auto-focuses on channel open
+  // and is the Esc-return target (marked with data-main-composer). `onNavigateUp`
+  // fires when ↑ is pressed in an empty composer with no open autocomplete — the
+  // pane uses it to move focus into the message list at the newest row.
+  main?: boolean
+  onNavigateUp?: () => void
 }
 
 type Attach = { path: string; name: string; mime: string; size: number }
@@ -53,7 +59,7 @@ export default function Composer(props: Props) {
   return <ComposerBody key={draftKey} draftKey={draftKey} {...props} />
 }
 
-function ComposerBody({ draftKey, conversationId, selfRole, memberIds, parentId, onSent, onRemove, onFail, showBroadcast = false, broadcastLabel }: Props & { draftKey: string }) {
+function ComposerBody({ draftKey, conversationId, selfRole, memberIds, parentId, onSent, onRemove, onFail, showBroadcast = false, broadcastLabel, main = false, onNavigateUp }: Props & { draftKey: string }) {
   const { users, selfId } = useChat()
   const [raw, setRaw] = useState<string>(() => readDraft(draftKey))
   const [broadcast, setBroadcast] = useState(false)
@@ -218,6 +224,11 @@ function ComposerBody({ draftKey, conversationId, selfRole, memberIds, parentId,
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    // ↑ in an empty main composer (no open autocomplete) enters the message list
+    // at the newest row — the keyboard path back into history.
+    if (main && e.key === 'ArrowUp' && !menu && raw === '' && e.currentTarget.selectionStart === 0) {
+      e.preventDefault(); onNavigateUp?.(); return
+    }
     // Formatting shortcuts (before the menu/Enter branches): Cmd/Ctrl+B/I and
     // Cmd/Ctrl+Shift+C for bold / italic / inline code.
     const mod = e.metaKey || e.ctrlKey
@@ -242,7 +253,7 @@ function ComposerBody({ draftKey, conversationId, selfRole, memberIds, parentId,
           {menu.items.map((it, i) => (
             <li key={it.key}>
               <button type="button" onMouseDown={(e) => { e.preventDefault(); insert(it) }}
-                className={`block w-full px-3 py-1.5 text-left text-sm ${i === activeIdx ? 'bg-accent-subtle text-accent' : 'text-default hover:bg-hover'}`}>
+                className={`block w-full px-3 py-1.5 text-left text-sm ${i === activeIdx ? 'bg-accent-subtle text-[var(--text-accent)]' : 'text-default hover:bg-hover'}`}>
                 {it.label}
               </button>
             </li>
@@ -282,6 +293,7 @@ function ComposerBody({ draftKey, conversationId, selfRole, memberIds, parentId,
         <IconButton label="Attach a file" onClick={() => fileRef.current?.click()}><Paperclip size={16} aria-hidden /></IconButton>
         <textarea ref={taRef} value={raw} rows={1} placeholder={parentId ? 'Reply in thread…' : 'Write a message…'}
           aria-label={parentId ? 'Reply in thread' : 'Write a message'}
+          autoFocus={main} {...(main ? { 'data-main-composer': '' } : {})}
           suppressHydrationWarning
           onChange={(e) => { setRaw(e.target.value); updateMenu(e.target.value, e.target.selectionStart); maybeTyping() }}
           onKeyDown={onKeyDown} onBlur={() => setTimeout(() => setMenu(null), 100)}
@@ -307,7 +319,7 @@ function ComposerBody({ draftKey, conversationId, selfRole, memberIds, parentId,
       <p className="mt-1 text-[11px] text-muted">
         Enter to send · Shift+Enter for a newline · mentions and :emoji: autocomplete (they render once sent).
       </p>
-      {error && <p className="mt-1 text-xs text-[var(--color-danger)]">{error}</p>}
+      {error && <p className="mt-1 text-xs text-[var(--text-danger)]">{error}</p>}
     </div>
   )
 }

@@ -74,7 +74,7 @@ export default function ProfileClient({ user }: { user: ProfileUser }) {
             </button>
             {image && (
               <button type="button" onClick={onRemovePhoto} disabled={busy}
-                className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-[var(--color-danger)] hover:bg-hover disabled:opacity-50">
+                className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-[var(--text-danger)] hover:bg-hover disabled:opacity-50">
                 <Trash2 size={15} aria-hidden /> Remove
               </button>
             )}

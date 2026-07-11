@@ -31,7 +31,7 @@ export function Menu({ button, label, items, buttonClassName }: {
               className={`block w-full rounded-md px-3 py-1.5 text-left text-sm ${
                 it.disabled
                   ? 'cursor-not-allowed text-subtle opacity-50'
-                  : `hover:bg-hover ${it.danger ? 'text-[var(--color-danger)]' : 'text-default'}`
+                  : `hover:bg-hover ${it.danger ? 'text-[var(--text-danger)]' : 'text-default'}`
               }`}>
               {it.label}
             </button>

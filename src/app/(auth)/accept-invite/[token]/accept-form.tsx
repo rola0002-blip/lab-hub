@@ -26,7 +26,7 @@ export default function AcceptForm({ email }: { email: string }) {
       <p className="text-sm text-muted">Signing up as <strong className="text-default">{email}</strong></p>
       <input name="name" required placeholder="Your name" className="w-full rounded-md border border-border bg-surface px-3 py-2" />
       <input name="password" type="password" required minLength={10} placeholder="Password (min 10 chars)" className="w-full rounded-md border border-border bg-surface px-3 py-2" />
-      {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
+      {error && <p className="text-sm text-[var(--text-danger)]">{error}</p>}
       <button disabled={busy} className="w-full rounded-md bg-accent px-3 py-2 font-medium text-accent-on transition-colors hover:bg-accent-hover disabled:opacity-50">{busy ? 'Creating…' : 'Create account'}</button>
     </form>
   )

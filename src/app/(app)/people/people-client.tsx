@@ -41,8 +41,8 @@ export default function PeopleClient({ users, invitations, isAdmin, selfId }: { 
               <li key={i.id} className="flex items-center justify-between p-3 text-sm text-default transition-colors hover:bg-hover">
                 <span>{i.email} · {i.role}</span>
                 <span className="flex gap-2">
-                  <button onClick={() => start(() => resendInviteAction(i.id))} className="text-accent hover:underline">Resend</button>
-                  <button onClick={() => start(() => revokeInviteAction(i.id))} className="text-[var(--color-danger)] hover:underline">Revoke</button>
+                  <button onClick={() => start(() => resendInviteAction(i.id))} className="text-[var(--text-accent)] hover:underline">Resend</button>
+                  <button onClick={() => start(() => revokeInviteAction(i.id))} className="text-[var(--text-danger)] hover:underline">Revoke</button>
                 </span>
               </li>
             ))}
@@ -68,8 +68,8 @@ export default function PeopleClient({ users, invitations, isAdmin, selfId }: { 
                     <option value="guest">Guest</option><option value="member">Member</option><option value="admin">Admin</option>
                   </select>
                   {u.banned
-                    ? <button onClick={() => start(() => reactivateAction(u.id))} className="text-accent hover:underline">Reactivate</button>
-                    : <button onClick={() => { if (confirm(`Deactivate ${u.name}? Their sessions end and future bookings are cancelled.`)) start(() => deactivateAction(u.id)) }} className="text-[var(--color-danger)] hover:underline">Deactivate</button>}
+                    ? <button onClick={() => start(() => reactivateAction(u.id))} className="text-[var(--text-accent)] hover:underline">Reactivate</button>
+                    : <button onClick={() => { if (confirm(`Deactivate ${u.name}? Their sessions end and future bookings are cancelled.`)) start(() => deactivateAction(u.id)) }} className="text-[var(--text-danger)] hover:underline">Deactivate</button>}
                 </span>
               ) : (
                 <span className="rounded-full bg-active px-2 py-0.5 text-xs uppercase tracking-wide text-muted">{u.role}</span>

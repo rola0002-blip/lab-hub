@@ -50,10 +50,10 @@ function DayDivider({ label }: { label: string }) {
 // above the first message the viewer hasn't read yet.
 function NewMessagesDivider() {
   return (
-    <div role="separator" aria-label="New messages" tabIndex={-1} className="my-2 flex items-center gap-2">
-      <div className="h-px flex-1 bg-[var(--color-danger)]" />
-      <span className="text-2xs font-semibold uppercase tracking-wide text-[var(--color-danger)]">New</span>
-      <div className="h-px flex-1 bg-[var(--color-danger)]" />
+    <div role="separator" aria-label="New messages" className="my-2 flex items-center gap-2">
+      <div className="h-px flex-1 bg-[var(--text-danger)]" />
+      <span className="text-2xs font-semibold uppercase tracking-wide text-[var(--text-danger)]">New</span>
+      <div className="h-px flex-1 bg-[var(--text-danger)]" />
     </div>
   )
 }
@@ -73,6 +73,10 @@ export default function MessagePane({ conversationId, conversationType, channelN
   const [firstUnreadId, setFirstUnreadId] = useState<string | null>(null)
   const [atBottom, setAtBottom] = useState(true)
   const [newCount, setNewCount] = useState(0)
+  // Roving focus (Task 18): the id of the message row that is the single tab stop.
+  // null falls back to the newest row, so Tab / ↑-from-composer always lands on
+  // the latest message; focusing or arrowing to a row updates it.
+  const [activeMsgId, setActiveMsgId] = useState<string | null>(null)
   // Channel-intro "Add people" opens the same members dialog the ⋯ menu uses.
   const [membersOpen, setMembersOpen] = useState(false)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -175,10 +179,23 @@ export default function MessagePane({ conversationId, conversationType, channelN
           return
         }
         upsert(m); markRead()
-        // A new message from someone else that lands while we're scrolled up feeds
-        // the "N new" pill on the jump button. System rows (created/joined lines)
-        // never contribute to the unread pill.
-        if (isNew && m.kind !== 'system' && m.author.id !== selfId && !atBottomRef.current) setNewCount((n) => n + 1)
+        // A genuinely-new inbound message (this handler already filters to the
+        // current conversation and this branch drops our own echo + system rows,
+        // and backfill never routes through here) is announced to assistive tech
+        // via the app-shell #live-msgs region, and — when we're scrolled up — feeds
+        // the "N new" pill on the jump button. We announce ARRIVAL + author, not the
+        // body: the body already lives in the (role="log") message list, so echoing
+        // it here would both double-announce and duplicate the text node.
+        if (isNew && m.kind !== 'system' && m.author.id !== selfId) {
+          const live = document.getElementById('live-msgs')
+          if (live) {
+            const p = document.createElement('p')
+            p.textContent = `New message from ${m.author.name}`
+            live.appendChild(p)
+            while (live.childElementCount > 20) live.firstElementChild?.remove()
+          }
+          if (!atBottomRef.current) setNewCount((n) => n + 1)
+        }
       })
     }
     if (e.t === 'typing') {
@@ -229,6 +246,42 @@ export default function MessagePane({ conversationId, conversationType, channelN
     if (el?.dataset.root === 'true' && el.dataset.msgId) setThreadRoot(el.dataset.msgId)
   })
 
+  // Roving keyboard model for the message log. Focus a row, then ↑/↓/Home/End move
+  // focus (and the single tab stop) between rows; Esc returns to the composer.
+  const focusComposer = useCallback(() => {
+    document.querySelector<HTMLTextAreaElement>('[data-main-composer]')?.focus()
+  }, [])
+  const focusRow = useCallback((el: HTMLElement | undefined) => {
+    if (!el) return
+    setActiveMsgId(el.dataset.msgId ?? null)
+    el.focus()
+    el.scrollIntoView({ block: 'nearest' })
+  }, [])
+  const onListKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const row = (e.target as HTMLElement).closest<HTMLElement>('[data-msg-id]')
+    if (!row) return
+    if (e.key === 'Escape') { e.preventDefault(); focusComposer(); return }
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown' && e.key !== 'Home' && e.key !== 'End') return
+    const rows = Array.from(scroller.current?.querySelectorAll<HTMLElement>('[data-msg-id]') ?? [])
+    const i = rows.indexOf(row)
+    if (i < 0) return
+    e.preventDefault()
+    const next = e.key === 'ArrowUp' ? Math.max(0, i - 1)
+      : e.key === 'ArrowDown' ? Math.min(rows.length - 1, i + 1)
+      : e.key === 'Home' ? 0 : rows.length - 1
+    focusRow(rows[next])
+  }, [focusComposer, focusRow])
+  // Track the roving tab stop as focus enters a row (Tab, click, or arrow).
+  const onListFocus = useCallback((e: React.FocusEvent) => {
+    const id = (e.target as HTMLElement).closest<HTMLElement>('[data-msg-id]')?.dataset.msgId
+    if (id) setActiveMsgId(id)
+  }, [])
+  // ↑ from the empty composer enters the list at the newest row.
+  const enterListAtNewest = useCallback(() => {
+    const rows = scroller.current?.querySelectorAll<HTMLElement>('[data-msg-id]')
+    focusRow(rows?.[rows.length - 1])
+  }, [focusRow])
+
   const loadEarlier = useCallback(async () => {
     if (!messages.length) return
     const r = await fetch(`/api/chat/conversations/${conversationId}/messages?before=${messages[0].id}`)
@@ -274,6 +327,11 @@ export default function MessagePane({ conversationId, conversationType, channelN
   const title = isDm ? dmTitle : `#${channelName}`
   const names = new Map(users.map((u) => [u.id, u.name]))
   const now = new Date() // viewer-local reference for day-divider labels (client render)
+  // Exactly one row is a tab stop: the active row, or the newest message when
+  // nothing is active yet (or the active row scrolled out of the loaded window).
+  const rovingId = (activeMsgId && messages.some((m) => m.id === activeMsgId))
+    ? activeMsgId
+    : [...messages].reverse().find((m) => m.kind !== 'system')?.id ?? null
 
   return (
     <div className="flex h-full min-w-0 flex-1">
@@ -291,7 +349,9 @@ export default function MessagePane({ conversationId, conversationType, channelN
           <ConversationMenu conversationId={conversationId} conversationType={conversationType}
             channelName={channelName} archived={archived} manage={manage} />
         </header>
-        <div ref={scroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
+        <div ref={scroller} onScroll={onScroll} onKeyDown={onListKeyDown} onFocus={onListFocus}
+          role="log" aria-label="Messages" aria-live="off"
+          className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
           {/* Initial load shows skeleton rows instead of a blank/flash of the wrong
               intro; it clears as soon as the first fetch resolves. */}
           {loading && <MessageListSkeleton />}
@@ -327,6 +387,7 @@ export default function MessagePane({ conversationId, conversationType, channelN
                 {dayChanged && <DayDivider label={dayLabel(m.createdAt, now)} />}
                 {isFirstUnread && <NewMessagesDivider />}
                 <MessageItem msg={m} prev={groupPrev} names={names} selfId={selfId} selfRole={selfRole}
+                  tabIndex={m.id === rovingId ? 0 : -1}
                   forceLeading={isFirstUnread} onUpdated={upsert} onOpenThread={() => setThreadRoot(m.id)} onRetry={retrySend} />
               </Fragment>
             )
@@ -343,7 +404,7 @@ export default function MessagePane({ conversationId, conversationType, channelN
         )}
         {archived
           ? <p className="border-t border-border p-3 text-sm text-muted">This conversation is archived.</p>
-          : <Composer conversationId={conversationId} selfRole={selfRole} memberIds={memberIds} onSent={upsert} onRemove={remove} onFail={markFailed} />}
+          : <Composer main onNavigateUp={enterListAtNewest} conversationId={conversationId} selfRole={selfRole} memberIds={memberIds} onSent={upsert} onRemove={remove} onFail={markFailed} />}
       </div>
       {threadRoot && (
         <ThreadPanel rootId={threadRoot} conversationId={conversationId} conversationType={conversationType} channelName={channelName}

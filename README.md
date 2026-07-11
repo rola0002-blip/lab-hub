@@ -16,6 +16,42 @@ direct @mentions).
 Membership is the single authorization rule: you only ever read, search, or
 receive events for conversations you are a member of.
 
+## Design system & theming
+
+The UI is driven entirely by semantic design tokens defined in
+`src/app/globals.css`: static scales (type, spacing, radius, the teal ramp,
+motion curves) in `@theme`, then semantic roles — `bg-canvas`, `bg-surface`,
+`text-default`/`-muted`/`-subtle`, `border-*`, `accent`, `ring-focus`,
+`sidebar-*` — resolved twice, once for light (`:root`) and once for dark
+(`:root[data-theme="dark"]`). Components never hardcode gray/black/white; they use
+these tokens, so both themes come for free.
+
+**Light / dark.** The active theme is the `data-theme` attribute on `<html>`. A
+tiny pre-paint boot script (the sole sanctioned `dangerouslySetInnerHTML`) reads
+`localStorage.theme` — or the OS preference — before first paint, so there is no
+flash. The header/​profile toggle writes `data-theme` + `localStorage`, and
+persists the choice to `User.themePreference` so it follows you across devices.
+
+**Accent presets.** Ten accents (teal is the default) live in `src/lib/accents.ts`
+as `{ slug, name, light, dark }`. The active slug is the `data-accent` attribute on
+`<html>`; `globals.css` repaints the accent-role tokens (`--accent`, `-hover`,
+`-active`, `-subtle`, `-on`, `--ring-focus`, `--border-focus`, `--text-link`,
+`--text-accent`, `--bg-selected`) for that slug in the current theme. It persists
+via `localStorage.accent` + `User.accentPreference`. The teal-slate sidebar rail
+(`--sidebar-*`) is **never** accent-themed.
+
+**Profile.** Each user has a profile at `/profile` (reached from the top-bar avatar
+menu, outside the primary nav): photo upload, display name, title, timezone, and an
+Appearance section with the theme toggle + accent picker.
+
+**Accessibility.** Landmark regions (nav / search / main / thread) with F6 cycling,
+an SSE live region for new messages, roving-focus message navigation, a
+focus-trapped responsive nav drawer, and reduced-motion support. Two gates guard
+it: `npm run contrast` (`scripts/check-contrast.mjs`) statically checks WCAG
+contrast for the semantic token pairs and all 10 accents in both themes, and the
+`e2e/a11y.spec.ts` axe-core sweep asserts zero serious/critical violations on every
+core surface in both themes.
+
 ## Install (any org)
 
 Requirements: Docker + Docker Compose. Optional: a Cloudflare Tunnel token for public access.
@@ -83,5 +119,6 @@ For the full freeze → export → verify → announce → rollback procedure, s
 
 - `npm run test:unit` — pure logic (policy engine, recurrence, chips, templates)
 - `npm run test:int` — services + API against real Postgres (`labhub_test`)
-- `npm run test:e2e` — Playwright journeys
+- `npm run test:e2e` — Playwright journeys, incl. `e2e/a11y.spec.ts` (axe-core, both themes)
 - `npm run coverage` — ≥85% gate on src/lib + src/features (unit + integration)
+- `npm run contrast` — WCAG contrast gate over the token pairs + all 10 accents × both themes

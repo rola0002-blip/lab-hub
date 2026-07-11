@@ -23,7 +23,7 @@ export default function Matrix({ users, equipment, certs, editable }: Props) {
 
   return (
     <div className="mt-6 overflow-x-auto rounded-xl border border-border bg-surface shadow-xs">
-      {msg && <p className="p-2 text-sm text-[var(--color-danger)]">{msg}</p>}
+      {msg && <p className="p-2 text-sm text-[var(--text-danger)]">{msg}</p>}
       <table className="min-w-full border-collapse text-sm">
         <thead>
           <tr>

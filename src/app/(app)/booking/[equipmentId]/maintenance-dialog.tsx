@@ -39,7 +39,7 @@ export default function MaintenanceDialogButton({ equipmentId }: { equipmentId: 
             <label className="block text-sm">From<input type="datetime-local" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2" /></label>
             <label className="block text-sm">To<input type="datetime-local" value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2" /></label>
             <label className="block text-sm">Reason<input value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder="e.g. heater replacement" className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2" /></label>
-            {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
+            {error && <p className="text-sm text-[var(--text-danger)]">{error}</p>}
             {conflicts.length > 0 && (
               <div className="rounded-md bg-[var(--color-warning)]/12 p-3 text-sm text-default">
                 <p className="font-medium">These bookings will be CANCELLED and owners notified:</p>

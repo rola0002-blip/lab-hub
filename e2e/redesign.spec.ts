@@ -120,3 +120,78 @@ test('profile: rename + accent switch persist across reload', async ({ browser }
 
   await page.context().close()
 })
+
+test('theme toggle persists across reload', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  const html = page.locator('html')
+  await page.goto('/dashboard')
+  // Fresh context defaults to light (no stored choice, Playwright's light scheme).
+  await expect(html).toHaveAttribute('data-theme', 'light')
+  // The toggle's accessible name names the TARGET theme.
+  await page.getByRole('button', { name: 'Switch to dark theme' }).click()
+  await expect(html).toHaveAttribute('data-theme', 'dark')
+  // Persisted via localStorage (pre-paint) + account, so a reload stays dark.
+  await page.reload()
+  await expect(html).toHaveAttribute('data-theme', 'dark')
+  await page.getByRole('button', { name: 'Switch to light theme' }).click()
+  await expect(html).toHaveAttribute('data-theme', 'light')
+  await page.context().close()
+})
+
+test('keyboard-only reply: ↑ into the log, r opens the thread, type + send', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  await createChannel(page, 'keys')
+  const box = page.getByPlaceholder('Write a message…')
+  await box.fill('root message for keyboard reply')
+  await box.press('Enter')
+  await expect(page.getByText('root message for keyboard reply')).toBeVisible()
+  // Wait for the send to settle so the composer is genuinely empty — the ↑ guard
+  // only fires on an empty composer (the message renders optimistically first).
+  await expect(box).toHaveValue('')
+
+  // ↑ in the (now empty) composer enters the message log at the newest row…
+  await box.focus()
+  await box.press('ArrowUp')
+  await expect(page.locator('[data-msg-id]').last()).toBeFocused()
+  // …then `r` opens the thread on the focused message (pane-scoped hotkey).
+  await page.keyboard.press('r')
+  const threadBox = page.getByPlaceholder('Reply in thread…')
+  await expect(threadBox).toBeVisible()
+  await threadBox.fill('keyboard-only reply body')
+  await threadBox.press('Enter')
+  // Wait for the reply to settle so the thread composer clears — otherwise
+  // getByText would also match the textarea's lingering value.
+  await expect(threadBox).toHaveValue('')
+  await expect(page.getByText('keyboard-only reply body')).toBeVisible()
+  await expect(page.getByRole('button', { name: /1 reply/ })).toBeVisible()
+  await page.context().close()
+})
+
+test('deep-link scrolls the linked message into view', async ({ browser }) => {
+  test.setTimeout(120_000)
+  const page = await admin(browser)
+  const cid = await createChannel(page, 'links')
+  // Seed via the API (fast, no composer busy-race): a target then enough fillers
+  // to push it well above the fold.
+  const first = await page.request.post('/api/chat/messages', { data: { conversationId: cid, body: 'deep link target' } })
+  expect(first.status()).toBe(201)
+  const targetId = (await first.json()).message.id as string
+  // 24 fillers (25 sends total) stays under the 30/60s per-user send limit while
+  // comfortably overflowing the message pane so the target sits above the fold.
+  for (let i = 0; i < 24; i++) {
+    const r = await page.request.post('/api/chat/messages', { data: { conversationId: cid, body: `filler ${i}` } })
+    expect(r.status()).toBe(201)
+  }
+
+  const target = page.locator(`[data-msg-id="${targetId}"]`)
+  // Opening the channel normally lands at the newest message; the target is above the fold.
+  await page.goto('/chat/' + cid)
+  await expect(page.getByText('filler 23')).toBeVisible()
+  await expect(target).not.toBeInViewport()
+  // The ?msg= deep-link consumes the target and scrolls it into view.
+  await page.goto(`/chat/${cid}?msg=${targetId}`)
+  await expect(target).toBeInViewport()
+  await page.context().close()
+})

@@ -26,9 +26,9 @@ export default function SignInPage() {
   return (
     <form onSubmit={onSubmit} className="w-full max-w-sm space-y-4 rounded-xl border border-border bg-surface p-8 shadow-sm">
       <h1 className="text-xl font-semibold text-default">Sign in</h1>
-      <input name="email" type="email" required placeholder="Email" className="w-full rounded-md border border-border bg-surface px-3 py-2" />
-      <input name="password" type="password" required placeholder="Password" className="w-full rounded-md border border-border bg-surface px-3 py-2" />
-      {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
+      <input name="email" type="email" required placeholder="Email" aria-label="Email" className="w-full rounded-md border border-border bg-surface px-3 py-2" />
+      <input name="password" type="password" required placeholder="Password" aria-label="Password" className="w-full rounded-md border border-border bg-surface px-3 py-2" />
+      {error && <p className="text-sm text-[var(--text-danger)]">{error}</p>}
       <button disabled={busy} className="w-full rounded-md bg-accent px-3 py-2 font-medium text-accent-on transition-colors hover:bg-accent-hover disabled:opacity-50">
         {busy ? 'Signing in…' : 'Sign in'}
       </button>

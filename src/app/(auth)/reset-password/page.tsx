@@ -19,7 +19,7 @@ function ResetForm() {
     <form onSubmit={onSubmit} className="w-full max-w-sm space-y-4 rounded-xl border border-border bg-surface p-8 shadow-sm">
       <h1 className="text-xl font-semibold text-default">Choose a new password</h1>
       <input name="password" type="password" required minLength={10} placeholder="New password (min 10 chars)" className="w-full rounded-md border border-border bg-surface px-3 py-2" />
-      {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
+      {error && <p className="text-sm text-[var(--text-danger)]">{error}</p>}
       <button className="w-full rounded-md bg-accent px-3 py-2 font-medium text-accent-on transition-colors hover:bg-accent-hover">Set password</button>
     </form>
   )

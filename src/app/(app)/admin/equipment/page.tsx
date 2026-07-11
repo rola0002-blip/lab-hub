@@ -18,7 +18,7 @@ export default async function EquipmentAdminPage() {
           <li key={e.id} className={`flex items-center justify-between p-3 text-sm text-default transition-colors hover:bg-hover ${e.status === 'RETIRED' ? 'opacity-50' : ''}`}>
             <span>{e.name} <span className="text-muted">· {e.location}</span>{e.status === 'RETIRED' && ' · retired'}</span>
             <span className="flex items-center gap-3">
-              <Link href={`/admin/equipment/${e.id}`} className="text-accent hover:underline">Edit</Link>
+              <Link href={`/admin/equipment/${e.id}`} className="text-[var(--text-accent)] hover:underline">Edit</Link>
               {e.status === 'ACTIVE' && <RetireButton id={e.id} name={e.name} futureCount={e._count.bookings} />}
             </span>
           </li>

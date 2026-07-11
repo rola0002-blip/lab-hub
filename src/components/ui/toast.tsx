@@ -30,7 +30,7 @@ export function ToastHost() {
             <button
               type="button"
               onClick={() => { t.action!.onClick(); toastStore.dismiss(t.id) }}
-              className="shrink-0 rounded-md px-2 py-1 text-sm font-semibold text-accent transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]"
+              className="shrink-0 rounded-md px-2 py-1 text-sm font-semibold text-[var(--text-accent)] transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]"
             >
               {t.action.label}
             </button>

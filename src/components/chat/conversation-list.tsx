@@ -27,7 +27,7 @@ export default function ConversationList({ role }: { role: string }) {
     // still fires so an @you can't be silenced. Selected wins the styling for the
     // conversation you're actively reading.
     const cls = selected
-      ? 'bg-selected text-accent font-semibold'
+      ? 'bg-selected text-[var(--text-accent)] font-semibold'
       : c.muted
         ? 'text-subtle hover:bg-hover'
         : c.unread > 0

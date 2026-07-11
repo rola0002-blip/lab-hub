@@ -70,7 +70,7 @@ export default function ThreadPanel({ rootId, conversationId, conversationType, 
   }, [onClose])
 
   return (
-    <aside className="flex w-[22rem] shrink-0 flex-col border-l border-border lg:w-[26rem]">
+    <aside aria-label="Thread" data-region-root tabIndex={-1} className="flex w-[22rem] shrink-0 flex-col border-l border-border outline-none lg:w-[26rem]">
       <header className="flex items-center justify-between border-b border-border px-3 py-2">
         <h2 className="text-sm font-semibold">Thread</h2>
         <button onClick={onClose} aria-label="Close thread" className="rounded p-1 text-muted hover:bg-hover">✕</button>

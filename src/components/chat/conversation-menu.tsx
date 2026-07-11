@@ -60,7 +60,7 @@ export default function ConversationMenu({ conversationId, conversationType, cha
     } catch { /* archive failed; channel stays active */ } finally { setBusy(false); setConfirmArchive(false) }
   }
 
-  const item = 'block w-full px-3 py-1.5 text-left text-sm hover:bg-gray-100 disabled:opacity-50'
+  const item = 'block w-full px-3 py-1.5 text-left text-sm hover:bg-hover disabled:opacity-50'
 
   return (
     <div className="relative" ref={ref}>
@@ -69,7 +69,7 @@ export default function ConversationMenu({ conversationId, conversationType, cha
         <Ellipsis size={18} />
       </button>
       {open && (
-        <div className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+        <div className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-md border border-border bg-surface py-1 shadow-menu">
           <button onClick={toggleMute} className={item}>{muted ? 'Unmute' : 'Mute'}</button>
           {isChannel && manage && !archived && (
             <button onClick={() => { setOpen(false); setDialog('edit') }} className={item}>Edit channel…</button>
@@ -77,7 +77,7 @@ export default function ConversationMenu({ conversationId, conversationType, cha
           {isChannel && <button onClick={() => { setOpen(false); setDialog('members') }} className={item}>Members…</button>}
           {isChannel && <button onClick={leave} className={item}>Leave channel</button>}
           {isChannel && manage && !archived && (
-            <button onClick={() => { setOpen(false); setConfirmArchive(true) }} className={`${item} text-red-600`}>Archive channel</button>
+            <button onClick={() => { setOpen(false); setConfirmArchive(true) }} className={`${item} text-[var(--text-danger)]`}>Archive channel</button>
           )}
         </div>
       )}
@@ -93,9 +93,9 @@ export default function ConversationMenu({ conversationId, conversationType, cha
 
       {confirmArchive && (
         <Modal title="Archive channel?" onClose={() => setConfirmArchive(false)}>
-          <p className="mt-2 text-sm text-gray-600">Archiving #{channelName} hides it for everyone and stops new messages. This can’t be undone here.</p>
+          <p className="mt-2 text-sm text-muted">Archiving #{channelName} hides it for everyone and stops new messages. This can’t be undone here.</p>
           <div className="mt-4 flex justify-end gap-2">
-            <button onClick={() => setConfirmArchive(false)} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm">Cancel</button>
+            <button onClick={() => setConfirmArchive(false)} className="rounded-md border border-border px-3 py-1.5 text-sm">Cancel</button>
             <button onClick={archive} disabled={busy} className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">
               {busy ? 'Archiving…' : 'Archive'}
             </button>
@@ -155,26 +155,26 @@ export function MembersDialog({ conversationId, channelName, manage, onClose }: 
     <Modal title={`Members of #${channelName ?? ''}`} onClose={onClose}>
       <div className="mt-3 max-h-56 space-y-0.5 overflow-y-auto">
         {memberIds.map((id) => (
-          <div key={id} className="flex items-center justify-between rounded-md px-3 py-1.5 text-sm hover:bg-gray-50">
-            <span>{names.get(id) ?? 'unknown'}{id === selfId && <span className="ml-1 text-[11px] text-gray-400">you</span>}</span>
+          <div key={id} className="flex items-center justify-between rounded-md px-3 py-1.5 text-sm hover:bg-hover">
+            <span>{names.get(id) ?? 'unknown'}{id === selfId && <span className="ml-1 text-[11px] text-subtle">you</span>}</span>
             {manage && id !== selfId && (
-              <button onClick={() => remove(id)} disabled={busy} className="text-xs text-red-600 hover:underline disabled:opacity-50">Remove</button>
+              <button onClick={() => remove(id)} disabled={busy} className="text-xs text-[var(--text-danger)] hover:underline disabled:opacity-50">Remove</button>
             )}
           </div>
         ))}
       </div>
 
       {manage && (
-        <div className="mt-4 border-t border-gray-200 pt-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Add people</p>
+        <div className="mt-4 border-t border-border pt-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-subtle">Add people</p>
           <div className="mt-2 max-h-40 space-y-0.5 overflow-y-auto">
-            {candidates.length === 0 && <p className="px-1 text-sm text-gray-500">Everyone is already a member.</p>}
+            {candidates.length === 0 && <p className="px-1 text-sm text-subtle">Everyone is already a member.</p>}
             {candidates.map((u) => {
               const on = picked.has(u.id)
               return (
                 <button key={u.id} onClick={() => toggle(u.id)}
-                  className={`flex w-full items-center justify-between rounded-md px-3 py-1.5 text-left text-sm ${on ? 'bg-accent/10 text-accent' : 'hover:bg-gray-100'}`}>
-                  <span>{u.name}{u.role === 'guest' && <span className="ml-1 text-[11px] text-gray-400">guest</span>}</span>
+                  className={`flex w-full items-center justify-between rounded-md px-3 py-1.5 text-left text-sm ${on ? 'bg-accent-subtle text-[var(--text-accent)]' : 'hover:bg-hover'}`}>
+                  <span>{u.name}{u.role === 'guest' && <span className="ml-1 text-[11px] text-subtle">guest</span>}</span>
                   {on && <span aria-hidden>✓</span>}
                 </button>
               )
@@ -188,7 +188,7 @@ export function MembersDialog({ conversationId, channelName, manage, onClose }: 
           </div>
         </div>
       )}
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-2 text-sm text-[var(--text-danger)]">{error}</p>}
     </Modal>
   )
 }
@@ -223,15 +223,15 @@ function EditChannelDialog({ conversationId, initialName, initialTopic, onClose 
     <Modal title="Edit channel" onClose={onClose}>
       <label className="mt-4 block text-sm">Name
         <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} autoFocus
-          className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
+          className="mt-1 w-full rounded-md border border-border px-3 py-2" />
       </label>
-      <label className="mt-3 block text-sm">Topic <span className="text-gray-400">(optional)</span>
+      <label className="mt-3 block text-sm">Topic <span className="text-subtle">(optional)</span>
         <input value={topic} onChange={(e) => setTopic(e.target.value)} maxLength={200}
-          placeholder="What's this channel about?" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
+          placeholder="What's this channel about?" className="mt-1 w-full rounded-md border border-border px-3 py-2" />
       </label>
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-2 text-sm text-[var(--text-danger)]">{error}</p>}
       <div className="mt-4 flex justify-end gap-2">
-        <button onClick={onClose} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm">Cancel</button>
+        <button onClick={onClose} className="rounded-md border border-border px-3 py-1.5 text-sm">Cancel</button>
         <button onClick={save} disabled={busy || !name.trim()}
           className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">
           {busy ? 'Saving…' : 'Save'}

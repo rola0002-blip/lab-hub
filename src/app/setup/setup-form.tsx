@@ -38,7 +38,7 @@ export default function SetupForm() {
       <label className="block text-sm">Your name<input name="adminName" required className={input} /></label>
       <label className="block text-sm">Email<input name="adminEmail" type="email" required className={input} /></label>
       <label className="block text-sm">Password (min 10 chars)<input name="adminPassword" type="password" minLength={10} required className={input} /></label>
-      {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
+      {error && <p className="text-sm text-[var(--text-danger)]">{error}</p>}
       <button disabled={busy} className="rounded-md bg-accent px-4 py-2 font-medium text-accent-on transition-colors hover:bg-accent-hover disabled:opacity-50">{busy ? 'Setting up…' : 'Finish setup'}</button>
     </form>
   )

@@ -72,18 +72,18 @@ export function BrowseAndCreate() {
           {mode === 'browse' ? (
             <>
               <div className="mt-3 max-h-72 space-y-1 overflow-y-auto">
-                {error && <p className="text-sm text-red-600">{error}</p>}
-                {!error && rows === null && <p className="text-sm text-gray-500">Loading…</p>}
-                {!error && rows?.length === 0 && <p className="text-sm text-gray-500">No public channels yet.</p>}
+                {error && <p className="text-sm text-[var(--text-danger)]">{error}</p>}
+                {!error && rows === null && <p className="text-sm text-subtle">Loading…</p>}
+                {!error && rows?.length === 0 && <p className="text-sm text-subtle">No public channels yet.</p>}
                 {rows?.map((c) => (
-                  <div key={c.id} className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2">
+                  <div key={c.id} className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">#{c.name}</p>
-                      {c.topic && <p className="truncate text-xs text-gray-500">{c.topic}</p>}
-                      <p className="text-[11px] text-gray-400">{c.memberCount} {c.memberCount === 1 ? 'member' : 'members'}</p>
+                      {c.topic && <p className="truncate text-xs text-subtle">{c.topic}</p>}
+                      <p className="text-[11px] text-subtle">{c.memberCount} {c.memberCount === 1 ? 'member' : 'members'}</p>
                     </div>
                     {c.isMember
-                      ? <span className="shrink-0 text-xs font-medium text-gray-400">Joined</span>
+                      ? <span className="shrink-0 text-xs font-medium text-subtle">Joined</span>
                       : <button onClick={() => join(c.id)} disabled={busy === c.id}
                           className="shrink-0 rounded-md bg-accent px-3 py-1 text-xs font-medium text-white disabled:opacity-50">
                           {busy === c.id ? 'Joining…' : 'Join'}
@@ -99,19 +99,19 @@ export function BrowseAndCreate() {
             <>
               <label className="mt-4 block text-sm">Name
                 <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} autoFocus
-                  placeholder="e.g. cvd-lab" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
+                  placeholder="e.g. cvd-lab" className="mt-1 w-full rounded-md border border-border px-3 py-2" />
               </label>
-              <label className="mt-3 block text-sm">Topic <span className="text-gray-400">(optional)</span>
+              <label className="mt-3 block text-sm">Topic <span className="text-subtle">(optional)</span>
                 <input value={topic} onChange={(e) => setTopic(e.target.value)} maxLength={200}
-                  placeholder="What's this channel about?" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
+                  placeholder="What's this channel about?" className="mt-1 w-full rounded-md border border-border px-3 py-2" />
               </label>
               <label className="mt-3 flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
                 <span className="inline-flex items-center gap-1">Private (invitation only) <Lock size={13} aria-hidden /></span>
               </label>
-              {createErr && <p className="mt-2 text-sm text-red-600">{createErr}</p>}
+              {createErr && <p className="mt-2 text-sm text-[var(--text-danger)]">{createErr}</p>}
               <div className="mt-4 flex justify-between">
-                <button onClick={() => { setMode('browse'); setCreateErr(null) }} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm">Back</button>
+                <button onClick={() => { setMode('browse'); setCreateErr(null) }} className="rounded-md border border-border px-3 py-1.5 text-sm">Back</button>
                 <button onClick={create} disabled={creating || !name.trim()}
                   className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">
                   {creating ? 'Creating…' : 'Create channel'}
@@ -170,25 +170,25 @@ export function NewDmButton() {
       <IconButton label="New direct message" onClick={() => setOpen(true)}><Plus size={18} /></IconButton>
       {open && (
         <Modal title="New message" onClose={close}>
-          <p className="mt-1 text-xs text-gray-500">Pick up to 7 people ({picked.size} selected).</p>
+          <p className="mt-1 text-xs text-subtle">Pick up to 7 people ({picked.size} selected).</p>
           <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search people…"
-            className="mt-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
+            className="mt-3 w-full rounded-md border border-border px-3 py-2 text-sm" />
           <div className="mt-2 max-h-64 space-y-0.5 overflow-y-auto">
-            {candidates.length === 0 && <p className="p-2 text-sm text-gray-500">No people found.</p>}
+            {candidates.length === 0 && <p className="p-2 text-sm text-subtle">No people found.</p>}
             {candidates.map((u) => {
               const on = picked.has(u.id)
               return (
                 <button key={u.id} onClick={() => toggle(u.id)}
-                  className={`flex w-full items-center justify-between rounded-md px-3 py-1.5 text-left text-sm ${on ? 'bg-accent/10 text-accent' : 'hover:bg-gray-100'}`}>
-                  <span>{u.name}{u.role === 'guest' && <span className="ml-1 text-[11px] text-gray-400">guest</span>}</span>
+                  className={`flex w-full items-center justify-between rounded-md px-3 py-1.5 text-left text-sm ${on ? 'bg-accent-subtle text-[var(--text-accent)]' : 'hover:bg-hover'}`}>
+                  <span>{u.name}{u.role === 'guest' && <span className="ml-1 text-[11px] text-subtle">guest</span>}</span>
                   {on && <span aria-hidden>✓</span>}
                 </button>
               )
             })}
           </div>
-          {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+          {error && <p className="mt-2 text-sm text-[var(--text-danger)]">{error}</p>}
           <div className="mt-4 flex justify-end gap-2">
-            <button onClick={close} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm">Cancel</button>
+            <button onClick={close} className="rounded-md border border-border px-3 py-1.5 text-sm">Cancel</button>
             <button onClick={start} disabled={busy || picked.size === 0}
               className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">
               {busy ? 'Starting…' : 'Start'}

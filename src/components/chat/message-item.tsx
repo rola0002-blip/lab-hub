@@ -103,11 +103,11 @@ function renderToken(t: Token, key: number, names: Names, selfId: string | undef
     // non-http(s) url never reaches here. `label` is the visible text of a
     // markdown link; a bare-URL link (label undefined) shows its url.
     case 'link': return <a key={key} href={t.value} target="_blank" rel="noreferrer" className="text-link hover:underline">{t.label ?? t.value}</a>
-    case 'channel': return <span key={key} className="rounded bg-accent-subtle px-1 font-medium text-accent">@channel</span>
+    case 'channel': return <span key={key} className="rounded bg-accent-subtle px-1 font-medium text-[var(--text-accent)]">@channel</span>
     case 'mention': {
       const isSelf = !!selfId && t.userId === selfId
       return (
-        <span key={key} className={`rounded px-1 font-medium text-accent ${isSelf ? 'bg-mention' : 'bg-accent-subtle'}`}>
+        <span key={key} className={`rounded px-1 font-medium text-[var(--text-accent)] ${isSelf ? 'bg-mention' : 'bg-accent-subtle'}`}>
           @{names.get(t.userId ?? t.value) ?? 'unknown'}
         </span>
       )
@@ -145,9 +145,13 @@ type Props = {
   // Task 13: rendered as the root INSIDE the thread panel. Suppresses the
   // thread affordances (facepile + "reply in thread") that are redundant there.
   inThread?: boolean
+  // Task 18 (roving focus): the main pane makes exactly one row a tab stop (the
+  // active/newest one) and the rest tabIndex=-1, reachable via ↑/↓. Defaults to a
+  // normal tab stop for the thread panel, which isn't roving.
+  tabIndex?: number
 }
 
-export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpdated, onOpenThread, forceLeading = false, onRetry, inThread = false }: Props) {
+export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpdated, onOpenThread, forceLeading = false, onRetry, inThread = false, tabIndex = 0 }: Props) {
   const { online } = useChat()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(msg.body)
@@ -235,7 +239,7 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
     // resolve to; focus also reveals the toolbar (group-focus-within), so the
     // toolbar is reachable by keyboard, not hover alone.
     <div
-      tabIndex={0}
+      tabIndex={tabIndex}
       data-msg-id={msg.id}
       data-root={String(!msg.parentId)}
       className={`group relative grid grid-cols-[36px_1fr] gap-2 border-l-2 px-4 py-0.5 outline-none transition-opacity duration-200 hover:bg-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)] ${leading ? 'pt-2' : ''} ${isTemp ? 'opacity-60' : 'opacity-100'} ${selfMention ? 'border-[var(--accent)] bg-mention' : 'border-transparent'}`}>
@@ -315,7 +319,7 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
                     aria-pressed={mine}
                     aria-label={`${emojiLabel(rx.emoji)}, ${rx.userIds.length}, react`}
                     title={whoReacted(rx.userIds, names)}
-                    className={`inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs tabular-nums ${mine ? 'border-accent bg-accent-subtle font-semibold text-accent' : 'border-border text-muted hover:border-border-strong'}`}>
+                    className={`inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs tabular-nums ${mine ? 'border-accent bg-accent-subtle font-semibold text-[var(--text-accent)]' : 'border-border text-muted hover:border-border-strong'}`}>
                     {/* Keyed by count so an add remounts the glyph and replays the
                         pop (motion-safe only — skipped under reduced-motion). */}
                     <span key={rx.userIds.length} aria-hidden className="motion-safe:animate-pop">{rx.emoji}</span>
@@ -344,7 +348,7 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
                   </span>
                 ))}
               </span>
-              <span className="text-xs font-medium text-accent">
+              <span className="text-xs font-medium text-[var(--text-accent)]">
                 {msg.replyCount} {msg.replyCount === 1 ? 'reply' : 'replies'}
               </span>
               {msg.lastReplyAt && (
@@ -354,7 +358,7 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
           )}
 
           {isTemp && msg.sendFailed && (
-            <p className="mt-0.5 text-xs text-[var(--color-danger)]">
+            <p className="mt-0.5 text-xs text-[var(--text-danger)]">
               Not delivered ·{' '}
               <button type="button" onClick={() => onRetry?.(msg)} className="font-medium underline">Retry</button>
             </p>
@@ -365,7 +369,7 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
           // Lucide icons only (emoji stays content). Reachable on hover OR keyboard
           // focus (group-focus-within); kept `flex` while the emoji picker is open
           // so moving the cursor into the popover doesn't collapse the toolbar.
-          <div className={`absolute -top-3 right-2 z-10 items-center gap-0.5 rounded-md border border-border bg-surface px-1 py-0.5 shadow-sm ${pickerAt === 'toolbar' ? 'flex' : 'hidden group-hover:flex group-focus-within:flex'}`}>
+          <div className={`absolute -top-3 right-2 z-10 items-center gap-0.5 rounded-md border border-border bg-surface px-1 py-0.5 shadow-sm ${pickerAt === 'toolbar' ? 'flex' : 'hidden group-hover:flex group-focus-within:flex pointer-coarse:flex'}`}>
             <div className="relative">
               <IconButton label="Add reaction" active={pickerAt === 'toolbar'}
                 onClick={() => setPickerAt((a) => (a === 'toolbar' ? null : 'toolbar'))}>

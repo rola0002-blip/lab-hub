@@ -9,8 +9,8 @@ import SearchBox from '@/components/chat/search-box'
 export default async function ChatLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser()
   return (
-    <div className="flex h-[calc(100vh-7rem)] gap-0 overflow-hidden rounded-xl border border-border">
-      <aside className="flex w-64 shrink-0 flex-col border-r border-border">
+    <div className="flex h-[calc(100dvh-7rem)] gap-0 overflow-hidden rounded-xl border border-border">
+      <aside aria-label="Conversations" className="flex w-64 shrink-0 flex-col border-r border-border">
         <div className="border-b border-border p-2">
           <SearchBox />
         </div>

@@ -26,8 +26,8 @@ function Row({ b, onErr }: { b: Item; onErr: (m: string) => void }) {
         <Badge variant={BOOKING_VARIANT[b.status as keyof typeof BOOKING_VARIANT]}>{b.status.toLowerCase()}</Badge>
         {b.cancellable && (
           <>
-            <button disabled={pending} onClick={() => cancel('one')} className="text-[var(--color-danger)] hover:underline">Cancel</button>
-            {b.recurring && <button disabled={pending} onClick={() => cancel('future')} className="text-[var(--color-danger)] hover:underline">Cancel series</button>}
+            <button disabled={pending} onClick={() => cancel('one')} className="text-[var(--text-danger)] hover:underline">Cancel</button>
+            {b.recurring && <button disabled={pending} onClick={() => cancel('future')} className="text-[var(--text-danger)] hover:underline">Cancel series</button>}
           </>
         )}
       </span>
@@ -39,13 +39,13 @@ export default function BookingsClient({ upcoming, past }: { upcoming: Item[]; p
   const [msg, setMsg] = useState<string | null>(null)
   return (
     <div className="mt-6 space-y-8">
-      {msg && <p className="text-sm text-[var(--color-danger)]">{msg}</p>}
+      {msg && <p className="text-sm text-[var(--text-danger)]">{msg}</p>}
       <section>
         <h2 className="font-medium text-default">Upcoming</h2>
         {upcoming.length === 0 ? (
           <EmptyState icon={CalendarCheck} title="Nothing booked"
             hint="Head to Booking to reserve an instrument — your upcoming reservations will live here."
-            action={<Link href="/booking" className="text-sm font-medium text-accent hover:underline">Browse equipment →</Link>} />
+            action={<Link href="/booking" className="text-sm font-medium text-[var(--text-accent)] hover:underline">Browse equipment →</Link>} />
         ) : (
           <ul className="mt-2 divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface shadow-xs">{upcoming.map((b) => <Row key={b.id} b={b} onErr={setMsg} />)}</ul>
         )}

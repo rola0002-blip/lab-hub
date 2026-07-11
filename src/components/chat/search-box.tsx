@@ -54,8 +54,8 @@ function renderExcerpt(body: string, names: Names, terms: string[]): ReactNode[]
       case 'strike': return <s key={k}>{highlight(t.value, terms)}</s>
       case 'code':
       case 'codeblock': return <code key={k} className="rounded bg-surface-sunken px-1 font-mono text-[12px]">{t.value}</code>
-      case 'mention': return <span key={k} className="font-medium text-accent">@{names.get(t.userId ?? t.value) ?? 'unknown'}</span>
-      case 'channel': return <span key={k} className="font-medium text-accent">@channel</span>
+      case 'mention': return <span key={k} className="font-medium text-[var(--text-accent)]">@{names.get(t.userId ?? t.value) ?? 'unknown'}</span>
+      case 'channel': return <span key={k} className="font-medium text-[var(--text-accent)]">@channel</span>
       case 'link': return <span key={k} className="text-link">{t.label ?? t.value}</span>
       case 'emoji': return <span key={k}>{t.value}</span>
       // text / quote / listitem
@@ -114,7 +114,7 @@ export default function SearchBox({ align = 'left' }: { align?: 'left' | 'right'
         className="w-full rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-default transition-colors placeholder:text-subtle hover:border-border-strong focus-visible:border-[var(--border-focus)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
       {open && q.trim().length > 0 && (
         <div className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} z-30 mt-1 max-h-96 w-80 overflow-y-auto rounded-lg border border-border bg-surface py-1 shadow-menu`}>
-          {error && <p className="p-3 text-sm text-[var(--color-danger)]">{error}</p>}
+          {error && <p className="p-3 text-sm text-[var(--text-danger)]">{error}</p>}
           {!error && hits.length === 0 && (
             <EmptyState icon={SearchX} title="No matches"
               hint={`Nothing matches “${q.trim()}”. Try a different word or check the spelling.`} />

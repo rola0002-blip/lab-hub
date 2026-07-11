@@ -51,7 +51,7 @@ export default function EquipmentForm({ action, users, initial }: Props) {
           {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
       </label>
-      {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
+      {error && <p className="text-sm text-[var(--text-danger)]">{error}</p>}
       <button disabled={pending} className="rounded-md bg-accent px-4 py-2 font-medium text-accent-on transition-colors hover:bg-accent-hover disabled:opacity-50">{pending ? 'Saving…' : 'Save'}</button>
     </form>
   )

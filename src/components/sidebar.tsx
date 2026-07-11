@@ -63,7 +63,7 @@ export function Sidebar({ org, user, unread, role }: {
   }
 
   return (
-    <aside aria-label="Primary" className="flex w-56 shrink-0 flex-col bg-sidebar p-2">
+    <div className="flex w-56 shrink-0 flex-col bg-sidebar p-2">
       <Menu
         label="Workspace menu"
         buttonClassName="flex w-full items-center gap-2 rounded-md px-1 py-1.5 text-left text-sidebar-fg-strong hover:bg-sidebar-hover"
@@ -81,7 +81,7 @@ export function Sidebar({ org, user, unread, role }: {
         }
         items={[{ label: 'Sign out', onSelect: handleSignOut }]}
       />
-      <nav aria-label="Primary navigation" className="mt-2 flex-1 overflow-y-auto">
+      <nav aria-label="Primary" data-region-root tabIndex={-1} className="mt-2 flex-1 overflow-y-auto outline-none">
         {NAV_SECTIONS.map((sec) => {
           const items = sec.items.filter((i) => isNavVisible(i.href, role))
           if (items.length === 0) return null
@@ -118,6 +118,6 @@ export function Sidebar({ org, user, unread, role }: {
         <Avatar name={user.name} id={user.id} image={user.image} size={24} presence="active" />
         <span className="truncate text-sm text-sidebar-fg">{user.name}</span>
       </div>
-    </aside>
+    </div>
   )
 }

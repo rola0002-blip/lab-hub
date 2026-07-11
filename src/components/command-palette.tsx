@@ -219,14 +219,14 @@ export function CommandPalette({ orgName = 'COLOSSUS', role }: { orgName?: strin
                       onMouseDown={(e) => { e.preventDefault(); void select(cmd) }}
                       onMouseEnter={() => setActive(i)}
                       className={`flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm ${
-                        selected ? 'bg-selected text-accent' : 'text-default'
+                        selected ? 'bg-selected text-[var(--text-accent)]' : 'text-default'
                       }`}
                     >
                       {cmd.kind === 'dm'
                         ? <Avatar size={20} name={cmd.label} id={peerId ?? cmd.id} image={null} />
                         : <KindIcon cmd={cmd} />}
                       <span className="min-w-0 flex-1 truncate">{cmd.label}</span>
-                      {cmd.sub && <span className="shrink-0 text-2xs uppercase tracking-wide text-subtle">{cmd.sub}</span>}
+                      {cmd.sub && <span className="shrink-0 text-2xs uppercase tracking-wide text-muted">{cmd.sub}</span>}
                     </li>
                   )
                 })

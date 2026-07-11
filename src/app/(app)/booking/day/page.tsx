@@ -48,7 +48,7 @@ export default async function DayViewPage({ searchParams }: { searchParams: Prom
         <div className="grid min-w-[900px]" style={{ gridTemplateColumns: `48px repeat(${equipment.length}, minmax(140px, 1fr))` }}>
           <div />
           {equipment.map((eq) => (
-            <Link key={eq.id} href={`/booking/${eq.id}`} className="border-b border-l border-border p-2 text-center text-sm font-medium text-default transition-colors hover:text-accent">{eq.name}</Link>
+            <Link key={eq.id} href={`/booking/${eq.id}`} className="border-b border-l border-border p-2 text-center text-sm font-medium text-default transition-colors hover:text-[var(--text-accent)]">{eq.name}</Link>
           ))}
           <div className="relative" style={{ height }}>
             {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => (
@@ -67,7 +67,7 @@ export default async function DayViewPage({ searchParams }: { searchParams: Prom
               {bookings.filter((b) => b.equipmentId === eq.id).map((b) => {
                 const r = rect(b.startsAt, b.endsAt)
                 return (
-                  <div key={b.id} className={`absolute inset-x-0.5 overflow-hidden rounded-md px-1 text-[11px] ${b.status === 'PENDING' ? 'border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/15 text-default' : 'border border-[var(--accent)]/30 bg-accent-subtle text-accent'}`} style={r}>
+                  <div key={b.id} className={`absolute inset-x-0.5 overflow-hidden rounded-md px-1 text-[11px] ${b.status === 'PENDING' ? 'border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/15 text-default' : 'border border-[var(--accent)]/30 bg-accent-subtle text-[var(--text-accent)]'}`} style={r}>
                     {b.user.name}{b.status === 'PENDING' ? ' (pending)' : ''}
                   </div>
                 )

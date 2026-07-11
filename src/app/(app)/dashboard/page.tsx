@@ -53,7 +53,7 @@ export default async function DashboardPage() {
           {mine.length === 0 ? (
             <EmptyState icon={CalendarCheck} title="Nothing booked yet"
               hint="Reserve an instrument and it will show up here."
-              action={<Link href="/booking" className="text-sm font-medium text-accent hover:underline">Reserve an instrument →</Link>} />
+              action={<Link href="/booking" className="text-sm font-medium text-[var(--text-accent)] hover:underline">Reserve an instrument →</Link>} />
           ) : (
             <ul className="mt-2 space-y-1 text-sm">
               {mine.map((b) => (
@@ -79,7 +79,7 @@ export default async function DashboardPage() {
               ))}
             </ul>
           )}
-          <Link href="/booking/day" className="mt-3 block text-sm text-accent hover:underline">Full day view →</Link>
+          <Link href="/booking/day" className="mt-3 block text-sm text-[var(--text-accent)] hover:underline">Full day view →</Link>
         </section>
       </div>
     </div>

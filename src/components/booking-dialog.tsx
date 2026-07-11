@@ -88,7 +88,7 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, i
               <div className="mt-2 space-y-2">
                 <div className="flex flex-wrap gap-2">
                   {WEEKDAYS.map((w, i) => (
-                    <label key={w} className={`cursor-pointer rounded-md border px-2 py-1 transition-colors ${days.includes(i) ? 'border-accent bg-accent/10 text-accent' : 'border-border hover:bg-hover'}`}>
+                    <label key={w} className={`cursor-pointer rounded-md border px-2 py-1 transition-colors ${days.includes(i) ? 'border-accent bg-accent/10 text-[var(--text-accent)]' : 'border-border hover:bg-hover'}`}>
                       <input type="checkbox" className="hidden" checked={days.includes(i)}
                         onChange={(e) => setDays(e.target.checked ? [...days, i] : days.filter((d) => d !== i))} />{w}
                     </label>
@@ -109,7 +109,7 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, i
             {verdict.kind === 'blocked' && verdict.message}
           </p>
         )}
-        {error && <p className="mt-2 text-sm text-[var(--color-danger)]">{error}</p>}
+        {error && <p className="mt-2 text-sm text-[var(--text-danger)]">{error}</p>}
         {conflicts.length > 0 && (
           <div className="mt-2 rounded-md bg-[var(--color-danger)]/10 p-2 text-sm text-default">
             <p>These occurrences clash — adjust the pattern:</p>

@@ -69,7 +69,7 @@ export default function WeekCalendar({ equipmentId, timezone, weekStartISO, slot
           const dayDate = addDays(weekStart, d)
           const isToday = format(dayDate, 'yyyy-MM-dd') === todayKey
           return (
-            <div key={d} className={`border-b border-l border-border p-2 text-center text-sm ${isToday ? 'font-semibold text-accent' : 'font-medium text-default'}`}>
+            <div key={d} className={`border-b border-l border-border p-2 text-center text-sm ${isToday ? 'font-semibold text-[var(--text-accent)]' : 'font-medium text-default'}`}>
               {format(dayDate, 'EEE d')}
             </div>
           )
@@ -103,7 +103,7 @@ export default function WeekCalendar({ equipmentId, timezone, weekStartISO, slot
                 ? 'bg-active text-muted border border-border'
                 : s.status === 'PENDING' ? 'bg-[var(--color-warning)]/15 text-default border border-[var(--color-warning)]/40'
                 : s.own ? 'bg-accent text-accent-on border border-[var(--accent)]'
-                : 'bg-accent-subtle text-accent border border-[var(--accent)]/30'
+                : 'bg-accent-subtle text-[var(--text-accent)] border border-[var(--accent)]/30'
               return (
                 <div key={`${s.id}-${day}`} className={`pointer-events-none absolute inset-x-0.5 overflow-hidden rounded-md px-1 text-[11px] ${style}`}
                   style={{ top: r.top, height: r.height }}>
