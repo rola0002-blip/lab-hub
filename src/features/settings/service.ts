@@ -33,7 +33,14 @@ export async function setTimezone(userId: string, timezone: string) {
 }
 
 export async function setAvatar(userId: string, imagePath: string) {
+  const prev = await prisma.user.findUnique({ where: { id: userId }, select: { image: true } })
   await prisma.user.update({ where: { id: userId }, data: { image: imagePath } })
+  // Best-effort cleanup of the replaced file so re-uploads don't orphan the old
+  // one — only ever our own avatars/ path, mirroring removeAvatar. DB update
+  // first so a failed unlink can never lose the new image.
+  if (prev?.image && prev.image !== imagePath && prev.image.startsWith('/uploads/avatars/')) {
+    await removeUpload(prev.image)
+  }
 }
 
 export async function removeAvatar(userId: string) {

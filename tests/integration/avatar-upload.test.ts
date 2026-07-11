@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { existsSync } from 'node:fs'
+import path from 'node:path'
 import { resetDb, makeUser } from '../factories'
 import { prisma } from '@/lib/db'
-import { saveUpload } from '@/lib/uploads'
+import { saveUpload, removeUpload, uploadsDir } from '@/lib/uploads'
+import { setAvatar } from '@/features/settings/service'
 
 const mockUser = vi.hoisted(() => ({ current: null as null | { id: string; name: string; email: string; role: string } }))
 vi.mock('@/lib/session', () => ({
@@ -9,6 +12,14 @@ vi.mock('@/lib/session', () => ({
   requireUser: async () => mockUser.current,
   requireAdmin: async () => mockUser.current,
 }))
+
+// Wrap removeUpload with a spy that still runs the real deletion, so the
+// replace-cleanup tests can observe disk effects AND assert call behaviour
+// (e.g. that an externally-set image is never unlinked).
+vi.mock('@/lib/uploads', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/uploads')>()
+  return { ...actual, removeUpload: vi.fn(actual.removeUpload) }
+})
 
 import { POST as avatarPost, DELETE as avatarDelete } from '@/app/api/me/avatar/route'
 import { GET as uploadRoute } from '@/app/uploads/[...path]/route'
@@ -23,8 +34,11 @@ const partsOf = (p: string) => p.replace(/^\/uploads\//, '').split('/')
 const uploadReq = (p: string, params: string[]) =>
   uploadRoute(new Request('http://t' + p), { params: Promise.resolve({ path: params }) })
 
+const diskPath = (publicPath: string) =>
+  path.join(uploadsDir(), ...publicPath.replace(/^\/uploads\//, '').split('/'))
+
 describe('avatar upload', () => {
-  beforeEach(async () => { await resetDb(); mockUser.current = null })
+  beforeEach(async () => { await resetDb(); mockUser.current = null; vi.mocked(removeUpload).mockClear() })
 
   it('401 when signed out', async () => {
     expect((await avatarPost(postReq(png()))).status).toBe(401)
@@ -66,6 +80,38 @@ describe('avatar upload', () => {
     expect((await avatarDelete()).status).toBe(200)
     const row = await prisma.user.findUnique({ where: { id: u.id }, select: { image: true } })
     expect(row?.image).toBeNull()
+  })
+
+  it('replace deletes the previous avatar file and keeps the new one', async () => {
+    const u = await makeUser({ role: 'member' })
+    mockUser.current = { ...u, role: u.role }
+
+    const imageA = (await (await avatarPost(postReq(png()))).json()).image as string
+    expect(existsSync(diskPath(imageA))).toBe(true)
+
+    const imageB = (await (await avatarPost(postReq(png()))).json()).image as string
+    expect(imageB).not.toBe(imageA)
+
+    // The orphaned prior file is gone; the replacement survives; row points at B.
+    expect(existsSync(diskPath(imageA))).toBe(false)
+    expect(existsSync(diskPath(imageB))).toBe(true)
+    const row = await prisma.user.findUnique({ where: { id: u.id }, select: { image: true } })
+    expect(row?.image).toBe(imageB)
+    expect(removeUpload).toHaveBeenCalledWith(imageA)
+  })
+
+  it('cleanup guard: an externally-set image is never unlinked on replace', async () => {
+    const u = await makeUser({ role: 'member' })
+    const external = 'https://cdn.example.com/avatars/someone.jpg'
+    await prisma.user.update({ where: { id: u.id }, data: { image: external } })
+
+    const next = await saveUpload(png(), 'avatars')
+    await setAvatar(u.id, next)
+
+    // The external URL is not under /uploads/avatars/, so no unlink is attempted.
+    expect(removeUpload).not.toHaveBeenCalled()
+    const row = await prisma.user.findUnique({ where: { id: u.id }, select: { image: true } })
+    expect(row?.image).toBe(next)
   })
 
   it('/uploads/avatars/* requires a session: 401 anon, 200 authed (private no-store)', async () => {
