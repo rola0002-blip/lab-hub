@@ -1,5 +1,5 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
-import { wipe, runWizard, signIn, ADMIN, createMemberViaInvite, acceptInvite } from './helpers'
+import { wipe, runWizard, signIn, signOut, ADMIN, createMemberViaInvite, acceptInvite } from './helpers'
 
 // Per-context client IP so better-auth's per-IP sign-in/up rate limit never trips
 // across this serial suite (mirrors messaging.spec.ts). Offset the sequence so it
@@ -117,6 +117,19 @@ test('profile: rename + accent switch persist across reload', async ({ browser }
   await page.reload()
   await expect(page.locator('html')).toHaveAttribute('data-accent', 'crimson')
   await expect(page.getByLabel('Full name')).toHaveValue('Roland Renamed')
+
+  // Signing out must drop this device's stored theme/accent so a shared machine
+  // never leaks the previous user's appearance to the next signer-in.
+  await signOut(page)
+  await page.waitForURL('**/sign-in')
+  // The device's stored appearance is gone — this is the leak fix: without it the
+  // next user's own server prefs would lose to the leftover localStorage value.
+  expect(await page.evaluate(() => localStorage.getItem('accent'))).toBeNull()
+  expect(await page.evaluate(() => localStorage.getItem('theme'))).toBeNull()
+  // On the next full document load the pre-paint boot script re-reads the (now
+  // empty) localStorage and no longer stamps the crimson accent onto the page.
+  await page.reload()
+  await expect(page.locator('html')).not.toHaveAttribute('data-accent', 'crimson')
 
   await page.context().close()
 })

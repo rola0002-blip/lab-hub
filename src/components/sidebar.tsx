@@ -57,8 +57,11 @@ export function Sidebar({ org, user, unread, role }: {
   const pathname = usePathname()
   const router = useRouter()
   // Reuse the existing better-auth sign-out mechanism (was <SignOutButton/>).
+  // Also drop this device's saved theme/accent so a shared machine never leaks
+  // the previous user's appearance to the next (and their own server prefs win).
   async function handleSignOut() {
     await authClient.signOut()
+    try { localStorage.removeItem('theme'); localStorage.removeItem('accent') } catch {}
     router.push('/sign-in')
   }
 

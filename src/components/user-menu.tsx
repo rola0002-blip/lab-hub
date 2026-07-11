@@ -8,6 +8,9 @@ export function UserMenu({ user }: { user: { id: string; name: string; image: st
   const router = useRouter()
   async function signOut() {
     await authClient.signOut()
+    // Clear this device's saved theme/accent so a shared machine never leaks the
+    // previous user's appearance to the next signer-in (their own server prefs win).
+    try { localStorage.removeItem('theme'); localStorage.removeItem('accent') } catch {}
     router.push('/sign-in')
   }
   return (
