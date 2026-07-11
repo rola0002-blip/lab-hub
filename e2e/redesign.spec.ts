@@ -195,3 +195,54 @@ test('deep-link scrolls the linked message into view', async ({ browser }) => {
   await expect(target).toBeInViewport()
   await page.context().close()
 })
+
+test('mobile 320px: no horizontal overflow and the thread opens as a focus-trapped drawer', async ({ browser }) => {
+  test.setTimeout(90_000)
+  // A phone-width context (also the 400%-zoom equivalent of a desktop width).
+  ipSeq += 1
+  const ctx = await browser.newContext({
+    viewport: { width: 320, height: 640 },
+    extraHTTPHeaders: { 'x-forwarded-for': `10.20.${ipSeq}.7` },
+  })
+  const page = await ctx.newPage()
+  await runWizard(page)
+  await signIn(page, ADMIN.email, ADMIN.password)
+
+  // Open a channel: lands on /chat/<cid>, where the conversation-list rail
+  // collapses (list/pane swap) so there is no second shrink-0 column.
+  await createChannel(page, 'mobile')
+  const box = page.getByPlaceholder('Write a message…')
+  await box.fill('mobile root message')
+  await box.press('Enter')
+  await expect(page.getByText('mobile root message')).toBeVisible()
+  await expect(box).toHaveValue('')
+
+  const docScrollWidth = () => page.evaluate(() => document.documentElement.scrollWidth)
+  // No horizontal page scroll at 320px with a conversation open.
+  expect(await docScrollWidth()).toBeLessThanOrEqual(320)
+
+  // Open the thread without hover (no pointer hover on a phone): focus the newest
+  // message row (its roving tab stop), then the pane's `r` hotkey opens its thread.
+  const row = page.locator('[data-msg-id]').last()
+  await row.focus()
+  await expect(row).toBeFocused()
+  await page.keyboard.press('r')
+
+  // The thread is now a modal drawer (role=dialog "Thread"): visible, still no
+  // horizontal overflow, and it trapped focus (useFocusTrap moved focus inside it).
+  const drawer = page.getByRole('dialog', { name: 'Thread' })
+  await expect(drawer).toBeVisible()
+  await expect(page.getByPlaceholder('Reply in thread…')).toBeVisible()
+  expect(await docScrollWidth()).toBeLessThanOrEqual(320)
+  const focusTrapped = await page.evaluate(() => {
+    const dlg = document.querySelector('[role="dialog"][aria-label="Thread"]')
+    return !!dlg && !!document.activeElement && dlg.contains(document.activeElement)
+  })
+  expect(focusTrapped).toBe(true)
+
+  // Escape dismisses the drawer.
+  await page.keyboard.press('Escape')
+  await expect(drawer).toBeHidden()
+
+  await ctx.close()
+})

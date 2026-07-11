@@ -1,8 +1,11 @@
 'use client'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useChat } from './chat-store'
 import MessageItem, { type Msg } from './message-item'
 import Composer from './composer'
+import { useFocusTrap } from '@/components/hooks/use-focus-trap'
+import { useMediaQuery } from '@/components/hooks/use-media-query'
 
 type Props = {
   rootId: string
@@ -20,6 +23,12 @@ export default function ThreadPanel({ rootId, conversationId, conversationType, 
   const { registerConversationHandler } = useChat()
   const [root, setRoot] = useState<Msg | null>(null)
   const [replies, setReplies] = useState<Msg[]>([])
+  // Responsive form. <768: modal drawer (focus-trapped, backdrop, inert behind).
+  // 768–1279: overlay pinned over the message pane. ≥1280: in-row third column
+  // (unchanged). matchMedia gates the trap + inert so they engage ONLY as a drawer.
+  const narrow = useMediaQuery('(max-width: 767px)')
+  const drawerRef = useRef<HTMLElement>(null)
+  useFocusTrap(drawerRef, narrow)
 
   const load = useCallback(async () => {
     const r = await fetch(`/api/chat/threads/${rootId}`)
@@ -69,8 +78,21 @@ export default function ThreadPanel({ rootId, conversationId, conversationType, 
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  return (
-    <aside aria-label="Thread" data-region-root tabIndex={-1} className="flex w-[22rem] shrink-0 flex-col border-l border-border outline-none lg:w-[26rem]">
+  // Drawer form only (<768): mark the rest of the shell (#app-content: top bar +
+  // main) inert so nothing behind the trapped drawer is reachable by pointer or
+  // AT. The drawer itself is portaled to <body> (outside #app-content), so inert
+  // never disables it. Guarded on `narrow`, so the overlay/column forms pay nothing.
+  useEffect(() => {
+    if (!narrow) return
+    const content = document.getElementById('app-content')
+    content?.setAttribute('inert', '')
+    return () => content?.removeAttribute('inert')
+  }, [narrow])
+
+  // Identical panel body across all three forms; only the wrapper's positioning /
+  // modality changes with the viewport.
+  const body = (
+    <>
       <header className="flex items-center justify-between border-b border-border px-3 py-2">
         <h2 className="text-sm font-semibold">Thread</h2>
         <button onClick={onClose} aria-label="Close thread" className="rounded p-1 text-muted hover:bg-hover">✕</button>
@@ -98,6 +120,32 @@ export default function ThreadPanel({ rootId, conversationId, conversationType, 
       <Composer conversationId={conversationId} selfRole={selfRole} memberIds={memberIds} parentId={rootId}
         onSent={upsertReply} onRemove={removeReply}
         showBroadcast={conversationType === 'CHANNEL'} broadcastLabel={channelName ? `#${channelName}` : undefined} />
+    </>
+  )
+
+  // <768: focus-trapped modal drawer over a backdrop, portaled to <body> so the
+  // inert #app-content behind it stays fully inert (the drawer is not a descendant
+  // of it). Backdrop click + Esc close; useFocusTrap restores focus to the opener.
+  if (narrow) {
+    return createPortal(
+      <div className="fixed inset-0 z-50 md:hidden">
+        <button type="button" aria-hidden tabIndex={-1} onClick={onClose} className="absolute inset-0 bg-black/50" />
+        <aside ref={drawerRef} role="dialog" aria-modal="true" aria-label="Thread"
+          className="absolute inset-y-0 right-0 flex w-full max-w-[26rem] flex-col border-l border-border bg-surface shadow-modal outline-none">
+          {body}
+        </aside>
+      </div>,
+      document.body,
+    )
+  }
+
+  // 768–1279: absolute overlay pinned to the right of the (now relative) pane row.
+  // ≥1280 (xl): reverts to the in-row static third column — byte-identical to before
+  // (static, w-26rem, shrink-0, transparent, no shadow).
+  return (
+    <aside aria-label="Thread" data-region-root tabIndex={-1}
+      className="absolute inset-y-0 right-0 z-30 flex w-[22rem] flex-col border-l border-border bg-surface shadow-modal outline-none xl:static xl:z-auto xl:w-[26rem] xl:shrink-0 xl:bg-transparent xl:shadow-none">
+      {body}
     </aside>
   )
 }

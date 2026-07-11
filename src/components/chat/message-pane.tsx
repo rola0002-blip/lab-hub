@@ -1,6 +1,7 @@
 'use client'
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowDown, Hash, MessageSquare } from 'lucide-react'
+import Link from 'next/link'
+import { ArrowDown, ArrowLeft, Hash, MessageSquare } from 'lucide-react'
 import { messageToPlainText } from '@/features/chat/markdown'
 import { dayLabel } from '@/lib/humanize'
 import { Avatar } from '@/components/ui/avatar'
@@ -344,9 +345,17 @@ export default function MessagePane({ conversationId, conversationType, channelN
     : [...messages].reverse().find((m) => m.kind !== 'system')?.id ?? null
 
   return (
-    <div className="flex h-full min-w-0 flex-1">
+    // `relative` anchors the thread panel's 768–1279 overlay form; it has no effect
+    // on the xl in-row column (which is statically positioned).
+    <div className="relative flex h-full min-w-0 flex-1">
       <div className="relative flex min-w-0 flex-1 flex-col">
         <header className="flex items-center gap-2 border-b border-border px-4 py-2">
+          {/* Narrow (<768): the conversation-list rail collapses (list/pane swap),
+              so the pane gets a back affordance to return to the list at /chat. */}
+          <Link href="/chat" aria-label="Back to conversations"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-default md:hidden">
+            <ArrowLeft size={18} aria-hidden />
+          </Link>
           {isDm && peerId && (
             <Avatar size={24} name={dmTitle} id={peerId} image={peer?.image ?? null} presence={peerOnline ? 'active' : 'away'} />
           )}
