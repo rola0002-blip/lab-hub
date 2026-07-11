@@ -232,6 +232,27 @@ describe('message service', () => {
     expect(after.ok && after.firstUnreadId).toBeNull()
   })
 
+  it('firstUnreadId excludes the reader own messages (no New-messages divider above your own line)', async () => {
+    const me = await makeUser()
+    const other = await makeUser()
+    const ch = await makeChannel()
+    const cutoff = new Date(Date.now() - 60_000)
+    await makeMember(ch.id, me.id, { lastReadAt: cutoff })
+    const base = Date.now()
+    // The reader's OWN message, newer than their lastReadAt, must NOT anchor the
+    // divider — sending a message implicitly means you've seen up to it.
+    await makeMessage(ch.id, me.id, { body: 'my own', createdAt: new Date(base - 20_000) })
+    const r = await listMessages({ userId: me.id, conversationId: ch.id })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.firstUnreadId).toBeNull()
+
+    // A later message from someone else still anchors normally.
+    const theirs = await makeMessage(ch.id, other.id, { body: 'from them', createdAt: new Date(base - 5_000) })
+    const r2 = await listMessages({ userId: me.id, conversationId: ch.id })
+    expect(r2.ok && r2.firstUnreadId).toBe(theirs.id)
+  })
+
   it('pagination pages backwards by cursor; markRead zeroes unread', async () => {
     const me = await makeUser()
     const other = await makeUser()

@@ -213,9 +213,12 @@ export async function listMessages(args: { userId: string; conversationId: strin
     }),
     // Oldest root USER message the reader hasn't seen yet (createdAt strictly
     // after their lastReadAt). System rows (created/joined lines) never anchor the
-    // New-messages line. Conversation-wide, independent of the page cursor.
+    // New-messages line, and neither do the reader's OWN messages — otherwise a
+    // reader who sends after catching up gets a "New messages" divider above their
+    // own line. Mirrors the own-message exclusion in conversation-service's unread
+    // counts. Conversation-wide, independent of the page cursor.
     prisma.message.findFirst({
-      where: { conversationId: args.conversationId, parentId: null, kind: 'user', createdAt: { gt: member.lastReadAt } },
+      where: { conversationId: args.conversationId, parentId: null, kind: 'user', userId: { not: args.userId }, createdAt: { gt: member.lastReadAt } },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       select: { id: true },
     }),
