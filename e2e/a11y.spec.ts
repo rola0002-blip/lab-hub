@@ -1,6 +1,6 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
-import { wipe, runWizard, signIn, ADMIN } from './helpers'
+import { wipe, runWizard, signIn, ADMIN, createIssueViaUI } from './helpers'
 
 // axe-core accessibility floor. For each core surface — the sign-in page, the
 // dashboard, a channel view, an open modal (the ⌘K command palette), and the
@@ -85,7 +85,7 @@ test('sign-in: no serious/critical axe violations, both themes', async ({ browse
 })
 
 test('app surfaces: no serious/critical axe violations, both themes', async ({ browser }) => {
-  test.setTimeout(180_000)
+  test.setTimeout(240_000) // core surfaces + 5 SP4 surfaces, each audited in both themes
   const page = await newPage(browser)
   await runWizard(page)
   await signIn(page, ADMIN.email, ADMIN.password)
@@ -119,6 +119,38 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
   await page.goto('/profile')
   await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible()
   await auditBothThemes(page, 'profile')
+
+  // SP4 surfaces — issues list/board, projects, issue detail, create modal.
+  // Seed one issue so the list/board/detail render populated (createIssueViaUI
+  // opens the composer, creates, and redirects to /issues/COL-1).
+  await page.goto('/issues')
+  await expect(page.getByRole('heading', { name: 'Issues' })).toBeVisible()
+  await createIssueViaUI(page, 'A11y issue')
+
+  await page.goto('/issues')
+  await expect(page.getByText('A11y issue')).toBeVisible()
+  await auditBothThemes(page, 'issues-list')
+
+  await page.getByRole('button', { name: 'Board' }).click()
+  await expect(page.getByRole('button', { name: 'Reorder COL-1' })).toBeVisible()
+  await auditBothThemes(page, 'issues-board')
+
+  await page.goto('/projects')
+  await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible()
+  await auditBothThemes(page, 'projects')
+
+  await page.goto('/issues/COL-1')
+  await expect(page.getByRole('textbox', { name: 'Issue title' })).toHaveValue('A11y issue')
+  await auditBothThemes(page, 'issue-detail')
+
+  // Open the create-issue modal (role=dialog) and audit it in both themes. The
+  // "New issue" trigger lives on the list surface (the issue-detail page has none).
+  await page.goto('/issues')
+  await expect(page.getByRole('heading', { name: 'Issues' })).toBeVisible()
+  await page.getByRole('button', { name: 'New issue' }).first().click()
+  await expect(page.getByRole('dialog', { name: 'New issue' })).toBeVisible()
+  await auditBothThemes(page, 'create-issue')
+  await page.keyboard.press('Escape')
 
   await page.context().close()
 })

@@ -72,6 +72,9 @@ const BASE = {
     ring: hex('#0d9488'),                              // --ring-focus (teal-600, nudged)
     selected: hex('#eaf6f4'),                          // --bg-selected
     sidebarActive: hex('#0f766e'),                     // --sidebar-active-bg (teal-700)
+    // §3c status glyph fills (globals.css light) — small non-text marks, 3:1 UI bar.
+    statusBacklog: hex('#6b7280'), statusTodo: hex('#b45309'), statusInProgress: hex('#2563eb'),
+    statusInReview: hex('#7c3aed'), statusDone: hex('#15803d'), statusCanceled: hex('#71717a'),
   },
   dark: {
     textDefault: hex('#d1d2d3'),
@@ -84,6 +87,9 @@ const BASE = {
     ring: hex('#2dd4bf'),                              // --ring-focus (teal-400)
     selected: hex('#0f2c2a'),                          // --bg-selected
     sidebarActive: hex('#0f766e'),                     // --sidebar-active-bg (teal-700)
+    // §3c status glyph fills (globals.css dark) — lightened for the near-black canvas.
+    statusBacklog: hex('#9ca3af'), statusTodo: hex('#fbbf24'), statusInProgress: hex('#60a5fa'),
+    statusInReview: hex('#a78bfa'), statusDone: hex('#4ade80'), statusCanceled: hex('#a1a1aa'),
   },
 }
 
@@ -109,6 +115,12 @@ for (const theme of ['light', 'dark']) {
   check(theme, 'sidebar-active-text / sidebar-active-bg', WHITE, b.sidebarActive, AA_TEXT) // active nav label
   check(theme, 'accent-on / accent', b.accentOn, b.accent, UI)
   check(theme, 'ring-focus / canvas', b.ring, canvas, UI)
+  // Issue status glyphs (§3c) — each small non-text mark must clear the 3:1 UI
+  // bar on its own theme canvas (they are theme-split so one hue need not span
+  // both surfaces). Gated against the resolved globals.css values above.
+  for (const [name, key] of [['backlog', 'statusBacklog'], ['todo', 'statusTodo'], ['in-progress', 'statusInProgress'], ['in-review', 'statusInReview'], ['done', 'statusDone'], ['canceled', 'statusCanceled']]) {
+    check(theme, `status-${name} / canvas`, b[key], canvas, UI)
+  }
 }
 
 // Accent presets — re-derive the two adjudicated non-text pairs exactly as
@@ -126,4 +138,4 @@ if (failures.length) {
   for (const f of failures) console.error(`  ✗ ${f}`)
   process.exit(1)
 }
-console.log(`check-contrast: PASSED — ${count} pairs (base + ${ACCENTS.length} accents × 2 themes) clear their bars.`)
+console.log(`check-contrast: PASSED — ${count} pairs (base + 6 status × 2 themes + ${ACCENTS.length} accents × 2 themes) clear their bars.`)
