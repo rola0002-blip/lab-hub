@@ -62,6 +62,18 @@ describe('issue routes', () => {
     expect(body.issues.map((i: { id: string }) => i.id)).toContain(iss.id)
   })
 
+  it('GET /api/issues validates enum filters (S1/S3): bad status/priority → 400, valid → 200', async () => {
+    const u = await makeUser({ role: 'member' }); session.current = sessOf(u, 'member')
+    await makeIssue(u.id, { title: 'filterable', status: 'IN_PROGRESS', priority: 'HIGH', rank: 'V' })
+    // Previously an unchecked cast let ?status=FOO reach Prisma's enum column → 500.
+    expect((await listGET(new Request('http://x/api/issues?status=FOO'))).status).toBe(400)
+    expect((await listGET(new Request('http://x/api/issues?priority=SOMEDAY'))).status).toBe(400)
+    // A valid enum filter still returns 200 and applies.
+    const ok = await listGET(new Request('http://x/api/issues?status=IN_PROGRESS&priority=HIGH'))
+    expect(ok.status).toBe(200)
+    expect((await ok.json()).issues).toHaveLength(1)
+  })
+
   it('POST /api/issues: 401 signed out, 403 guest, 400 bad body, 200 member', async () => {
     expect((await createPOST(jreq({ title: 'x' }))).status).toBe(401)
 
