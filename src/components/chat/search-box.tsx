@@ -46,7 +46,7 @@ function highlight(text: string, terms: string[]): ReactNode[] {
 // Compact, safe excerpt: tokenize the body (mentions/links/emphasis/emoji) and
 // render inline nodes, highlighting query terms inside plain text. Block tokens
 // (code fences, quotes, list items) collapse to inline text for the preview.
-function renderExcerpt(body: string, names: Names, terms: string[]): ReactNode[] {
+export function renderExcerpt(body: string, names: Names, terms: string[]): ReactNode[] {
   return tokenizeMessage(body).map((t, k) => {
     switch (t.type) {
       case 'bold': return <strong key={k} className="font-semibold">{highlight(t.value, terms)}</strong>
@@ -58,6 +58,11 @@ function renderExcerpt(body: string, names: Names, terms: string[]): ReactNode[]
       case 'channel': return <span key={k} className="font-medium text-[var(--text-accent)]">@channel</span>
       case 'link': return <span key={k} className="text-link">{t.label ?? t.value}</span>
       case 'emoji': return <span key={k}>{t.value}</span>
+      // issueRef `value` is the BARE number (the COL- prefix was consumed by the
+      // match), so re-add it — a compact plain-text identifier, highlight-aware, so
+      // a search for "COL-5" still marks the term (the pill treatment is reserved
+      // for full message bodies; excerpts stay compact).
+      case 'issueRef': return <Fragment key={k}>{highlight(`COL-${t.value}`, terms)}</Fragment>
       // text / quote / listitem
       default: return <Fragment key={k}>{highlight(t.value, terms)}</Fragment>
     }

@@ -84,8 +84,9 @@ const plain: Sub = (s) => (s === '' ? [] : [{ type: 'text', value: s }])
 // Inline pipeline (order matters): inline code protects its contents first, then
 // mentions/channel (higher priority than emphasis so `**<@u>**` keeps the mention),
 // then markdown `[text](url)` links (BEFORE bare-URL autolinking, so a link's
-// `(url)` is not re-scanned), then bare links, emphasis, emoji shortnames, and
-// finally raw unicode emoji.
+// `(url)` is not re-scanned), then bare links, then issue autolinks (`COL-<n>`,
+// AFTER both link passes so a ref inside a link is never split out), then emphasis,
+// emoji shortnames, and finally raw unicode emoji.
 const rawEmoji: Sub = (s) => split(s, RAW_EMOJI, (m) => ({ type: 'emoji', value: m[0] }), plain)
 const shortcodes: Sub = (s) => split(s, SHORTCODE, (m) => {
   const g = emojiFor(m[1])
@@ -94,7 +95,14 @@ const shortcodes: Sub = (s) => split(s, SHORTCODE, (m) => {
 const strike: Sub = (s) => split(s, STRIKE, (m) => ({ type: 'strike', value: m[1] }), shortcodes)
 const italic: Sub = (s) => split(s, ITALIC, (m) => ({ type: 'italic', value: m[1] }), strike)
 const bold: Sub = (s) => split(s, BOLD, (m) => ({ type: 'bold', value: m[1] }), italic)
-const links: Sub = (s) => split(s, LINK, (m) => ({ type: 'link', value: m[0] }), bold)
+// Issue autolink `COL-<n>` runs AFTER both link passes (markdown + bare URL) so a
+// `COL-<n>` sitting inside a link's label or URL is protected: the whole link is
+// extracted first and its label/URL are never re-scanned, so an ordinary link is
+// never split into a stray pill + raw href (F2 regression). It still autolinks a
+// bare `COL-<n>` in plain text. Value is the bare number; the renderer resolves it
+// to a live pill (identifier + title + status) or falls back to `COL-<n>` text.
+const issueRefs: Sub = (s) => split(s, ISSUE_REF, (m) => ({ type: 'issueRef', value: m[1] }), bold)
+const links: Sub = (s) => split(s, LINK, (m) => ({ type: 'link', value: m[0] }), issueRefs)
 // Markdown `[text](url)` runs BEFORE the bare-URL pass so a link's `(url)` is
 // never re-scanned. Scheme-locked: a non-http(s) url (javascript:/data:/
 // relative/empty) returns null, leaving the whole marker as literal text
@@ -103,13 +111,12 @@ const links: Sub = (s) => split(s, LINK, (m) => ({ type: 'link', value: m[0] }),
 const mdLinks: Sub = (s) => split(s, MDLINK, (m) =>
   HTTP.test(m[2]) ? { type: 'link', value: m[2], label: m[1] || undefined } : null,
   links)
-// Issue autolink `COL-<n>` runs after mentions (so a mention is never re-scanned)
-// and before markdown links. Value is the bare number; the renderer resolves it to
-// a live pill (identifier + title + status) or falls back to `COL-<n>` plain text.
-const issueRefs: Sub = (s) => split(s, ISSUE_REF, (m) => ({ type: 'issueRef', value: m[1] }), mdLinks)
+// Mentions run before the link passes (a mention token is never re-scanned) and
+// well before issueRefs, so `<@COL-5>` matches the mention alphabet and is never
+// mistaken for an issue ref.
 const mentions: Sub = (s) => split(s, MENTION, (m) =>
   m[0] === '<!channel>' ? { type: 'channel', value: 'channel' } : { type: 'mention', value: m[1], userId: m[1] },
-  issueRefs)
+  mdLinks)
 const inline: Sub = (s) => split(s, INLINE_CODE, (m) => ({ type: 'code', value: m[1] }), mentions)
 
 // Line-level pass over a non-fenced segment: `> ` → quote, `- `/`* ` → list item,
