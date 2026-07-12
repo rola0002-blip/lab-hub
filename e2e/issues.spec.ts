@@ -31,16 +31,32 @@ test('issue lifecycle: project, create, board move, comment, complete, autolink'
   await expect(page.getByText('Calibrate the SEM')).toBeVisible()
   await page.getByLabel('Status', { exact: true }).selectOption('') // clear the filter for the board
 
-  // Board view: keyboard-only move (grip → Space lift → Arrow → Space drop). This
-  // exercises @dnd-kit's KeyboardSensor path; the definitive status transition is
-  // asserted below via the properties panel (a single-card board has no concrete
-  // cross-column sortable target to assert against in headless).
+  // Seed a second issue in the ADJACENT Todo column so the keyboard move has a
+  // concrete cross-column target to land in (a single-card board has no sortable to
+  // move onto, which is why the prior version asserted nothing).
+  await createIssueViaUI(page, 'Anneal the sample') // COL-2, lands on its detail
+  await page.getByRole('button', { name: 'Set status' }).click()
+  await page.getByRole('menuitem', { name: 'Todo' }).click()
+  await expect(page.getByRole('button', { name: 'Set status' })).toContainText('Todo')
+
+  // Board view: keyboard-only cross-column move (grip → Space lift → ArrowRight into
+  // the Todo column → Space drop). Exercises @dnd-kit's KeyboardSensor AND the /move
+  // route end-to-end, asserting BOTH the POST and the card's resulting column.
+  await page.goto('/issues')
   await page.getByRole('button', { name: 'Board' }).click()
   const grip = page.getByRole('button', { name: 'Reorder COL-1' })
   await grip.focus()
-  await page.keyboard.press('Space')
-  await page.keyboard.press('ArrowRight')
-  await page.keyboard.press('Space')
+  await page.keyboard.press('Space')       // lift
+  await page.keyboard.press('ArrowRight')  // move toward the adjacent Todo column
+  const [moveRes] = await Promise.all([
+    page.waitForResponse((r) => /\/api\/issues\/[^/]+\/move/.test(r.url()) && r.request().method() === 'POST'),
+    page.keyboard.press('Space'),          // drop → fires POST /api/issues/<id>/move
+  ])
+  expect(moveRes.ok()).toBeTruthy()
+  // COL-1 now lives in the Todo column (the keyboard DnD changed its status).
+  await expect(
+    page.locator('section[data-col-status="TODO"]').getByRole('link', { name: 'COL-1', exact: true }),
+  ).toBeVisible()
 
   // Detail: comment + complete.
   await page.goto('/issues/COL-1')
