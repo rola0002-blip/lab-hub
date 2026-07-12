@@ -3,6 +3,7 @@ import { useState, useTransition, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { Paperclip } from 'lucide-react'
 import { renderTokens } from '@/components/chat/message-item'
+import type { RefData } from '@/components/chat/issue-ref-pill'
 import { IssueMentionInput } from './issue-mention-input'
 import { IssueTimeline } from './issue-timeline'
 import { IssueComposer } from './issue-composer'
@@ -16,9 +17,12 @@ import type { Role } from '@/lib/session'
 
 type Opt = { id: string; name: string; image?: string | null }
 type Attachment = { id: string; path: string; name: string; mime: string; size: number }
-export function IssueDetail({ issue, attachments, timeline, role, selfId, users, projects, labels, originChip }: {
+export function IssueDetail({ issue, attachments, timeline, role, selfId, users, projects, labels, originChip, issueRefs = [] }: {
   issue: IssueDto; attachments: Attachment[]; timeline: TimelineEntry[]; role: Role; selfId: string
   users: Opt[]; projects: Opt[]; labels: { id: string; name: string; color: string }[]; originChip?: ReactNode
+  // Server-resolved COL-<n> refs from the description + all comment bodies; the
+  // client builds the Map once (pure render) and threads it into renderTokens.
+  issueRefs?: { number: number; identifier: string; title: string; status: IssueDto['status'] }[]
 }) {
   const router = useRouter()
   const canEdit = role !== 'guest'
@@ -27,6 +31,7 @@ export function IssueDetail({ issue, attachments, timeline, role, selfId, users,
   const [desc, setDesc] = useState(issue.description)
   const [, start] = useTransition()
   const names = new Map(users.map((u) => [u.id, u.name]))
+  const refsMap: Map<number, RefData> = new Map(issueRefs.map((r) => [r.number, r]))
   useEvents((e) => { if (e.t === 'issue' || e.t === 'issue_comment' || e.t === 'issue_move') router.refresh() })
 
   return (
@@ -58,7 +63,7 @@ export function IssueDetail({ issue, attachments, timeline, role, selfId, users,
             </div>
           ) : (
             <button type="button" disabled={!canEdit} onClick={() => setDescEditing(true)} className="block w-full rounded-md p-2 text-left text-sm text-default hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] disabled:hover:bg-transparent">
-              {issue.description ? <span className="whitespace-pre-wrap break-words">{renderTokens(issue.description, names, selfId)}</span> : <span className="text-subtle">{canEdit ? 'Add a description…' : 'No description.'}</span>}
+              {issue.description ? <span className="whitespace-pre-wrap break-words">{renderTokens(issue.description, names, selfId, refsMap)}</span> : <span className="text-subtle">{canEdit ? 'Add a description…' : 'No description.'}</span>}
             </button>
           )}
         </div>
@@ -78,7 +83,7 @@ export function IssueDetail({ issue, attachments, timeline, role, selfId, users,
           </div>
         )}
         <div className="border-t border-border pt-4">
-          <IssueTimeline entries={timeline} selfId={selfId} role={role} names={names} />
+          <IssueTimeline entries={timeline} selfId={selfId} role={role} names={names} refs={refsMap} />
           {canEdit && <div className="mt-3"><IssueComposer issueId={issue.id} users={users} /></div>}
         </div>
       </div>

@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { useGlobalHotkey } from '@/components/hooks/use-global-hotkey'
 import { useChat, dmName } from './chat-store'
 import MessageItem, { type Msg } from './message-item'
+import { IssueRefProvider } from './issue-ref-store'
 import Composer from './composer'
 import ThreadPanel from './thread-panel'
 import ConversationMenu, { MembersDialog } from './conversation-menu'
@@ -383,7 +384,11 @@ export default function MessagePane({ conversationId, conversationType, channelN
           ) : (
             <ChannelIntro name={channelName} manage={manage} onAddPeople={() => setMembersOpen(true)} />
           ))}
-          {!loading && messages.map((m, i) => {
+          {/* One batched resolution per visible message set — ONE fetch per pane,
+              never one per pill. Provides the resolved-ref Map each MessageItem reads. */}
+          {!loading && (
+          <IssueRefProvider bodies={messages.map((m) => m.body)}>
+          {messages.map((m, i) => {
             const prev = messages[i - 1]
             const prevDate = prev ? new Date(prev.createdAt) : null
             const dayChanged = !prevDate || new Date(m.createdAt).toDateString() !== prevDate.toDateString()
@@ -411,6 +416,8 @@ export default function MessagePane({ conversationId, conversationType, channelN
               </Fragment>
             )
           })}
+          </IssueRefProvider>
+          )}
           {typing && <TypingIndicator name={typing} />}
         </div>
         {!atBottom && (

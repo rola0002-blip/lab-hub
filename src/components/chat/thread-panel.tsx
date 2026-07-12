@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useChat } from './chat-store'
 import MessageItem, { type Msg } from './message-item'
+import { IssueRefProvider } from './issue-ref-store'
 import Composer from './composer'
 import { useFocusTrap } from '@/components/hooks/use-focus-trap'
 import { useMediaQuery } from '@/components/hooks/use-media-query'
@@ -99,6 +100,9 @@ export default function ThreadPanel({ rootId, conversationId, conversationType, 
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
+        {/* One batched resolution for the root + all replies. `root` is null before
+            load, so guard it out of the body set. */}
+        <IssueRefProvider bodies={root ? [root.body, ...replies.map((m) => m.body)] : replies.map((m) => m.body)}>
         {root && (
           // Reuse MessageItem for the root (identical rendering, reactions, edit,
           // ⋯ menu) — `inThread` drops the redundant facepile + "reply in thread".
@@ -115,6 +119,7 @@ export default function ThreadPanel({ rootId, conversationId, conversationType, 
               onUpdated={upsertReply} onOpenThread={() => {}} />
           ))}
         </div>
+        </IssueRefProvider>
       </div>
 
       <Composer conversationId={conversationId} selfRole={selfRole} memberIds={memberIds} parentId={rootId}

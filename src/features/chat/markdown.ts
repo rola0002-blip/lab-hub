@@ -8,7 +8,7 @@ import { emojiFor } from './emoji'
 export type TokenType =
   | 'text' | 'bold' | 'italic' | 'strike'
   | 'code' | 'codeblock' | 'quote' | 'listitem'
-  | 'mention' | 'channel' | 'link' | 'emoji'
+  | 'mention' | 'channel' | 'link' | 'emoji' | 'issueRef'
 
 // `label` is the visible text of a markdown `[text](url)` link (the href lives
 // in `value`); it is undefined for a bare-URL link (which renders its url).
@@ -28,6 +28,10 @@ const FENCE = /```([\s\S]*?)```/g
 const INLINE_CODE = /`([^`\n]+)`/g
 // Mentions (id-safe alphabet, matching mentions.ts) and the channel token.
 const MENTION = /<@([a-zA-Z0-9_-]+)>|<!channel>/g
+// Word-bounded COL-<digits>. `(?<![\w-])` / `(?![\w-])` keep COLA-1 / COL-1a /
+// a-COL-1 from matching. Runs only on non-code text (inline/fenced code is peeled
+// off first), so `COL-9` inside a code span is inherently skipped.
+const ISSUE_REF = /(?<![\w-])COL-(\d+)(?![\w-])/g
 // Markdown links `[text](url)`: label is any run without `]`, url any run
 // without `)`/whitespace. Backtracking-safe (one `*`/`+` per negated class).
 // Scheme validation happens in the tokenizer, not the regex (see HTTP below).
@@ -99,9 +103,13 @@ const links: Sub = (s) => split(s, LINK, (m) => ({ type: 'link', value: m[0] }),
 const mdLinks: Sub = (s) => split(s, MDLINK, (m) =>
   HTTP.test(m[2]) ? { type: 'link', value: m[2], label: m[1] || undefined } : null,
   links)
+// Issue autolink `COL-<n>` runs after mentions (so a mention is never re-scanned)
+// and before markdown links. Value is the bare number; the renderer resolves it to
+// a live pill (identifier + title + status) or falls back to `COL-<n>` plain text.
+const issueRefs: Sub = (s) => split(s, ISSUE_REF, (m) => ({ type: 'issueRef', value: m[1] }), mdLinks)
 const mentions: Sub = (s) => split(s, MENTION, (m) =>
   m[0] === '<!channel>' ? { type: 'channel', value: 'channel' } : { type: 'mention', value: m[1], userId: m[1] },
-  mdLinks)
+  issueRefs)
 const inline: Sub = (s) => split(s, INLINE_CODE, (m) => ({ type: 'code', value: m[1] }), mentions)
 
 // Line-level pass over a non-fenced segment: `> ` → quote, `- `/`* ` → list item,
@@ -163,6 +171,7 @@ export function messageToPlainText(body: string, resolveMention?: (userId: strin
         case 'mention': return `@${resolveMention?.(t.value) ?? 'mention'}`
         case 'channel': return '@channel'
         case 'link': return t.label ?? t.value // spoken text is the visible label, never the raw href
+        case 'issueRef': return `COL-${t.value}` // announce the identifier, not the bare number
         default: return t.value // text/bold/italic/strike/code/codeblock/quote/listitem/emoji
       }
     })
