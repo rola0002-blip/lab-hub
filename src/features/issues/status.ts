@@ -27,6 +27,15 @@ export function isDoneLike(s: IssueStatus): boolean {
   return s === 'DONE' || s === 'CANCELED'
 }
 
+// A label stores a --status-* token as its color (LABEL_PALETTE above). That hue is
+// tuned to the 3:1 non-text glyph bar and reads below the 4.5:1 AA TEXT bar as chip
+// text over the chip's 14% tint, so chip TEXT must use the parallel --label-* token
+// (darker in light / lighter in dark; both themes gated at 4.5:1 in
+// scripts/check-contrast.mjs). The tint background keeps the original --status- hue.
+export function labelTextVar(color: string): string {
+  return color.startsWith('--status-') ? color.replace('--status-', '--label-') : color
+}
+
 // Shareable-URL hardening: Next searchParams values are string | string[] |
 // undefined, and enum params come from user-editable URLs. A typo'd/stale value
 // (?status=foo) must degrade to "no filter", never reach Prisma's enum column

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useTransition } from 'react'
 import { createLabelAction } from '@/app/(app)/issues/actions'
-import { LABEL_PALETTE } from '@/features/issues/status'
+import { LABEL_PALETTE, labelTextVar } from '@/features/issues/status'
 import { toast } from '@/lib/toast-store'
 
 export type LabelOpt = { id: string; name: string; color: string }
@@ -36,10 +36,13 @@ export function LabelPicker({ labels, selectedIds, onChange, canEdit }: {
       <div className="flex flex-wrap gap-1">
         {visible.map((l) => {
           const on = selected.has(l.id)
+          // Selection is shown with a persistent ring, NOT opacity — opacity-50 would
+          // halve the chip text's effective contrast below the 4.5:1 AA bar. Both
+          // states keep full-strength readable label text (F6).
           return (
             <button key={l.id} type="button" disabled={!canEdit} aria-pressed={on} onClick={() => toggle(l.id)}
-              className={`rounded-full px-2 py-0.5 text-2xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] ${on ? '' : 'opacity-50'}`}
-              style={{ color: `var(${l.color})`, background: `color-mix(in srgb, var(${l.color}) 14%, var(--bg-canvas))` }}>{l.name}</button>
+              className={`rounded-full px-2 py-0.5 text-2xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] ${on ? 'ring-2 ring-inset ring-[var(--ring-focus)]' : 'ring-1 ring-inset ring-border'}`}
+              style={{ color: `var(${labelTextVar(l.color)})`, background: `color-mix(in srgb, var(${l.color}) 14%, var(--bg-canvas))` }}>{l.name}</button>
           )
         })}
         {canEdit && q && !exact && (

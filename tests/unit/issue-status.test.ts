@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ISSUE_STATUSES, OPEN_STATUSES, STATUS_LABEL, STATUS_TOKEN, PRIORITIES, isDoneLike, LABEL_PALETTE, parseIssueFilters } from '@/features/issues/status'
+import { ISSUE_STATUSES, OPEN_STATUSES, STATUS_LABEL, STATUS_TOKEN, PRIORITIES, isDoneLike, LABEL_PALETTE, labelTextVar, parseIssueFilters } from '@/features/issues/status'
 
 describe('issue status metadata', () => {
   it('covers all six statuses with labels + tokens in board order', () => {
@@ -14,6 +14,13 @@ describe('issue status metadata', () => {
   it('label palette cycles over the fixed status-token set', () => {
     expect(LABEL_PALETTE.length).toBeGreaterThan(0)
     for (const c of LABEL_PALETTE) expect(c).toMatch(/^--status-/)
+  })
+  it('labelTextVar maps every palette --status- token to a readable --label- text token (F6)', () => {
+    // Chip TEXT must use the AA-compliant --label-* partner, not the 3:1 glyph hue.
+    expect(labelTextVar('--status-in-progress')).toBe('--label-in-progress')
+    for (const c of LABEL_PALETTE) expect(labelTextVar(c)).toBe(c.replace('--status-', '--label-'))
+    // A non-status color is returned unchanged (defensive).
+    expect(labelTextVar('--accent')).toBe('--accent')
   })
 })
 

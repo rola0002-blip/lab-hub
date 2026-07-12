@@ -213,6 +213,19 @@
   --status-backlog:#9ca3af; --status-todo:#fbbf24; --status-in-progress:#60a5fa;
   --status-in-review:#a78bfa; --status-done:#4ade80; --status-canceled:#a1a1aa;
 }
+/* Label-chip TEXT colours (features/issues/status.ts → labelTextVar maps each
+   --status-* to its --label-* partner). The --status-* glyph hues are tuned to the
+   3:1 non-text bar and fail the 4.5:1 AA TEXT bar as chip text over the chip's 14%
+   tint, so label text uses these darker-in-light / lighter-in-dark partners. Every
+   pair (6 hues × both themes) is contrast-gated at 4.5:1 in scripts/check-contrast.mjs. */
+:root {
+  --label-backlog:#374151; --label-todo:#92400e; --label-in-progress:#1e40af;
+  --label-in-review:#5b21b6; --label-done:#166534; --label-canceled:#3f3f46;
+}
+[data-theme="dark"] {
+  --label-backlog:#d1d5db; --label-todo:#fcd34d; --label-in-progress:#93c5fd;
+  --label-in-review:#c4b5fd; --label-done:#86efac; --label-canceled:#d4d4d8;
+}
 
 /* ── 4. MAP SEMANTICS → TAILWIND UTILITIES ────────── */
 @theme inline {

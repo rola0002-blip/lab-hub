@@ -4,7 +4,7 @@ import { useTransition } from 'react'
 import { Avatar } from '@/components/ui/avatar'
 import { Menu } from '@/components/ui/menu'
 import { StatusIcon, PriorityIcon } from './status'
-import { ISSUE_STATUSES, STATUS_LABEL, PRIORITIES, PRIORITY_LABEL, isDoneLike } from '@/features/issues/status'
+import { ISSUE_STATUSES, STATUS_LABEL, PRIORITIES, PRIORITY_LABEL, isDoneLike, labelTextVar } from '@/features/issues/status'
 import { setStatusAction, setAssigneeAction, setPriorityAction } from '@/app/(app)/issues/actions'
 import { toast } from '@/lib/toast-store'
 import { formatDay } from '@/lib/time'
@@ -36,7 +36,7 @@ export function IssueRow({ issue, role, users, timezone, tabIndex, onFocusIndex 
       </Link>
       <span className="flex shrink-0 gap-1">
         {issue.labels.map((l) => (
-          <span key={l.id} className="rounded-full px-1.5 py-0.5 text-2xs" style={{ color: `var(${l.color})`, background: `color-mix(in srgb, var(${l.color}) 14%, var(--bg-canvas))` }}>{l.name}</span>
+          <span key={l.id} className="rounded-full px-1.5 py-0.5 text-2xs" style={{ color: `var(${labelTextVar(l.color)})`, background: `color-mix(in srgb, var(${l.color}) 14%, var(--bg-canvas))` }}>{l.name}</span>
         ))}
       </span>
       <span className="shrink-0 text-2xs text-subtle">{issue.project?.name ?? ''}</span>
