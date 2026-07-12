@@ -197,6 +197,23 @@
 :root[data-accent="graphite"]{--accent:#475569;--accent-hover:color-mix(in srgb,#475569,#000 12%);--accent-active:color-mix(in srgb,#475569,#000 24%);--accent-subtle:color-mix(in srgb,#475569 12%,var(--bg-canvas));--accent-on:#fff;--ring-focus:#475569;--border-focus:#475569;--text-link:color-mix(in srgb,#475569,#000 12%);--text-accent:color-mix(in srgb,#475569,#000 12%);--bg-selected:color-mix(in srgb,#475569 12%,var(--bg-canvas));}
 [data-theme="dark"][data-accent="graphite"]{--accent:#94a3b8;--accent-hover:color-mix(in srgb,#94a3b8,#fff 12%);--accent-active:color-mix(in srgb,#94a3b8,#fff 24%);--accent-subtle:color-mix(in srgb,#94a3b8 16%,transparent);--accent-on:color-mix(in srgb,#94a3b8,#000 78%);--ring-focus:#94a3b8;--border-focus:#94a3b8;--text-link:#94a3b8;--text-accent:#94a3b8;--bg-selected:color-mix(in srgb,#94a3b8 16%,var(--bg-canvas));}
 
+/* ── 3c. ISSUE STATUS PALETTE (SP4) ───────────────── */
+/* Colours for the six-state status glyphs (features/issues/status.ts →
+   STATUS_TOKEN) and the fixed label-chip palette (LABEL_PALETTE). Theme-split so
+   each small non-text glyph clears the 3:1 bar on its own canvas — a single
+   mid-tone cannot on both the white and the near-black surface. The chromatic
+   five reuse the accent-preset hexes already contrast-verified by
+   scripts/check-contrast.mjs; the two neutrals are gray/zinc-500 (light) and
+   gray/zinc-400 (dark). NOT accent-themed. */
+:root {
+  --status-backlog:#6b7280; --status-todo:#b45309; --status-in-progress:#2563eb;
+  --status-in-review:#7c3aed; --status-done:#15803d; --status-canceled:#71717a;
+}
+[data-theme="dark"] {
+  --status-backlog:#9ca3af; --status-todo:#fbbf24; --status-in-progress:#60a5fa;
+  --status-in-review:#a78bfa; --status-done:#4ade80; --status-canceled:#a1a1aa;
+}
+
 /* ── 4. MAP SEMANTICS → TAILWIND UTILITIES ────────── */
 @theme inline {
   --color-canvas:var(--bg-canvas); --color-surface:var(--bg-surface);
