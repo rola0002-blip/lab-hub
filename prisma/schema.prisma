@@ -36,6 +36,13 @@ model User {
   chatReactions     Reaction[]
   pushSubscriptions PushSubscription[]
 
+  projectsLed     Project[]         @relation("ProjectLead")
+  issuesCreated   Issue[]           @relation("IssueCreator")
+  issuesAssigned  Issue[]           @relation("IssueAssignee")
+  issueComments   IssueComment[]
+  issueUploads    IssueAttachment[]
+  issueActivities IssueActivity[]
+
   @@map("user")
 }
 
@@ -315,6 +322,8 @@ model Message {
   reactions   Reaction[]
   attachments ChatAttachment[]
 
+  originatedIssues Issue[] @relation("IssueOrigin")
+
   @@unique([conversationId, slackTs])
   @@index([conversationId, createdAt])
   @@index([parentId])
@@ -349,4 +358,143 @@ model PushSubscription {
   p256dh    String
   auth      String
   createdAt DateTime @default(now())
+}
+
+// ---------- Project management (sub-project 4) ----------
+enum ProjectStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELED
+}
+
+enum IssueStatus {
+  BACKLOG
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+  CANCELED
+}
+
+enum IssuePriority {
+  NONE
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  description String        @default("")
+  leadId      String?
+  lead        User?         @relation("ProjectLead", fields: [leadId], references: [id], onDelete: SetNull)
+  targetDate  DateTime?
+  status      ProjectStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  issues Issue[]
+}
+
+model Issue {
+  id              String                   @id @default(cuid())
+  // Drawn from the workspace-global issue_number_seq (created in the migration).
+  // dbgenerated → Prisma omits it on insert; Postgres nextval fills it atomically
+  // so concurrent creates never collide. Rendered as COL-<number>.
+  number          Int                      @unique @default(dbgenerated("nextval('issue_number_seq'::regclass)"))
+  title           String
+  description     String                   @default("")
+  status          IssueStatus              @default(BACKLOG)
+  priority        IssuePriority            @default(NONE)
+  assigneeId      String?
+  assignee        User?                    @relation("IssueAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  creatorId       String
+  creator         User                     @relation("IssueCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  projectId       String?
+  project         Project?                 @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  dueDate         DateTime?
+  // Fractional-index ordering key within a board column. COLLATE "C" (set in the
+  // migration) so Postgres orders it by byte = base-62 order (rank.ts).
+  rank            String
+  completedAt     DateTime?
+  // Backlink for create-from-message. SetNull: deleting the source message never
+  // deletes the issue.
+  originMessageId String?
+  originMessage   Message?                 @relation("IssueOrigin", fields: [originMessageId], references: [id], onDelete: SetNull)
+  search          Unsupported("tsvector")?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  labels      IssueLabel[]
+  comments    IssueComment[]
+  attachments IssueAttachment[]
+  activities  IssueActivity[]
+
+  @@index([status, rank])
+  @@index([projectId])
+  @@index([assigneeId])
+}
+
+model Label {
+  id    String @id @default(cuid())
+  name  String @unique
+  color String
+
+  issues IssueLabel[]
+}
+
+model IssueLabel {
+  id      String @id @default(cuid())
+  issueId String
+  issue   Issue  @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  labelId String
+  label   Label  @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@unique([issueId, labelId])
+}
+
+model IssueComment {
+  id             String    @id @default(cuid())
+  issueId        String
+  issue          Issue     @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body           String
+  mentionUserIds String[]
+  editedAt       DateTime?
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([issueId, createdAt])
+}
+
+model IssueAttachment {
+  id         String @id @default(cuid())
+  issueId    String
+  issue      Issue  @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  uploaderId String
+  uploader   User   @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  path       String
+  name       String
+  mime       String
+  size       Int
+
+  @@index([issueId])
+}
+
+model IssueActivity {
+  id        String   @id @default(cuid())
+  issueId   String
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  actorId   String
+  actor     User     @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  // 'created' | 'status' | 'assignee' | 'priority' | 'project' | 'due_date' | 'labels' | 'title'
+  type      String
+  data      Json
+  createdAt DateTime @default(now())
+
+  @@index([issueId, createdAt])
 }

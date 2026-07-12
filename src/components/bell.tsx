@@ -1,8 +1,9 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import {
   Bell as BellIcon, Check, Hash, AtSign, MessageSquare,
-  CalendarClock, CalendarCheck, CalendarX, type LucideIcon,
+  CalendarClock, CalendarCheck, CalendarX, UserPlus, CircleCheck, type LucideIcon,
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -22,6 +23,10 @@ const LABEL: Record<string, string> = {
   message_mention: 'You were mentioned',
   message_dm: 'New direct message',
   channel_added: 'Added to a channel',
+  issue_assigned: 'Issue assigned to you',
+  issue_mention: 'You were mentioned on an issue',
+  issue_comment: 'New comment on an issue',
+  issue_done: 'Your issue was completed',
 }
 
 // Per-type glyph for the actor square when there's no person avatar to show
@@ -36,6 +41,10 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   message_mention: AtSign,
   message_dm: MessageSquare,
   channel_added: Hash,
+  issue_assigned: UserPlus,
+  issue_mention: AtSign,
+  issue_comment: MessageSquare,
+  issue_done: CircleCheck,
 }
 
 type Face =
@@ -137,8 +146,10 @@ export default function Bell() {
             const head = g.items[0]
             const face = faceFor(head)
             const unreadGroup = g.items.some((it) => !it.readAt)
-            return (
-              <div key={g.key} className="flex gap-2.5 rounded-lg p-2 transition-colors hover:bg-hover">
+            // Issue notifications carry a COL-<n> identifier → link the row to the issue.
+            const issueHref = typeof head.payload?.identifier === 'string' ? `/issues/${head.payload.identifier}` : null
+            const inner = (
+              <>
                 <FaceAvatar face={face} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
@@ -151,7 +162,14 @@ export default function Bell() {
                       : null
                   ))}
                 </div>
-              </div>
+              </>
+            )
+            return issueHref ? (
+              // Close the tray on navigate — the outside-click guard skips in-panel
+              // clicks, so without this the panel would sit on top of the issue page.
+              <Link key={g.key} href={issueHref} onClick={() => setOpen(false)} className="flex gap-2.5 rounded-lg p-2 transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">{inner}</Link>
+            ) : (
+              <div key={g.key} className="flex gap-2.5 rounded-lg p-2 transition-colors hover:bg-hover">{inner}</div>
             )
           })}
         </div>

@@ -1,6 +1,6 @@
 'use client'
 import { Fragment, useState, type ReactNode } from 'react'
-import { Copy, Check, Smile, SmilePlus, MessageSquare, Forward, Bookmark, MoreHorizontal } from 'lucide-react'
+import { Copy, Check, Smile, SmilePlus, MessageSquare, Forward, Bookmark, MoreHorizontal, ListPlus } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { IconButton } from '@/components/ui/icon-button'
 import { Menu } from '@/components/ui/menu'
@@ -8,8 +8,11 @@ import { avatarHue } from '@/lib/avatar'
 import { humanTime, clockTime } from '@/lib/humanize'
 import { tokenizeMessage, type Token } from '@/features/chat/markdown'
 import { EMOJI_MAP } from '@/features/chat/emoji'
+import { openIssueComposer } from '@/lib/issue-composer-store'
 import { useChat } from './chat-store'
 import { EmojiPicker } from './emoji-picker'
+import { IssueRefPill, type RefData } from './issue-ref-pill'
+import { useIssueRefs } from './issue-ref-store'
 
 // Client-side mirror of the server MessageDto (message-service is `server-only`,
 // so we redeclare the shape here rather than import it into a client bundle).
@@ -90,7 +93,7 @@ function CodeBlock({ value }: { value: string }) {
 
 // Render one markdown token to a React node (never an HTML string). `jumbo`
 // enlarges an emoji-only body; `selfId` emphasizes a mention of the viewer.
-function renderToken(t: Token, key: number, names: Names, selfId: string | undefined, jumbo: boolean): ReactNode {
+function renderToken(t: Token, key: number, names: Names, selfId: string | undefined, jumbo: boolean, refs: Map<number, RefData> | null): ReactNode {
   switch (t.type) {
     case 'bold': return <strong key={key} className="font-semibold text-default">{t.value}</strong>
     case 'italic': return <em key={key}>{t.value}</em>
@@ -113,6 +116,9 @@ function renderToken(t: Token, key: number, names: Names, selfId: string | undef
       )
     }
     case 'emoji': return <span key={key} className={jumbo ? 'align-middle text-3xl leading-none' : undefined}>{t.value}</span>
+    // Resolved → accent pill (identifier + live title + status dot, struck-through
+    // for Done/Canceled); unresolvable → plain `COL-<n>` text (pill decides).
+    case 'issueRef': return <IssueRefPill key={key} number={t.value} resolved={refs?.get(Number(t.value)) ?? undefined} />
     default: return <Fragment key={key}>{t.value}</Fragment>
   }
 }
@@ -121,11 +127,11 @@ function renderToken(t: Token, key: number, names: Names, selfId: string | undef
 // (mentions + links render identically) and adds markdown, code, quotes, lists
 // and emoji — all via tokens, never dangerouslySetInnerHTML. A body of ≤3 emoji
 // with no real text renders "jumbo".
-export function renderTokens(body: string, names: Names, selfId?: string): ReactNode[] {
+export function renderTokens(body: string, names: Names, selfId?: string, refs: Map<number, RefData> | null = null): ReactNode[] {
   const tokens = tokenizeMessage(body)
   const meaningful = tokens.filter((t) => !(t.type === 'text' && t.value.trim() === ''))
   const jumbo = meaningful.length > 0 && meaningful.length <= 3 && meaningful.every((t) => t.type === 'emoji')
-  return tokens.map((t, k) => renderToken(t, k, names, selfId, jumbo))
+  return tokens.map((t, k) => renderToken(t, k, names, selfId, jumbo, refs))
 }
 
 type Props = {
@@ -153,6 +159,8 @@ type Props = {
 
 export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpdated, onOpenThread, forceLeading = false, onRetry, inThread = false, tabIndex = 0 }: Props) {
   const { online } = useChat()
+  // Pane-provided resolved-ref Map (null outside a provider → pills render plain text).
+  const issueRefs = useIssueRefs()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(msg.body)
   // Which emoji picker is open, if any: the hover-toolbar face or the reaction
@@ -164,6 +172,10 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
 
   const own = msg.author.id === selfId
   const canDelete = own || selfRole === 'admin'
+  // Guests are read-only for issues (issue-hotkeys.tsx / command-palette gate them
+  // too); hide both create-issue affordances so a guest never raises a modal that
+  // only 403s at submit. The service is the real gate; this is the UI half.
+  const canCreateIssue = selfRole !== 'guest'
   const isTemp = msg.id.startsWith('tmp-')
   // A live message that @-mentions the viewer tints its row (accent rail + wash).
   const selfMention = !msg.deleted && msg.mentionUserIds.includes(selfId)
@@ -214,6 +226,16 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
     setLinkCopied(true)
     setTimeout(() => setLinkCopied(false), 1500)
   }
+  // Open the shared create-issue composer pre-filled from this message: title = the
+  // first line (truncated), description = the whole body quoted + author attribution,
+  // originMessageId set so the new issue backlinks here (T13 composer pushes to the
+  // new issue on create). The FK is onDelete:SetNull — deleting the message later
+  // just nulls the link, never the issue.
+  function createFromMessage() {
+    const firstLine = msg.body.split('\n')[0].slice(0, 120)
+    const quoted = msg.body.split('\n').map((l) => `> ${l}`).join('\n')
+    openIssueComposer({ title: firstLine, description: `${quoted}\n\n— ${msg.author.name}`, originMessageId: msg.id })
+  }
 
   // Presence of the message author, mirrored off the store's `online` set (same
   // source the DM rows/header use). Shown on the leading avatar as a filled dot
@@ -226,6 +248,7 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
   const menuItems = [
     ...(own ? [{ label: 'Edit', onSelect: () => { setDraft(msg.body); setEditing(true) } }] : []),
     { label: 'Copy link', onSelect: copyLink },
+    ...(canCreateIssue ? [{ label: 'Create issue', onSelect: createFromMessage }] : []),
     { label: 'Pin', onSelect: () => {}, disabled: true },
     ...(canDelete ? [{ label: 'Delete', onSelect: () => setConfirmDel(true), danger: true }] : []),
   ]
@@ -294,7 +317,7 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
             <p className="text-base italic text-subtle">message deleted</p>
           ) : (
             <p className="whitespace-pre-wrap break-words text-base text-default">
-              {renderTokens(msg.body, names, selfId)}
+              {renderTokens(msg.body, names, selfId, issueRefs)}
               {msg.editedAt && <span className="ml-1 text-2xs text-subtle">(edited)</span>}
             </p>
           )}
@@ -383,6 +406,7 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
             {!inThread && !msg.parentId && (
               <IconButton label="Reply in thread" onClick={onOpenThread}><MessageSquare size={16} aria-hidden /></IconButton>
             )}
+            {canCreateIssue && <IconButton label="Create issue from message" onClick={createFromMessage}><ListPlus size={16} aria-hidden /></IconButton>}
             {/* Forward + Save have no backend yet (like Pin) → present but disabled. */}
             <IconButton label="Forward (coming soon)" disabled><Forward size={16} aria-hidden /></IconButton>
             <IconButton label="Save for later (coming soon)" disabled><Bookmark size={16} aria-hidden /></IconButton>

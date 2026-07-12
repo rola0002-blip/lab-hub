@@ -72,6 +72,12 @@ const BASE = {
     ring: hex('#0d9488'),                              // --ring-focus (teal-600, nudged)
     selected: hex('#eaf6f4'),                          // --bg-selected
     sidebarActive: hex('#0f766e'),                     // --sidebar-active-bg (teal-700)
+    // §3c status glyph fills (globals.css light) — small non-text marks, 3:1 UI bar.
+    statusBacklog: hex('#6b7280'), statusTodo: hex('#b45309'), statusInProgress: hex('#2563eb'),
+    statusInReview: hex('#7c3aed'), statusDone: hex('#15803d'), statusCanceled: hex('#71717a'),
+    // §3c label-chip TEXT colours (globals.css light) — readable over the 14% tint, 4.5:1 TEXT bar.
+    labelBacklog: hex('#374151'), labelTodo: hex('#92400e'), labelInProgress: hex('#1e40af'),
+    labelInReview: hex('#5b21b6'), labelDone: hex('#166534'), labelCanceled: hex('#3f3f46'),
   },
   dark: {
     textDefault: hex('#d1d2d3'),
@@ -84,6 +90,12 @@ const BASE = {
     ring: hex('#2dd4bf'),                              // --ring-focus (teal-400)
     selected: hex('#0f2c2a'),                          // --bg-selected
     sidebarActive: hex('#0f766e'),                     // --sidebar-active-bg (teal-700)
+    // §3c status glyph fills (globals.css dark) — lightened for the near-black canvas.
+    statusBacklog: hex('#9ca3af'), statusTodo: hex('#fbbf24'), statusInProgress: hex('#60a5fa'),
+    statusInReview: hex('#a78bfa'), statusDone: hex('#4ade80'), statusCanceled: hex('#a1a1aa'),
+    // §3c label-chip TEXT colours (globals.css dark) — lightened; readable over the 14% tint.
+    labelBacklog: hex('#d1d5db'), labelTodo: hex('#fcd34d'), labelInProgress: hex('#93c5fd'),
+    labelInReview: hex('#c4b5fd'), labelDone: hex('#86efac'), labelCanceled: hex('#d4d4d8'),
   },
 }
 
@@ -109,6 +121,23 @@ for (const theme of ['light', 'dark']) {
   check(theme, 'sidebar-active-text / sidebar-active-bg', WHITE, b.sidebarActive, AA_TEXT) // active nav label
   check(theme, 'accent-on / accent', b.accentOn, b.accent, UI)
   check(theme, 'ring-focus / canvas', b.ring, canvas, UI)
+  // Issue status glyphs (§3c) — each small non-text mark must clear the 3:1 UI
+  // bar on its own theme canvas (they are theme-split so one hue need not span
+  // both surfaces). Gated against the resolved globals.css values above.
+  for (const [name, key] of [['backlog', 'statusBacklog'], ['todo', 'statusTodo'], ['in-progress', 'statusInProgress'], ['in-review', 'statusInReview'], ['done', 'statusDone'], ['canceled', 'statusCanceled']]) {
+    check(theme, `status-${name} / canvas`, b[key], canvas, UI)
+  }
+  // Issue label-chip TEXT (§3c) — real text (features/issues/status.ts labelTextVar),
+  // so it must clear the 4.5:1 AA TEXT bar over its chip background: a 14% tint of
+  // the matching status hue over the canvas (the components' color-mix). This is the
+  // TEXT gate the status-glyph 3:1 entries do NOT cover.
+  for (const [name, labelKey, statusKey] of [
+    ['backlog', 'labelBacklog', 'statusBacklog'], ['todo', 'labelTodo', 'statusTodo'],
+    ['in-progress', 'labelInProgress', 'statusInProgress'], ['in-review', 'labelInReview', 'statusInReview'],
+    ['done', 'labelDone', 'statusDone'], ['canceled', 'labelCanceled', 'statusCanceled'],
+  ]) {
+    check(theme, `label-${name} text / chip tint`, b[labelKey], mix(b[statusKey], canvas, 0.14), AA_TEXT)
+  }
 }
 
 // Accent presets — re-derive the two adjudicated non-text pairs exactly as
@@ -126,4 +155,4 @@ if (failures.length) {
   for (const f of failures) console.error(`  ✗ ${f}`)
   process.exit(1)
 }
-console.log(`check-contrast: PASSED — ${count} pairs (base + ${ACCENTS.length} accents × 2 themes) clear their bars.`)
+console.log(`check-contrast: PASSED — ${count} pairs (base + 6 status + 6 label × 2 themes + ${ACCENTS.length} accents × 2 themes) clear their bars.`)

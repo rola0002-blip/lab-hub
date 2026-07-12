@@ -1,5 +1,6 @@
 import 'server-only'
 import { Client } from 'pg'
+import type { IssueStatus } from '@prisma/client'
 import { prisma } from './db'
 import { env } from './env'
 
@@ -10,6 +11,12 @@ export type LabEvent =
   | { t: 'notif'; uid: string }
   | { t: 'read'; cid: string; uid: string }
   | { t: 'member'; cid: string; uid: string }
+  // SP4: issues are workspace-visible, so these broadcast to ALL subscribers with
+  // NO membership filter (deliberately unlike chat events — do not copy this into
+  // chat routing). `issue` = created/updated; `issue_move` = board move; `issue_comment` = a comment landed.
+  | { t: 'issue'; id: string; projectId?: string }
+  | { t: 'issue_move'; id: string; status: IssueStatus; rank: string }
+  | { t: 'issue_comment'; issueId: string }
 
 export type Subscriber = {
   userId: string
@@ -53,6 +60,7 @@ async function dispatch(e: LabEvent): Promise<void> {
       : e.t === 'read' ? sub.userId === e.uid && sub.conversationIds.has(e.cid)
       : e.t === 'typing' ? sub.userId !== e.uid && sub.conversationIds.has(e.cid)
       : e.t === 'member' ? sub.userId === e.uid || sub.conversationIds.has(e.cid)
+      : e.t === 'issue' || e.t === 'issue_move' || e.t === 'issue_comment' ? true // workspace-wide, no membership filter
       : sub.conversationIds.has(e.cid) // msg / msg_edit / msg_del / rx
     if (deliver) {
       try { sub.send(e) } catch { /* dead subscriber; unsubscribe cleans up */ }

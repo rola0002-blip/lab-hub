@@ -23,7 +23,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
 
   const isChat = path[0].toLowerCase() === 'chat'
   const isAvatar = path[0].toLowerCase() === 'avatars'
-  const isPrivate = isChat || isAvatar
+  const isIssue = path[0].toLowerCase() === 'issues'
+  const isPrivate = isChat || isAvatar || isIssue
 
   // Chat attachments are chat reads of potentially confidential lab data, so
   // they go through the ConversationMember gate like every other chat read.
@@ -39,11 +40,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
     })
     if (!attachment) return new Response('Not found', { status: 404 })
     if (!(await isMember(user.id, attachment.message.conversationId))) return new Response('Forbidden', { status: 403 })
-  } else if (isAvatar) {
-    // Avatars are user photos: any authenticated session may read them, but they
-    // are not public. The traversal/case-fold guard above already proved path[0]
-    // names the same top-level dir readUpload will open, so no request can evade
-    // this gate by resolving into avatars/ from another prefix.
+  } else if (isAvatar || isIssue) {
+    // Avatars + issue attachments are private but workspace-visible: any
+    // authenticated session may read them. The traversal/case-fold guard above
+    // already proved path[0] names the same top-level dir readUpload will open.
     const user = await getSessionUser()
     if (!user) return new Response('Unauthorized', { status: 401 })
   }

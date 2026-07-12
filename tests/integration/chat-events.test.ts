@@ -68,4 +68,19 @@ describe('events bus', () => {
     expect(a.events).toContainEqual({ t: 'member', cid: 'c9', uid: 'ua' })
     expect(a.events).toContainEqual({ t: 'msg', cid: 'c9', mid: 'm9' })
   })
+
+  it('broadcasts issue events to every subscriber regardless of membership', async () => {
+    const received: string[] = []
+    const unsub = subscribe({
+      userId: 'nonmember', conversationIds: new Set(), reload: async () => new Set(),
+      send: (e) => { if (e.t === 'issue' || e.t === 'issue_move' || e.t === 'issue_comment') received.push(e.t) },
+    })
+    await wait(300) // listener connects — LOAD-BEARING, see note below
+    // dispatch() is internal; drive it through the real pg NOTIFY path via emitEvent.
+    await emitEvent({ t: 'issue', id: 'i1' })
+    await emitEvent({ t: 'issue_comment', issueId: 'i1' })
+    await wait(300) // allow the LISTEN round-trip
+    unsub()
+    expect(received).toEqual(['issue', 'issue_comment'])
+  })
 })

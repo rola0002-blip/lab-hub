@@ -48,9 +48,41 @@ Appearance section with the theme toggle + accent picker.
 an SSE live region for new messages, roving-focus message navigation, a
 focus-trapped responsive nav drawer, and reduced-motion support. Two gates guard
 it: `npm run contrast` (`scripts/check-contrast.mjs`) statically checks WCAG
-contrast for the semantic token pairs and all 10 accents in both themes, and the
-`e2e/a11y.spec.ts` axe-core sweep asserts zero serious/critical violations on every
-core surface in both themes.
+contrast for the semantic token pairs, the six issue-status glyphs, and all 10
+accents in both themes, and the `e2e/a11y.spec.ts` axe-core sweep asserts zero
+serious/critical violations on every core surface — including the issues list,
+board, project, issue-detail, and create-issue surfaces — in both themes.
+
+**Project management (SP4).** The issue tracker (`/issues`, `/projects`) adds its own
+tokens and conventions on top of the design system:
+
+- **Status palette.** Six theme-split status tokens —
+  `--status-backlog`/`-todo`/`-in-progress`/`-in-review`/`-done`/`-canceled` — live in
+  `globals.css` §3c (`:root` light + `[data-theme="dark"]`), lightened on the dark
+  canvas so each small non-text glyph clears the 3:1 UI-component bar on its own
+  surface. They are **not** accent-themed. `features/issues/status.ts` maps each
+  `IssueStatus` to its token (`STATUS_TOKEN`), and the fixed label palette
+  (`LABEL_PALETTE`) reuses them. `scripts/check-contrast.mjs` gates all twelve
+  (6 × 2 themes) against the canvas.
+- **Identifier.** Issues render as `COL-<n>`: the `COL-` prefix is a single
+  workspace-brand constant in `features/issues/identifier.ts` (`ISSUE_PREFIX`), never
+  per-project. The same word-bounded scanner resolves `COL-<n>` references in chat
+  messages and issue bodies into linked, status-dotted pills (struck through when the
+  target is Done/Canceled).
+- **Realtime routing.** Issue events (`issue`, `issue_move`, `issue_comment`) broadcast
+  to **all** signed-in users — the tracker is workspace-wide, unlike chat, whose every
+  read/write/search/SSE event is gated by `ConversationMember` membership. Issue views
+  never add a membership filter.
+- **Migrations stay hand-written & additive.** `Issue.number` is assigned from a
+  Postgres sequence (`issue_number_seq`) and `Issue.search` is a generated `tsvector`
+  column — neither is expressible through `prisma migrate dev`, so SP4 schema changes
+  are hand-written, additive migrations (`prisma migrate deploy` only). `Issue.rank`
+  is a fractional index stored `COLLATE "C"` for deterministic byte-ordering;
+  `features/issues/rank.ts` computes between-ranks and rebalances a column when keys
+  get too long.
+- **Drag-and-drop.** `@dnd-kit` is confined to the board (`board-view.tsx`); its
+  `KeyboardSensor` makes every move keyboard-only (grip → Space to lift, arrows to
+  move, Space to drop), and a per-card status Menu is the non-DnD fallback.
 
 ## Install (any org)
 

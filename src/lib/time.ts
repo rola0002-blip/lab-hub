@@ -5,6 +5,15 @@ export function formatDay(d: Date, timezone: string): string {
   return format(new TZDate(d, timezone), 'EEE d MMM')
 }
 
+// Absolute date + time in the org timezone, e.g. "14 Jul 2026, 9:14 AM". Used for
+// issue-timeline comment/activity timestamps. Deterministic (no `now` reference,
+// fixed en pattern via TZDate) so the server-rendered string and the client
+// hydration string are byte-identical — no React hydration mismatch — and always
+// reads in the ORG zone, never the ambient runtime/browser TZ.
+export function formatDateTime(d: Date, timezone: string): string {
+  return format(new TZDate(d, timezone), 'd MMM yyyy, h:mm a')
+}
+
 export function formatRange(startsAt: Date, endsAt: Date, timezone: string): string {
   const s = new TZDate(startsAt, timezone)
   const e = new TZDate(endsAt, timezone)

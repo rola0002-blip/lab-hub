@@ -8,7 +8,7 @@ import { emojiFor } from './emoji'
 export type TokenType =
   | 'text' | 'bold' | 'italic' | 'strike'
   | 'code' | 'codeblock' | 'quote' | 'listitem'
-  | 'mention' | 'channel' | 'link' | 'emoji'
+  | 'mention' | 'channel' | 'link' | 'emoji' | 'issueRef'
 
 // `label` is the visible text of a markdown `[text](url)` link (the href lives
 // in `value`); it is undefined for a bare-URL link (which renders its url).
@@ -28,6 +28,10 @@ const FENCE = /```([\s\S]*?)```/g
 const INLINE_CODE = /`([^`\n]+)`/g
 // Mentions (id-safe alphabet, matching mentions.ts) and the channel token.
 const MENTION = /<@([a-zA-Z0-9_-]+)>|<!channel>/g
+// Word-bounded COL-<digits>. `(?<![\w-])` / `(?![\w-])` keep COLA-1 / COL-1a /
+// a-COL-1 from matching. Runs only on non-code text (inline/fenced code is peeled
+// off first), so `COL-9` inside a code span is inherently skipped.
+const ISSUE_REF = /(?<![\w-])COL-(\d+)(?![\w-])/g
 // Markdown links `[text](url)`: label is any run without `]`, url any run
 // without `)`/whitespace. Backtracking-safe (one `*`/`+` per negated class).
 // Scheme validation happens in the tokenizer, not the regex (see HTTP below).
@@ -80,8 +84,9 @@ const plain: Sub = (s) => (s === '' ? [] : [{ type: 'text', value: s }])
 // Inline pipeline (order matters): inline code protects its contents first, then
 // mentions/channel (higher priority than emphasis so `**<@u>**` keeps the mention),
 // then markdown `[text](url)` links (BEFORE bare-URL autolinking, so a link's
-// `(url)` is not re-scanned), then bare links, emphasis, emoji shortnames, and
-// finally raw unicode emoji.
+// `(url)` is not re-scanned), then bare links, then issue autolinks (`COL-<n>`,
+// AFTER both link passes so a ref inside a link is never split out), then emphasis,
+// emoji shortnames, and finally raw unicode emoji.
 const rawEmoji: Sub = (s) => split(s, RAW_EMOJI, (m) => ({ type: 'emoji', value: m[0] }), plain)
 const shortcodes: Sub = (s) => split(s, SHORTCODE, (m) => {
   const g = emojiFor(m[1])
@@ -90,7 +95,14 @@ const shortcodes: Sub = (s) => split(s, SHORTCODE, (m) => {
 const strike: Sub = (s) => split(s, STRIKE, (m) => ({ type: 'strike', value: m[1] }), shortcodes)
 const italic: Sub = (s) => split(s, ITALIC, (m) => ({ type: 'italic', value: m[1] }), strike)
 const bold: Sub = (s) => split(s, BOLD, (m) => ({ type: 'bold', value: m[1] }), italic)
-const links: Sub = (s) => split(s, LINK, (m) => ({ type: 'link', value: m[0] }), bold)
+// Issue autolink `COL-<n>` runs AFTER both link passes (markdown + bare URL) so a
+// `COL-<n>` sitting inside a link's label or URL is protected: the whole link is
+// extracted first and its label/URL are never re-scanned, so an ordinary link is
+// never split into a stray pill + raw href (F2 regression). It still autolinks a
+// bare `COL-<n>` in plain text. Value is the bare number; the renderer resolves it
+// to a live pill (identifier + title + status) or falls back to `COL-<n>` text.
+const issueRefs: Sub = (s) => split(s, ISSUE_REF, (m) => ({ type: 'issueRef', value: m[1] }), bold)
+const links: Sub = (s) => split(s, LINK, (m) => ({ type: 'link', value: m[0] }), issueRefs)
 // Markdown `[text](url)` runs BEFORE the bare-URL pass so a link's `(url)` is
 // never re-scanned. Scheme-locked: a non-http(s) url (javascript:/data:/
 // relative/empty) returns null, leaving the whole marker as literal text
@@ -99,6 +111,9 @@ const links: Sub = (s) => split(s, LINK, (m) => ({ type: 'link', value: m[0] }),
 const mdLinks: Sub = (s) => split(s, MDLINK, (m) =>
   HTTP.test(m[2]) ? { type: 'link', value: m[2], label: m[1] || undefined } : null,
   links)
+// Mentions run before the link passes (a mention token is never re-scanned) and
+// well before issueRefs, so `<@COL-5>` matches the mention alphabet and is never
+// mistaken for an issue ref.
 const mentions: Sub = (s) => split(s, MENTION, (m) =>
   m[0] === '<!channel>' ? { type: 'channel', value: 'channel' } : { type: 'mention', value: m[1], userId: m[1] },
   mdLinks)
@@ -163,6 +178,7 @@ export function messageToPlainText(body: string, resolveMention?: (userId: strin
         case 'mention': return `@${resolveMention?.(t.value) ?? 'mention'}`
         case 'channel': return '@channel'
         case 'link': return t.label ?? t.value // spoken text is the visible label, never the raw href
+        case 'issueRef': return `COL-${t.value}` // announce the identifier, not the bare number
         default: return t.value // text/bold/italic/strike/code/codeblock/quote/listitem/emoji
       }
     })
