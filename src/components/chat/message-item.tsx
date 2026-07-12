@@ -172,6 +172,10 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
 
   const own = msg.author.id === selfId
   const canDelete = own || selfRole === 'admin'
+  // Guests are read-only for issues (issue-hotkeys.tsx / command-palette gate them
+  // too); hide both create-issue affordances so a guest never raises a modal that
+  // only 403s at submit. The service is the real gate; this is the UI half.
+  const canCreateIssue = selfRole !== 'guest'
   const isTemp = msg.id.startsWith('tmp-')
   // A live message that @-mentions the viewer tints its row (accent rail + wash).
   const selfMention = !msg.deleted && msg.mentionUserIds.includes(selfId)
@@ -244,7 +248,7 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
   const menuItems = [
     ...(own ? [{ label: 'Edit', onSelect: () => { setDraft(msg.body); setEditing(true) } }] : []),
     { label: 'Copy link', onSelect: copyLink },
-    { label: 'Create issue', onSelect: createFromMessage },
+    ...(canCreateIssue ? [{ label: 'Create issue', onSelect: createFromMessage }] : []),
     { label: 'Pin', onSelect: () => {}, disabled: true },
     ...(canDelete ? [{ label: 'Delete', onSelect: () => setConfirmDel(true), danger: true }] : []),
   ]
@@ -402,7 +406,7 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
             {!inThread && !msg.parentId && (
               <IconButton label="Reply in thread" onClick={onOpenThread}><MessageSquare size={16} aria-hidden /></IconButton>
             )}
-            <IconButton label="Create issue from message" onClick={createFromMessage}><ListPlus size={16} aria-hidden /></IconButton>
+            {canCreateIssue && <IconButton label="Create issue from message" onClick={createFromMessage}><ListPlus size={16} aria-hidden /></IconButton>}
             {/* Forward + Save have no backend yet (like Pin) → present but disabled. */}
             <IconButton label="Forward (coming soon)" disabled><Forward size={16} aria-hidden /></IconButton>
             <IconButton label="Save for later (coming soon)" disabled><Bookmark size={16} aria-hidden /></IconButton>

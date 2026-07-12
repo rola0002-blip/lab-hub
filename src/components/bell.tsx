@@ -165,7 +165,9 @@ export default function Bell() {
               </>
             )
             return issueHref ? (
-              <Link key={g.key} href={issueHref} className="flex gap-2.5 rounded-lg p-2 transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">{inner}</Link>
+              // Close the tray on navigate — the outside-click guard skips in-panel
+              // clicks, so without this the panel would sit on top of the issue page.
+              <Link key={g.key} href={issueHref} onClick={() => setOpen(false)} className="flex gap-2.5 rounded-lg p-2 transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">{inner}</Link>
             ) : (
               <div key={g.key} className="flex gap-2.5 rounded-lg p-2 transition-colors hover:bg-hover">{inner}</div>
             )
