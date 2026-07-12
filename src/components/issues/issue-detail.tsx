@@ -8,6 +8,7 @@ import { IssueTimeline } from './issue-timeline'
 import { IssueComposer } from './issue-composer'
 import { PropertiesPanel } from './properties-panel'
 import { setTitleAction, updateDescriptionAction } from '@/app/(app)/issues/actions'
+import { toast } from '@/lib/toast-store'
 import { useEvents } from '@/components/use-events'
 import type { IssueDto } from '@/features/issues/issue-service'
 import type { TimelineEntry } from '@/features/issues/comment-service'
@@ -40,7 +41,7 @@ export function IssueDetail({ issue, attachments, timeline, role, selfId, users,
           <span className="text-2xs tabular-nums text-subtle">{issue.identifier}</span>
           {canEdit ? (
             <input value={title} onChange={(e) => setTitle(e.target.value)} aria-label="Issue title"
-              onBlur={() => { if (title.trim() && title !== issue.title) start(() => setTitleAction(issue.id, title.trim()).then(() => {})) }}
+              onBlur={() => { if (title.trim() && title !== issue.title) start(() => setTitleAction(issue.id, title.trim()).then((r) => { if (!r.ok) { toast(r.message); setTitle(issue.title) } })) }}
               className="mt-0.5 w-full rounded-md bg-transparent text-2xl font-semibold text-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
           ) : <h1 className="mt-0.5 text-2xl font-semibold text-default">{issue.title}</h1>}
           {originChip}
@@ -50,7 +51,8 @@ export function IssueDetail({ issue, attachments, timeline, role, selfId, users,
             <div>
               <IssueMentionInput value={desc} onChange={setDesc} users={users} rows={5} ariaLabel="Issue description" placeholder="Add a description…  @ to mention" />
               <div className="mt-1 flex gap-2 text-xs">
-                <button onClick={() => start(() => updateDescriptionAction(issue.id, desc).then(() => setDescEditing(false)))} className="rounded bg-accent px-2 py-0.5 font-medium text-accent-on focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">Save</button>
+                {/* Exit edit mode only on success — a failed save keeps the editor open with the draft intact. */}
+                <button onClick={() => start(() => updateDescriptionAction(issue.id, desc).then((r) => { if (r.ok) setDescEditing(false); else toast(r.message) }))} className="rounded bg-accent px-2 py-0.5 font-medium text-accent-on focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">Save</button>
                 <button onClick={() => { setDesc(issue.description); setDescEditing(false) }} className="rounded border border-border px-2 py-0.5 hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">Cancel</button>
               </div>
             </div>

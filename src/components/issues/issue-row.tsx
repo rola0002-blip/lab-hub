@@ -6,6 +6,7 @@ import { Menu } from '@/components/ui/menu'
 import { StatusIcon, PriorityIcon } from './status'
 import { ISSUE_STATUSES, STATUS_LABEL, PRIORITIES, PRIORITY_LABEL, isDoneLike } from '@/features/issues/status'
 import { setStatusAction, setAssigneeAction, setPriorityAction } from '@/app/(app)/issues/actions'
+import { toast } from '@/lib/toast-store'
 import { formatDay } from '@/lib/time'
 import type { IssueDto } from '@/features/issues/issue-service'
 import type { Role } from '@/lib/session'
@@ -23,11 +24,11 @@ export function IssueRow({ issue, role, users, timezone, tabIndex, onFocusIndex 
     >
       {canEdit ? (
         <Menu label={`Priority: ${PRIORITY_LABEL[issue.priority]}`} button={<PriorityIcon priority={issue.priority} />}
-          items={PRIORITIES.map((p) => ({ label: PRIORITY_LABEL[p], onSelect: () => start(() => setPriorityAction(issue.id, p).then(() => {})) }))} />
+          items={PRIORITIES.map((p) => ({ label: PRIORITY_LABEL[p], onSelect: () => start(() => setPriorityAction(issue.id, p).then((r) => { if (!r.ok) toast(r.message) })) }))} />
       ) : <PriorityIcon priority={issue.priority} />}
       {canEdit ? (
         <Menu label={`Status: ${STATUS_LABEL[issue.status]}`} button={<StatusIcon status={issue.status} />}
-          items={ISSUE_STATUSES.map((s) => ({ label: STATUS_LABEL[s], onSelect: () => start(() => setStatusAction(issue.id, s).then(() => {})) }))} />
+          items={ISSUE_STATUSES.map((s) => ({ label: STATUS_LABEL[s], onSelect: () => start(() => setStatusAction(issue.id, s).then((r) => { if (!r.ok) toast(r.message) })) }))} />
       ) : <StatusIcon status={issue.status} />}
       <Link href={`/issues/${issue.identifier}`} className="flex min-w-0 items-center gap-2 text-sm text-default hover:underline">
         <span className="shrink-0 text-2xs tabular-nums text-subtle">{issue.identifier}</span>
@@ -46,7 +47,7 @@ export function IssueRow({ issue, role, users, timezone, tabIndex, onFocusIndex 
       {canEdit ? (
         <Menu label={issue.assignee ? `Assignee: ${issue.assignee.name}` : 'Unassigned'}
           button={issue.assignee ? <Avatar size={20} name={issue.assignee.name} id={issue.assignee.id} image={issue.assignee.image} /> : <Avatar size={20} name="?" id="unassigned" image={null} />}
-          items={[{ label: 'Unassigned', onSelect: () => start(() => setAssigneeAction(issue.id, null).then(() => {})) }, ...users.map((u) => ({ label: u.name, onSelect: () => start(() => setAssigneeAction(issue.id, u.id).then(() => {})) }))]} />
+          items={[{ label: 'Unassigned', onSelect: () => start(() => setAssigneeAction(issue.id, null).then((r) => { if (!r.ok) toast(r.message) })) }, ...users.map((u) => ({ label: u.name, onSelect: () => start(() => setAssigneeAction(issue.id, u.id).then((r) => { if (!r.ok) toast(r.message) })) }))]} />
       ) : (issue.assignee ? <Avatar size={20} name={issue.assignee.name} id={issue.assignee.id} image={issue.assignee.image} /> : <span className="w-5" />)}
     </div>
   )
