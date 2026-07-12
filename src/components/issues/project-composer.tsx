@@ -22,6 +22,7 @@ export function ProjectComposer({ users, existing, onClose }: {
   const [name, setName] = useState(existing?.name ?? '')
   const [description, setDescription] = useState(existing?.description ?? '')
   const [leadId, setLeadId] = useState<string | null>(existing?.lead?.id ?? null)
+  const [startDate, setStartDate] = useState(existing?.startDate ? existing.startDate.slice(0, 10) : '')
   const [targetDate, setTargetDate] = useState(existing?.targetDate ? existing.targetDate.slice(0, 10) : '')
   const [status, setStatus] = useState<ProjectStatus>(existing?.status ?? 'ACTIVE')
   const [pending, start] = useTransition()
@@ -29,7 +30,7 @@ export function ProjectComposer({ users, existing, onClose }: {
   function submit() {
     const n = name.trim(); if (!n) { toast('Enter a project name.'); return }
     start(async () => {
-      const input = { name: n, description, leadId, targetDate: targetDate || null, status }
+      const input = { name: n, description, leadId, startDate: startDate || null, targetDate: targetDate || null, status }
       const r = existing ? await updateProjectAction(existing.id, input) : await createProjectAction(input)
       if (r.ok) { onClose(); if (!existing) router.push(`/projects/${r.data.id}`) }
       else toast(r.message)
@@ -44,20 +45,23 @@ export function ProjectComposer({ users, existing, onClose }: {
         <label className="block text-sm text-default">Description
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className={FIELD} />
         </label>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-sm text-default">Lead
             <select value={leadId ?? ''} onChange={(e) => setLeadId(e.target.value || null)} className={SELECT}>
               <option value="">No lead</option>
               {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
           </label>
-          <label className="block text-sm text-default">Target date
-            <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} className={SELECT} />
-          </label>
           <label className="block text-sm text-default">Status
             <select value={status} onChange={(e) => setStatus(e.target.value as ProjectStatus)} className={SELECT}>
               {PROJECT_STATUSES.map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}
             </select>
+          </label>
+          <label className="block text-sm text-default">Start date
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={SELECT} />
+          </label>
+          <label className="block text-sm text-default">Target date
+            <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} className={SELECT} />
           </label>
         </div>
         <div className="flex justify-end gap-2">

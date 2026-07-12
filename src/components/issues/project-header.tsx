@@ -56,6 +56,7 @@ export function ProjectHeader({ project, role, users, timezone }: { project: Pro
         {project.lead && <span className="flex items-center gap-1.5"><Avatar size={20} name={project.lead.name} id={project.lead.id} image={project.lead.image} />{project.lead.name}</span>}
         {/* Org-timezone rule (src/lib/time.ts): fixed pattern + org zone, never the
             ambient runtime TZ/locale — deterministic across server/client renders. */}
+        {project.startDate && <span>Start {formatDay(new Date(project.startDate), timezone)}</span>}
         {project.targetDate && <span>Target {formatDay(new Date(project.targetDate), timezone)}</span>}
       </div>
       <div className="max-w-xs"><ProgressBar {...project.progress} /></div>
