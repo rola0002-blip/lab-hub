@@ -17,9 +17,9 @@ import type { Role } from '@/lib/session'
 
 type Opt = { id: string; name: string; image?: string | null }
 type Attachment = { id: string; path: string; name: string; mime: string; size: number }
-export function IssueDetail({ issue, attachments, timeline, role, selfId, users, projects, labels, originChip, issueRefs = [] }: {
+export function IssueDetail({ issue, attachments, timeline, role, selfId, users, projects, labels, timezone, originChip, issueRefs = [] }: {
   issue: IssueDto; attachments: Attachment[]; timeline: TimelineEntry[]; role: Role; selfId: string
-  users: Opt[]; projects: Opt[]; labels: { id: string; name: string; color: string }[]; originChip?: ReactNode
+  users: Opt[]; projects: Opt[]; labels: { id: string; name: string; color: string }[]; timezone: string; originChip?: ReactNode
   // Server-resolved COL-<n> refs from the description + all comment bodies; the
   // client builds the Map once (pure render) and threads it into renderTokens.
   issueRefs?: { number: number; identifier: string; title: string; status: IssueDto['status'] }[]
@@ -83,7 +83,7 @@ export function IssueDetail({ issue, attachments, timeline, role, selfId, users,
           </div>
         )}
         <div className="border-t border-border pt-4">
-          <IssueTimeline entries={timeline} selfId={selfId} role={role} names={names} refs={refsMap} />
+          <IssueTimeline entries={timeline} selfId={selfId} role={role} names={names} timezone={timezone} refs={refsMap} />
           {canEdit && <div className="mt-3"><IssueComposer issueId={issue.id} users={users} /></div>}
         </div>
       </div>

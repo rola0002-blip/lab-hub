@@ -5,7 +5,7 @@ import { renderTokens } from '@/components/chat/message-item'
 import type { RefData } from '@/components/chat/issue-ref-pill'
 import { Avatar } from '@/components/ui/avatar'
 import { Menu } from '@/components/ui/menu'
-import { humanTime } from '@/lib/humanize'
+import { formatDateTime } from '@/lib/time'
 import { STATUS_LABEL } from '@/features/issues/status'
 import { editCommentAction, deleteCommentAction } from '@/app/(app)/issues/actions'
 import { toast } from '@/lib/toast-store'
@@ -27,8 +27,7 @@ function activityText(type: string, data: unknown): string {
   }
 }
 
-export function IssueTimeline({ entries, selfId, role, names, refs = null }: { entries: TimelineEntry[]; selfId: string; role: Role; names: Map<string, string>; refs?: Map<number, RefData> | null }) {
-  const now = new Date()
+export function IssueTimeline({ entries, selfId, role, names, timezone, refs = null }: { entries: TimelineEntry[]; selfId: string; role: Role; names: Map<string, string>; timezone: string; refs?: Map<number, RefData> | null }) {
   const [, start] = useTransition()
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
@@ -38,7 +37,7 @@ export function IssueTimeline({ entries, selfId, role, names, refs = null }: { e
         <li key={e.id} className="flex items-center gap-2 pl-1 text-xs text-muted">
           <Avatar size={20} name={e.actor.name} id={e.actor.id} image={e.actor.image} />
           <span><span className="font-medium text-default">{e.actor.name}</span> {activityText(e.type, e.data)}</span>
-          <time className="text-subtle">{humanTime(e.createdAt, now)}</time>
+          <time dateTime={e.createdAt} className="text-subtle">{formatDateTime(new Date(e.createdAt), timezone)}</time>
         </li>
       ) : (
         <li key={e.id} className="flex gap-2">
@@ -46,7 +45,7 @@ export function IssueTimeline({ entries, selfId, role, names, refs = null }: { e
           <div className="min-w-0 flex-1 rounded-lg border border-border bg-surface p-2">
             <div className="flex items-baseline gap-2">
               <span className="text-sm font-semibold text-default">{e.comment.author.name}</span>
-              <time className="text-xs text-muted">{humanTime(e.comment.createdAt, now)}</time>
+              <time dateTime={e.comment.createdAt} className="text-xs text-muted">{formatDateTime(new Date(e.comment.createdAt), timezone)}</time>
               {e.comment.editedAt && <span className="text-2xs text-subtle">(edited)</span>}
               <span className="flex-1" />
               {!e.comment.deleted && (e.comment.author.id === selfId || role === 'admin') && (
