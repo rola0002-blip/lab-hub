@@ -12,6 +12,12 @@ import { subscribeIssueComposer, getIssueComposer, closeIssueComposer } from '@/
 import { toast } from '@/lib/toast-store'
 import type { IssueStatus, IssuePriority } from '@prisma/client'
 
+// Chip-sized trigger for the property Menus. The Menu primitive's default 28px
+// icon trigger (h-7 w-7) clips these text chips, so they overflowed and overlapped
+// their neighbours; this carries the chip's border + hover + shared focus ring so the
+// inner content no longer duplicates them (mirrors properties-panel's TRIGGER).
+const CHIP_TRIGGER = 'inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-sm text-default hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]'
+
 type Opt = { id: string; name: string; image?: string | null }
 type LabelOpt = { id: string; name: string; color: string }
 export function CreateIssueModal({ users, projects, labels }: { users: Opt[]; projects: Opt[]; labels: LabelOpt[] }) {
@@ -48,10 +54,10 @@ function Composer({ users, projects, labels }: { users: Opt[]; projects: Opt[]; 
           className="w-full rounded-md border border-border bg-surface px-3 py-2 text-base text-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
         <IssueMentionInput value={description} onChange={setDescription} users={users} rows={4} ariaLabel="Issue description" placeholder="Add a description…  @ to mention" />
         <div className="flex flex-wrap gap-2">
-          <Menu label="Status" button={<span className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-sm text-default"><StatusIcon status={status} />{STATUS_LABEL[status]}</span>} items={ISSUE_STATUSES.map((s) => ({ label: STATUS_LABEL[s], onSelect: () => setStatus(s) }))} />
-          <Menu label="Priority" button={<span className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-sm text-default"><PriorityIcon priority={priority} />{PRIORITY_LABEL[priority]}</span>} items={PRIORITIES.map((p) => ({ label: PRIORITY_LABEL[p], onSelect: () => setPriority(p) }))} />
-          <Menu label="Assignee" button={<span className="rounded-md border border-border px-2 py-1 text-sm text-default">{users.find((u) => u.id === assigneeId)?.name ?? 'Unassigned'}</span>} items={[{ label: 'Unassigned', onSelect: () => setAssigneeId(null) }, ...users.map((u) => ({ label: u.name, onSelect: () => setAssigneeId(u.id) }))]} />
-          <Menu label="Project" button={<span className="rounded-md border border-border px-2 py-1 text-sm text-default">{projects.find((p) => p.id === projectId)?.name ?? 'No project'}</span>} items={[{ label: 'No project', onSelect: () => setProjectId(null) }, ...projects.map((p) => ({ label: p.name, onSelect: () => setProjectId(p.id) }))]} />
+          <Menu label="Status" buttonClassName={CHIP_TRIGGER} button={<><StatusIcon status={status} />{STATUS_LABEL[status]}</>} items={ISSUE_STATUSES.map((s) => ({ label: STATUS_LABEL[s], onSelect: () => setStatus(s) }))} />
+          <Menu label="Priority" buttonClassName={CHIP_TRIGGER} button={<><PriorityIcon priority={priority} />{PRIORITY_LABEL[priority]}</>} items={PRIORITIES.map((p) => ({ label: PRIORITY_LABEL[p], onSelect: () => setPriority(p) }))} />
+          <Menu label="Assignee" buttonClassName={CHIP_TRIGGER} button={users.find((u) => u.id === assigneeId)?.name ?? 'Unassigned'} items={[{ label: 'Unassigned', onSelect: () => setAssigneeId(null) }, ...users.map((u) => ({ label: u.name, onSelect: () => setAssigneeId(u.id) }))]} />
+          <Menu label="Project" buttonClassName={CHIP_TRIGGER} button={projects.find((p) => p.id === projectId)?.name ?? 'No project'} items={[{ label: 'No project', onSelect: () => setProjectId(null) }, ...projects.map((p) => ({ label: p.name, onSelect: () => setProjectId(p.id) }))]} />
           <input type="date" aria-label="Due date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
             className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
         </div>
