@@ -12,10 +12,12 @@ function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
   return arr
 }
 
-// Web Push opt-in button beside the bell. Opt-in must never break the header, so every
-// failure is swallowed with console.warn. SSR-safe: renders nothing until the client
-// confirms service-worker support and that the user isn't already subscribed.
-export default function PushOptIn() {
+// Web Push opt-in state + subscribe flow, extracted so the notification tray can
+// render the opt-in inline. Opt-in must never break the surface it lives on, so
+// every failure is swallowed with console.warn. SSR-safe: `show` stays false until
+// the client confirms service-worker support AND that this device isn't already
+// subscribed; a successful `enable()` flips it back off so the affordance vanishes.
+export function usePushOptIn(): { show: boolean; busy: boolean; enable: () => Promise<void> } {
   const [show, setShow] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -59,11 +61,5 @@ export default function PushOptIn() {
     }
   }
 
-  if (!show) return null
-  return (
-    <button onClick={enable} disabled={busy} title="Enable desktop notifications" aria-label="Enable desktop notifications"
-      className="rounded-full p-2 text-muted transition-colors hover:bg-hover disabled:opacity-50">
-      <span aria-hidden>🔔</span><span aria-hidden className="text-xs">＋</span>
-    </button>
-  )
+  return { show, busy, enable }
 }

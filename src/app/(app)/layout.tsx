@@ -4,7 +4,6 @@ import { prisma } from '@/lib/db'
 import { totalUnread } from '@/features/chat/conversation-service'
 import { Sidebar } from '@/components/sidebar'
 import Bell from '@/components/bell'
-import PushOptIn from '@/components/push-optin'
 import { ThemeToggle, ThemeSync } from '@/components/theme-toggle'
 import { AccentSync } from '@/components/accent-picker'
 import { ChatProvider } from '@/components/chat/chat-store'
@@ -57,7 +56,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <CommandPalette orgName={org.name} role={user.role} />
             </div>
             <div className="flex items-center gap-2">
-              <PushOptIn />
               <ThemeToggle />
               <Bell />
               <UserMenu user={{ id: user.id, name: user.name, image: pref?.image ?? null }} />

@@ -2,12 +2,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
-  Bell as BellIcon, Check, Hash, AtSign, MessageSquare,
+  Bell as BellIcon, BellPlus, Check, Hash, AtSign, MessageSquare,
   CalendarClock, CalendarCheck, CalendarX, UserPlus, CircleCheck, type LucideIcon,
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { EmptyState } from '@/components/ui/empty-state'
 import { humanTime } from '@/lib/humanize'
+import { usePushOptIn } from './hooks/use-push-optin'
 import { useChat } from './chat/chat-store'
 import { useEvents } from './use-events'
 
@@ -73,6 +74,7 @@ export default function Bell() {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const now = new Date() // viewer-local reference for humanized notification times
+  const push = usePushOptIn() // desktop-push opt-in lives in this tray, not a separate top-bar icon
 
   const load = useCallback(async () => {
     try {
@@ -172,6 +174,23 @@ export default function Bell() {
               <div key={g.key} className="flex gap-2.5 rounded-lg p-2 transition-colors hover:bg-hover">{inner}</div>
             )
           })}
+          {push.show && (
+            // Desktop-push opt-in — shown only while this device isn't subscribed
+            // (usePushOptIn), pinned to the tray's foot. A successful subscribe flips
+            // push.show off and the row disappears.
+            <div className="mt-1 border-t border-border pt-1">
+              <button type="button" onClick={() => void push.enable()} disabled={push.busy}
+                className="flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] disabled:opacity-50">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-avatar)] bg-active text-muted">
+                  <BellPlus size={18} aria-hidden />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium text-default">Enable desktop notifications</span>
+                  <span className="block text-xs text-subtle">Get alerted even when this tab is closed.</span>
+                </span>
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
