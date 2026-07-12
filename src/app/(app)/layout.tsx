@@ -9,6 +9,8 @@ import { ThemeToggle, ThemeSync } from '@/components/theme-toggle'
 import { AccentSync } from '@/components/accent-picker'
 import { ChatProvider } from '@/components/chat/chat-store'
 import { CommandPalette } from '@/components/command-palette'
+import { CreateIssueModal } from '@/components/issues/create-issue-modal'
+import { IssueHotkeys } from '@/components/issues/issue-hotkeys'
 import { UserMenu } from '@/components/user-menu'
 import { ToastHost } from '@/components/ui/toast'
 import { RegionCycler } from '@/components/region-cycler'
@@ -22,6 +24,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // contract); ThemeSync applies the theme on the device only when localStorage
   // has no choice yet.
   const pref = await prisma.user.findUnique({ where: { id: user.id }, select: { themePreference: true, accentPreference: true, image: true } })
+  // Small org-wide option lists for the globally-mounted create-issue composer
+  // (raised by the `c` shortcut, the ⌘K "Create issue" command, and any
+  // "New issue" button); the modal itself gates opening for guests.
+  const [issueUsers, issueProjects, issueLabels] = await Promise.all([
+    prisma.user.findMany({ where: { banned: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
+    prisma.project.findMany({ orderBy: { createdAt: 'desc' }, select: { id: true, name: true } }),
+    prisma.label.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true, color: true } }),
+  ])
 
   return (
     // ChatProvider is lifted to the app shell (was chat-only) so the global ⌘K
@@ -56,6 +66,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <main data-region-root tabIndex={-1} className="flex-1 p-4 outline-none md:p-6">{children}</main>
         </div>
       </div>
+      {/* Global create-issue composer + `c` shortcut — mounted once so any page
+          (or the ⌘K palette) can raise the modal. Hotkey is role-gated. */}
+      <CreateIssueModal users={issueUsers} projects={issueProjects} labels={issueLabels} />
+      <IssueHotkeys role={user.role} />
       {/* Global toast host — mounted once so `toast()` works from any page. */}
       <ToastHost />
       {/* Accessibility: F6 region cycling + SSE live regions mounted at first

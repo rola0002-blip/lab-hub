@@ -1,11 +1,12 @@
 'use client'
-import { useCallback, useId, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Hash, Lock, LayoutGrid, MessageSquare } from 'lucide-react'
+import { Search, Hash, Lock, LayoutGrid, MessageSquare, ListTodo, Plus } from 'lucide-react'
 import { NAV_SECTIONS, isNavVisible } from '@/components/sidebar'
 import { Avatar } from '@/components/ui/avatar'
 import { useChat, dmName } from '@/components/chat/chat-store'
 import { useGlobalHotkey } from '@/components/hooks/use-global-hotkey'
+import { openIssueComposer } from '@/lib/issue-composer-store'
 import { useFocusTrap } from '@/components/hooks/use-focus-trap'
 import { nextRovingIndex } from '@/lib/roving'
 import { filterCommands, type Cmd } from '@/lib/palette'
@@ -56,6 +57,8 @@ function KindIcon({ cmd }: { cmd: Cmd }) {
     ? <Lock size={16} aria-hidden className="shrink-0 text-subtle" />
     : <Hash size={16} aria-hidden className="shrink-0 text-subtle" />)
   if (cmd.kind === 'person') return <MessageSquare size={16} aria-hidden className="shrink-0 text-subtle" />
+  if (cmd.kind === 'issue') return <ListTodo size={16} aria-hidden className="shrink-0 text-subtle" />
+  if (cmd.kind === 'command') return <Plus size={16} aria-hidden className="shrink-0 text-subtle" />
   return null // dm rows render an Avatar instead
 }
 
@@ -66,6 +69,7 @@ export function CommandPalette({ orgName = 'COLOSSUS', role }: { orgName?: strin
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const [recents, setRecents] = useState<string[]>([])
+  const [issueHits, setIssueHits] = useState<Cmd[]>([])
   const dialogRef = useRef<HTMLDivElement>(null)
   const listId = useId()
   const optionId = (i: number) => `${listId}-opt-${i}`
@@ -98,8 +102,12 @@ export function CommandPalette({ orgName = 'COLOSSUS', role }: { orgName?: strin
     const people: Cmd[] = users
       .filter((u) => u.id !== selfId && !peered.has(u.id))
       .map((u) => ({ id: u.id, label: u.name, sub: 'Message', href: `/chat?dm=${u.id}`, kind: 'person' as const }))
-    return [...pages, ...channels, ...dms, ...people]
-  }, [conversations, users, selfId, role])
+    // Non-guests get a static "Create issue" command that raises the composer.
+    const commands: Cmd[] = role !== 'guest'
+      ? [{ id: 'create-issue', label: 'Create issue', sub: 'Command', href: '', kind: 'command' as const }]
+      : []
+    return [...commands, ...pages, ...channels, ...dms, ...people, ...issueHits]
+  }, [conversations, users, selfId, role, issueHits])
 
   const ordered = useMemo(() => (query.trim() ? items : recentsFirst(items, recents)), [items, recents, query])
   const results = useMemo(() => filterCommands(ordered, query), [ordered, query])
@@ -108,9 +116,29 @@ export function CommandPalette({ orgName = 'COLOSSUS', role }: { orgName?: strin
     setRecents(readRecents())
     setQuery('')
     setActive(0)
+    setIssueHits([]) // drop any stale hits so a fresh empty-query open shows only destinations
     setOpen(true)
   }, [])
   const close = useCallback(() => setOpen(false), [])
+
+  // Debounced issue search: an exact COL-n identifier jumps straight to the
+  // issue (closing the palette); anything else merges into the results as
+  // `kind: 'issue'` rows. State is set only after the awaited round-trip, so
+  // react-hooks/set-state-in-effect is satisfied (same pattern as SearchBox).
+  useEffect(() => {
+    const q = query.trim()
+    if (!q) { return }
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/issues/search?q=${encodeURIComponent(q)}`)
+        if (!r.ok) return
+        const d = await r.json()
+        if (d.jump) { setOpen(false); router.push(d.jump); return } // exact COL-n jumps straight in
+        setIssueHits((d.hits as { id: string; identifier: string; title: string }[]).map((h) => ({ id: h.id, label: `${h.identifier} ${h.title}`, sub: 'Issue', href: `/issues/${h.identifier}`, kind: 'issue' as const })))
+      } catch { /* transient */ }
+    }, 250)
+    return () => clearTimeout(t)
+  }, [query, router])
 
   useGlobalHotkey('k', openPalette, { meta: true })
 
@@ -123,6 +151,7 @@ export function CommandPalette({ orgName = 'COLOSSUS', role }: { orgName?: strin
   async function select(cmd: Cmd) {
     setRecents(pushRecent(cmdKey(cmd)))
     close()
+    if (cmd.kind === 'command' && cmd.id === 'create-issue') { openIssueComposer(); return }
     if (cmd.kind === 'person') {
       // No static DM yet: create-or-open the 1:1, then navigate to it.
       try {
@@ -195,7 +224,7 @@ export function CommandPalette({ orgName = 'COLOSSUS', role }: { orgName?: strin
                 aria-label={`Search ${orgName}`}
                 aria-activedescendant={results[active] ? optionId(active) : undefined}
                 value={query}
-                onChange={(e) => { setQuery(e.target.value); setActive(0) }}
+                onChange={(e) => { setQuery(e.target.value); setActive(0); if (!e.target.value.trim()) setIssueHits([]) }}
                 onKeyDown={onInputKeyDown}
                 placeholder="Jump to a page, channel, or person…"
                 className="h-12 w-full bg-transparent text-sm text-default outline-none placeholder:text-subtle"

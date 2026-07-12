@@ -7,6 +7,7 @@ import { listProjects } from '@/features/issues/project-service'
 import { parseIssueFilters } from '@/features/issues/status'
 import { IssuesSurface } from '@/components/issues/issues-surface'
 import { FilterBar } from '@/components/issues/filter-bar'
+import { NewIssueButton } from '@/components/issues/new-issue-button'
 import { EmptyState } from '@/components/ui/empty-state'
 
 export default async function MyIssuesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -26,7 +27,10 @@ export default async function MyIssuesPage({ searchParams }: { searchParams: Pro
     : <EmptyState icon={Inbox} title="No issues assigned to you" hint="Issues assigned to you will appear here." />
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold text-default">My issues</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold text-default">My issues</h1>
+        {user.role !== 'guest' && <NewIssueButton />}
+      </div>
       <FilterBar users={users} projects={projects.map((p) => ({ id: p.id, name: p.name }))} labels={labels} lockAssignee />
       <IssuesSurface key={JSON.stringify(sp)} initial={issues} role={user.role} users={users} timezone={timezone} closedGrouped empty={empty} />
     </div>

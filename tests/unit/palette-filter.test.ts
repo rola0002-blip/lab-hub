@@ -45,4 +45,19 @@ describe('filterCommands', () => {
   it('drops everything when nothing matches', () => {
     expect(filterCommands(cmds, 'zzzz')).toEqual([])
   })
+
+  // The ⌘K palette merges issue-search rows (kind 'issue') and a static
+  // 'Create issue' command (kind 'command') into the same list; filterCommands
+  // must rank them by label alongside pages/channels/people.
+  it('ranks and filters the merged issue + command kinds by label', () => {
+    const items: Cmd[] = [
+      { id: 'create-issue', label: 'Create issue', sub: 'Command', href: '', kind: 'command' },
+      { id: 'i1', label: 'COL-7 Fix memristor drift', sub: 'Issue', href: '/issues/COL-7', kind: 'issue' },
+      { id: 'p1', label: 'Dashboard', href: '/dashboard', kind: 'page' },
+    ]
+    // 'memristor' is a word-boundary hit only on the issue row.
+    expect(filterCommands(items, 'memristor').map((c) => c.id)).toEqual(['i1'])
+    // 'create' prefix-matches the command row and nothing else here.
+    expect(filterCommands(items, 'create').map((c) => c.id)).toEqual(['create-issue'])
+  })
 })
