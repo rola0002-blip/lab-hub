@@ -78,3 +78,14 @@ export async function acceptInvite(page: Page, token: string, name: string, pass
   await page.click('button:has-text("Create account")')
   await page.waitForURL('**/dashboard')
 }
+
+// Create an issue through the create modal (T13). T16 uses this to seed the board
+// for keyboard + pointer move specs. Selector contract for the T13 modal: a
+// `New issue` trigger button, an `Issue title` labelled field, and a `Create issue`
+// submit button; the new issue's title is rendered on the surface afterward.
+export async function createIssueViaUI(page: Page, title: string): Promise<void> {
+  await page.getByRole('button', { name: 'New issue' }).first().click()
+  await page.getByLabel('Issue title').fill(title)
+  await page.getByRole('button', { name: 'Create issue' }).click()
+  await page.getByText(title).first().waitFor()
+}

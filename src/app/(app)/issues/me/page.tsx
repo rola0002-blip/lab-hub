@@ -5,7 +5,7 @@ import { getOrg } from '@/lib/org'
 import { listIssues, listLabels } from '@/features/issues/issue-service'
 import { listProjects } from '@/features/issues/project-service'
 import { parseIssueFilters } from '@/features/issues/status'
-import { IssueListView } from '@/components/issues/issue-list-view'
+import { IssuesSurface } from '@/components/issues/issues-surface'
 import { FilterBar } from '@/components/issues/filter-bar'
 import { EmptyState } from '@/components/ui/empty-state'
 
@@ -28,7 +28,7 @@ export default async function MyIssuesPage({ searchParams }: { searchParams: Pro
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold text-default">My issues</h1>
       <FilterBar users={users} projects={projects.map((p) => ({ id: p.id, name: p.name }))} labels={labels} lockAssignee />
-      <IssueListView key={JSON.stringify(sp)} issues={issues} role={user.role} users={users} timezone={timezone} closedGrouped empty={empty} />
+      <IssuesSurface key={JSON.stringify(sp)} initial={issues} role={user.role} users={users} timezone={timezone} closedGrouped empty={empty} />
     </div>
   )
 }
