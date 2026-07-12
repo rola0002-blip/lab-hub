@@ -14,8 +14,8 @@ type Opt = { id: string; name: string; image?: string | null }
 // Renders directly from the server-driven `issues` prop — no local copy — so a
 // `router.refresh()` (SSE) or a server-action `revalidatePath` (inline picker)
 // re-renders with fresh data. Only roving-focus index is local state.
-export function IssueListView({ issues, role, users, closedGrouped = false, empty = null }: {
-  issues: IssueDto[]; role: Role; users: Opt[]; closedGrouped?: boolean; empty?: React.ReactNode
+export function IssueListView({ issues, role, users, timezone, closedGrouped = false, empty = null }: {
+  issues: IssueDto[]; role: Role; users: Opt[]; timezone: string; closedGrouped?: boolean; empty?: React.ReactNode
 }) {
   const router = useRouter()
   const [active, setActive] = useState(0)
@@ -61,7 +61,7 @@ export function IssueListView({ issues, role, users, closedGrouped = false, empt
           {g.items.map((issue, j) => {
             const idx = starts[gi] + j
             return (
-              <IssueRow key={issue.id} issue={issue} role={role} users={users} tabIndex={idx === active ? 0 : -1} onFocusIndex={() => setActive(idx)} />
+              <IssueRow key={issue.id} issue={issue} role={role} users={users} timezone={timezone} tabIndex={idx === active ? 0 : -1} onFocusIndex={() => setActive(idx)} />
             )
           })}
         </div>

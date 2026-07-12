@@ -6,12 +6,13 @@ import { Menu } from '@/components/ui/menu'
 import { StatusIcon, PriorityIcon } from './status'
 import { ISSUE_STATUSES, STATUS_LABEL, PRIORITIES, PRIORITY_LABEL, isDoneLike } from '@/features/issues/status'
 import { setStatusAction, setAssigneeAction, setPriorityAction } from '@/app/(app)/issues/actions'
+import { formatDay } from '@/lib/time'
 import type { IssueDto } from '@/features/issues/issue-service'
 import type { Role } from '@/lib/session'
 
 type Opt = { id: string; name: string; image?: string | null }
-export function IssueRow({ issue, role, users, tabIndex, onFocusIndex }: {
-  issue: IssueDto; role: Role; users: Opt[]; tabIndex: number; onFocusIndex: () => void
+export function IssueRow({ issue, role, users, timezone, tabIndex, onFocusIndex }: {
+  issue: IssueDto; role: Role; users: Opt[]; timezone: string; tabIndex: number; onFocusIndex: () => void
 }) {
   const [, start] = useTransition()
   const canEdit = role !== 'guest'
@@ -38,7 +39,10 @@ export function IssueRow({ issue, role, users, tabIndex, onFocusIndex }: {
         ))}
       </span>
       <span className="shrink-0 text-2xs text-subtle">{issue.project?.name ?? ''}</span>
-      <span className="shrink-0 text-2xs tabular-nums text-subtle">{issue.dueDate ? new Date(issue.dueDate).toLocaleDateString() : ''}</span>
+      {/* Org-timezone rule (src/lib/time.ts): fixed pattern + org zone, never the
+          ambient runtime TZ/locale — deterministic, so server and client HTML
+          match byte-for-byte (no hydration mismatch). */}
+      <span className="shrink-0 text-2xs tabular-nums text-subtle">{issue.dueDate ? formatDay(new Date(issue.dueDate), timezone) : ''}</span>
       {canEdit ? (
         <Menu label={issue.assignee ? `Assignee: ${issue.assignee.name}` : 'Unassigned'}
           button={issue.assignee ? <Avatar size={20} name={issue.assignee.name} id={issue.assignee.id} image={issue.assignee.image} /> : <Avatar size={20} name="?" id="unassigned" image={null} />}

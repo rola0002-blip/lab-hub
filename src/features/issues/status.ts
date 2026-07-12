@@ -26,3 +26,25 @@ export const LABEL_PALETTE: string[] = [
 export function isDoneLike(s: IssueStatus): boolean {
   return s === 'DONE' || s === 'CANCELED'
 }
+
+// Shareable-URL hardening: Next searchParams values are string | string[] |
+// undefined, and enum params come from user-editable URLs. A typo'd/stale value
+// (?status=foo) must degrade to "no filter", never reach Prisma's enum column
+// (which throws → 500 error boundary). Enum params are validated against the
+// fixed sets; id params pass through (unknown ids just match nothing), with
+// empty strings and repeated (array) params normalized to undefined.
+export type IssueFilterParams = {
+  status?: IssueStatus; priority?: IssuePriority
+  assignee?: string; project?: string; label?: string
+}
+export function parseIssueFilters(sp: Record<string, string | string[] | undefined>): IssueFilterParams {
+  const one = (v: string | string[] | undefined): string | undefined =>
+    typeof v === 'string' && v !== '' ? v : undefined
+  const status = one(sp.status)
+  const priority = one(sp.priority)
+  return {
+    status: status !== undefined && (ISSUE_STATUSES as string[]).includes(status) ? (status as IssueStatus) : undefined,
+    priority: priority !== undefined && (PRIORITIES as string[]).includes(priority) ? (priority as IssuePriority) : undefined,
+    assignee: one(sp.assignee), project: one(sp.project), label: one(sp.label),
+  }
+}
