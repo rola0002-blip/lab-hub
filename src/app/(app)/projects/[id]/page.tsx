@@ -22,7 +22,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const empty = <EmptyState icon={ListTodo} title="No issues in this project yet" hint='Use "New issue" above — it pre-fills this project.' />
   return (
     <div className="space-y-5">
-      <ProjectHeader project={project} role={user.role} users={users} />
+      <ProjectHeader project={project} role={user.role} users={users} timezone={timezone} />
       <IssuesSurface initial={issues} role={user.role} users={users} timezone={timezone} empty={empty} />
     </div>
   )

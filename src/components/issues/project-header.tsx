@@ -11,12 +11,13 @@ import { ProjectComposer } from './project-composer'
 import { openIssueComposer } from '@/lib/issue-composer-store'
 import { deleteProjectAction } from '@/app/(app)/issues/actions'
 import { toast } from '@/lib/toast-store'
+import { formatDay } from '@/lib/time'
 import type { ProjectDto } from '@/features/issues/project-service'
 import type { Role } from '@/lib/session'
 
 const STATUS_VARIANT = { ACTIVE: 'success', PAUSED: 'warning', COMPLETED: 'neutral', CANCELED: 'danger' } as const
 type Opt = { id: string; name: string }
-export function ProjectHeader({ project, role, users }: { project: ProjectDto; role: Role; users: Opt[] }) {
+export function ProjectHeader({ project, role, users, timezone }: { project: ProjectDto; role: Role; users: Opt[]; timezone: string }) {
   const router = useRouter()
   const [editing, setEditing] = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
@@ -53,7 +54,9 @@ export function ProjectHeader({ project, role, users }: { project: ProjectDto; r
       {project.description && <p className="max-w-2xl whitespace-pre-wrap text-sm text-muted">{project.description}</p>}
       <div className="flex items-center gap-3 text-xs text-muted">
         {project.lead && <span className="flex items-center gap-1.5"><Avatar size={20} name={project.lead.name} id={project.lead.id} image={project.lead.image} />{project.lead.name}</span>}
-        {project.targetDate && <span>Target {new Date(project.targetDate).toLocaleDateString()}</span>}
+        {/* Org-timezone rule (src/lib/time.ts): fixed pattern + org zone, never the
+            ambient runtime TZ/locale — deterministic across server/client renders. */}
+        {project.targetDate && <span>Target {formatDay(new Date(project.targetDate), timezone)}</span>}
       </div>
       <div className="max-w-xs"><ProgressBar {...project.progress} /></div>
 
