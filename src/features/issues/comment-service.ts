@@ -61,10 +61,29 @@ export async function editComment(args: { actorId: string; role: Role; commentId
   if (!canEditComment(args.role, c.userId, args.actorId)) throw new PolicyError('forbidden', 'You can only edit your own comments.')
   const body = args.body.trim().slice(0, 8000)
   if (!body) throw new PolicyError('invalid', 'Comment cannot be empty.')
+  const before = parseMentions(c.body).userIds
+  const after = parseMentions(body).userIds
   const updated = await prisma.issueComment.update({
-    where: { id: c.id }, data: { body, editedAt: new Date(), mentionUserIds: parseMentions(body).userIds }, include: { user: AUTHOR_SELECT },
+    where: { id: c.id }, data: { body, editedAt: new Date(), mentionUserIds: after }, include: { user: AUTHOR_SELECT },
   })
   await emitEvent({ t: 'issue_comment', issueId: c.issueId })
+  // Notify ONLY mentions newly added by this edit — the create-comment and
+  // description-edit paths already notify their new mentions; comment-edit was the
+  // asymmetric gap. Diff against the pre-edit set and never self (mention-wins /
+  // never-self conventions, same offline-only email as createComment).
+  const fresh = after.filter((uid) => !before.includes(uid) && uid !== args.actorId)
+  if (fresh.length) {
+    const issue = await prisma.issue.findUnique({ where: { id: c.issueId }, select: { number: true, title: true } })
+    if (issue) {
+      const actor = await prisma.user.findUnique({ where: { id: args.actorId }, select: { name: true } })
+      const id = formatIdentifier(issue.number)
+      const org = await orgName()
+      for (const uid of fresh) {
+        const email = hasLiveConnection(uid) ? undefined : issueMentionEmail(org, actor?.name ?? 'Someone', id, 'a comment', issue.title)
+        await notify(uid, 'issue_mention', { message: `${actor?.name ?? 'Someone'} mentioned you on ${id}`, issueId: c.issueId, identifier: id }, email)
+      }
+    }
+  }
   return toDto(updated)
 }
 

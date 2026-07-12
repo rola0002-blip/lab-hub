@@ -35,6 +35,23 @@ describe('comment-service', () => {
     expect(await prisma.notification.count({ where: { type: 'issue_comment', userId: both.id } })).toBe(0)
   })
 
+  it('editing a comment to add a NEW @mention notifies the newly-mentioned user (S5)', async () => {
+    const author = await makeUser({ role: 'member' })
+    const dana = await makeUser({ role: 'member' })
+    const iss = await createIssue({ actorId: author.id, role: 'member', title: 'Edit ping' })
+    const c = await createComment({ actorId: author.id, role: 'member', issueId: iss.id, body: 'looks good' })
+    expect(await prisma.notification.count({ where: { userId: dana.id, type: 'issue_mention' } })).toBe(0)
+    // Edit to pull Dana in → she is notified.
+    await editComment({ actorId: author.id, role: 'member', commentId: c.id, body: `looks good <@${dana.id}>` })
+    expect(await prisma.notification.count({ where: { userId: dana.id, type: 'issue_mention' } })).toBe(1)
+    // Re-editing while the mention persists does NOT re-notify (diff vs the pre-edit set).
+    await editComment({ actorId: author.id, role: 'member', commentId: c.id, body: `still good <@${dana.id}>` })
+    expect(await prisma.notification.count({ where: { userId: dana.id, type: 'issue_mention' } })).toBe(1)
+    // The editor never notifies themselves, even when self-mentioned in the edit.
+    await editComment({ actorId: author.id, role: 'member', commentId: c.id, body: `me <@${author.id}> and <@${dana.id}>` })
+    expect(await prisma.notification.count({ where: { userId: author.id, type: 'issue_mention' } })).toBe(0)
+  })
+
   it('author-only edit; author-or-admin tombstone delete; timeline merges comments + activity', async () => {
     const author = await makeUser({ role: 'member' })
     const other = await makeUser({ role: 'member' })
