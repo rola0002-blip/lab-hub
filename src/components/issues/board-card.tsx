@@ -9,6 +9,7 @@ import { Menu } from '@/components/ui/menu'
 import { StatusIcon, PriorityIcon } from './status'
 import { ISSUE_STATUSES, STATUS_LABEL, isDoneLike } from '@/features/issues/status'
 import { setStatusAction } from '@/app/(app)/issues/actions'
+import { toast } from '@/lib/toast-store'
 import type { IssueDto } from '@/features/issues/issue-service'
 
 export function BoardCard({ issue, disabled }: { issue: IssueDto; disabled: boolean }) {
@@ -32,7 +33,7 @@ export function BoardCard({ issue, disabled }: { issue: IssueDto; disabled: bool
             {disabled
               ? <StatusIcon status={issue.status} size={13} />
               : <Menu label={`Status: ${STATUS_LABEL[issue.status]}`} button={<StatusIcon status={issue.status} size={13} />}
-                  items={ISSUE_STATUSES.map((s) => ({ label: STATUS_LABEL[s], onSelect: () => start(() => setStatusAction(issue.id, s).then(() => {})) }))} />}
+                  items={ISSUE_STATUSES.map((s) => ({ label: STATUS_LABEL[s], onSelect: () => start(() => setStatusAction(issue.id, s).then((r) => { if (!r.ok) toast(r.message) })) }))} />}
             <span className="flex-1" />
             {issue.assignee && <Avatar size={20} name={issue.assignee.name} id={issue.assignee.id} image={issue.assignee.image} />}
           </div>
