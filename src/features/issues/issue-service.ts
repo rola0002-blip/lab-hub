@@ -8,6 +8,7 @@ import {
   issueAssignedEmail, issueMentionEmail, issueDoneEmail,
 } from '@/lib/email/templates'
 import { parseMentions } from '@/features/chat/mentions'
+import { isMember } from '@/features/chat/conversation-service'
 import { assertCanMutate, PolicyError } from './issue-policy'
 import { rankBetween, rebalance, REBALANCE_THRESHOLD } from './rank'
 import { formatIdentifier } from './identifier'
@@ -117,6 +118,15 @@ export async function createIssue(args: {
   if (title.length < 1 || title.length > 200) throw new PolicyError('invalid', 'Title must be 1–200 characters.')
   const status = args.status ?? 'BACKLOG'
   const description = (args.description ?? '').slice(0, 20000)
+  // Origin backlink (create-from-message): the client supplies originMessageId, so
+  // validate the actor can actually read that message's conversation before storing
+  // the link — otherwise a forged id could attach an issue to (and later surface the
+  // NAME of) a private channel the actor is not in. A missing message and a
+  // non-member both raise the SAME not_found (assert-then-load; no existence leak).
+  if (args.originMessageId) {
+    const msg = await prisma.message.findUnique({ where: { id: args.originMessageId }, select: { conversationId: true } })
+    if (!msg || !(await isMember(args.actorId, msg.conversationId))) throw new PolicyError('not_found', 'Message not found.')
+  }
   // Initial rank = end of the destination column.
   const last = await prisma.issue.findFirst({ where: { status }, orderBy: { rank: 'desc' }, select: { rank: true } })
   const rank = rankBetween(last?.rank ?? null, null)
@@ -139,14 +149,18 @@ export async function createIssue(args: {
 
   await emitEvent({ t: 'issue', id: created.id, projectId: created.projectId ?? undefined })
   const dto = toDto(created)
-  if (args.assigneeId && args.assigneeId !== args.actorId) {
+  // Mention-wins de-dup (matches comment-service): if the assignee is also @-mentioned
+  // in the description, the mention notification covers them — don't also fire
+  // issue_assigned (one create → one notification for that user), never self.
+  const mentionIds = parseMentions(description).userIds
+  if (args.assigneeId && args.assigneeId !== args.actorId && !mentionIds.includes(args.assigneeId)) {
     const actor = await prisma.user.findUnique({ where: { id: args.actorId }, select: { name: true } })
     await pushIssueNotif(args.assigneeId, 'issue_assigned', `${actor?.name ?? 'Someone'} assigned you ${dto.identifier}`,
       created.id, dto.identifier, issueAssignedEmail(await orgName(), actor?.name ?? 'Someone', dto.identifier, title))
   }
   await notifyNewMentions({
     actorId: args.actorId, issueId: created.id, identifier: dto.identifier, title, where: 'the description',
-    before: [], after: parseMentions(description).userIds,
+    before: [], after: mentionIds,
   })
   return dto
 }

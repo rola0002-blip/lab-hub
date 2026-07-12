@@ -28,6 +28,19 @@ describe('issue-service', () => {
     expect(notif).not.toBeNull()
   })
 
+  it('mention-wins on create: an assignee also @-mentioned gets one issue_mention, not issue_assigned (S6)', async () => {
+    const me = await makeUser({ role: 'member' })
+    const both = await makeUser({ role: 'member' }) // assignee AND mentioned in the description
+    await createIssue({ actorId: me.id, role: 'member', title: 'Overlap', assigneeId: both.id, description: `please handle <@${both.id}>` })
+    expect(await prisma.notification.count({ where: { userId: both.id, type: 'issue_mention' } })).toBe(1)
+    expect(await prisma.notification.count({ where: { userId: both.id, type: 'issue_assigned' } })).toBe(0)
+    // Control: an assignee who is NOT mentioned still gets issue_assigned, and only that.
+    const assignee = await makeUser({ role: 'member' })
+    await createIssue({ actorId: me.id, role: 'member', title: 'Plain', assigneeId: assignee.id })
+    expect(await prisma.notification.count({ where: { userId: assignee.id, type: 'issue_assigned' } })).toBe(1)
+    expect(await prisma.notification.count({ where: { userId: assignee.id, type: 'issue_mention' } })).toBe(0)
+  })
+
   it('assigns unique COL numbers under concurrent creates (Postgres nextval)', async () => {
     const me = await makeUser({ role: 'member' })
     const created = await Promise.all(Array.from({ length: 12 }, (_, i) =>
