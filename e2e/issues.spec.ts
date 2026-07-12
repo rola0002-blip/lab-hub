@@ -118,3 +118,47 @@ test('c shortcut never stacks the composer over an open modal', async ({ page })
   await page.keyboard.press('c')
   await expect(page.getByRole('heading', { name: 'New issue' })).toHaveCount(0)
 })
+
+test('create-issue modal: status menu is fully visible and clickable, not clipped by the dialog', async ({ page }) => {
+  test.setTimeout(90_000)
+  await runWizard(page)
+  await signIn(page, ADMIN.email, ADMIN.password)
+
+  // Open the global create-issue composer.
+  await page.goto('/issues')
+  await page.getByRole('button', { name: 'New issue' }).first().click()
+  const dialog = page.getByRole('dialog', { name: 'New issue' })
+  await expect(dialog).toBeVisible()
+
+  // Open the Status property menu. The chip is the LEFTMOST element in the property
+  // row — the worst case for the shared Menu, whose popover previously anchored
+  // `right-0` (growing leftward) and flowed downward, so it spilled past the dialog's
+  // left and bottom edges and was clipped by the panel's `overflow` scroll box. `exact`
+  // avoids the per-row "Status: <label>" menus that live behind the modal on /issues.
+  await dialog.getByRole('button', { name: 'Status', exact: true }).click()
+
+  // The menu (and specifically the mid-list "In Progress" item) must be visible — a
+  // clipped popover would report a zero/off-panel rect and fail actionability.
+  const inProgress = dialog.getByRole('menuitem', { name: 'In Progress' })
+  await expect(inProgress).toBeVisible()
+
+  // The item's on-screen rect must sit fully inside BOTH the viewport and the dialog's
+  // box: any clip on the left/bottom (the original bug) pushes it outside these bounds.
+  const vp = page.viewportSize()!
+  const item = (await inProgress.boundingBox())!
+  const panel = (await dialog.boundingBox())!
+  expect(item).not.toBeNull()
+  expect(item.x).toBeGreaterThanOrEqual(0)
+  expect(item.y).toBeGreaterThanOrEqual(0)
+  expect(item.x + item.width).toBeLessThanOrEqual(vp.width)
+  expect(item.y + item.height).toBeLessThanOrEqual(vp.height)
+  expect(item.x).toBeGreaterThanOrEqual(panel.x - 1)
+  expect(item.x + item.width).toBeLessThanOrEqual(panel.x + panel.width + 1)
+  expect(item.y).toBeGreaterThanOrEqual(panel.y - 1)
+  expect(item.y + item.height).toBeLessThanOrEqual(panel.y + panel.height + 1)
+
+  // Clicking it (Playwright actionability fails on occluded/clipped targets) selects
+  // the status: the chip must now read "In Progress".
+  await inProgress.click()
+  await expect(dialog.getByRole('button', { name: 'Status', exact: true })).toContainText('In Progress')
+})

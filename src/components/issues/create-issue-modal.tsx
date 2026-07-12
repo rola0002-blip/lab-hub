@@ -54,10 +54,10 @@ function Composer({ users, projects, labels }: { users: Opt[]; projects: Opt[]; 
           className="w-full rounded-md border border-border bg-surface px-3 py-2 text-base text-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
         <IssueMentionInput value={description} onChange={setDescription} users={users} rows={4} ariaLabel="Issue description" placeholder="Add a description…  @ to mention" />
         <div className="flex flex-wrap gap-2">
-          <Menu label="Status" buttonClassName={CHIP_TRIGGER} button={<><StatusIcon status={status} />{STATUS_LABEL[status]}</>} items={ISSUE_STATUSES.map((s) => ({ label: STATUS_LABEL[s], onSelect: () => setStatus(s) }))} />
-          <Menu label="Priority" buttonClassName={CHIP_TRIGGER} button={<><PriorityIcon priority={priority} />{PRIORITY_LABEL[priority]}</>} items={PRIORITIES.map((p) => ({ label: PRIORITY_LABEL[p], onSelect: () => setPriority(p) }))} />
-          <Menu label="Assignee" buttonClassName={CHIP_TRIGGER} button={users.find((u) => u.id === assigneeId)?.name ?? 'Unassigned'} items={[{ label: 'Unassigned', onSelect: () => setAssigneeId(null) }, ...users.map((u) => ({ label: u.name, onSelect: () => setAssigneeId(u.id) }))]} />
-          <Menu label="Project" buttonClassName={CHIP_TRIGGER} button={projects.find((p) => p.id === projectId)?.name ?? 'No project'} items={[{ label: 'No project', onSelect: () => setProjectId(null) }, ...projects.map((p) => ({ label: p.name, onSelect: () => setProjectId(p.id) }))]} />
+          <Menu label="Status" align="left" buttonClassName={CHIP_TRIGGER} button={<><StatusIcon status={status} />{STATUS_LABEL[status]}</>} items={ISSUE_STATUSES.map((s) => ({ label: STATUS_LABEL[s], onSelect: () => setStatus(s) }))} />
+          <Menu label="Priority" align="left" buttonClassName={CHIP_TRIGGER} button={<><PriorityIcon priority={priority} />{PRIORITY_LABEL[priority]}</>} items={PRIORITIES.map((p) => ({ label: PRIORITY_LABEL[p], onSelect: () => setPriority(p) }))} />
+          <Menu label="Assignee" align="left" buttonClassName={CHIP_TRIGGER} button={users.find((u) => u.id === assigneeId)?.name ?? 'Unassigned'} items={[{ label: 'Unassigned', onSelect: () => setAssigneeId(null) }, ...users.map((u) => ({ label: u.name, onSelect: () => setAssigneeId(u.id) }))]} />
+          <Menu label="Project" align="left" buttonClassName={CHIP_TRIGGER} button={projects.find((p) => p.id === projectId)?.name ?? 'No project'} items={[{ label: 'No project', onSelect: () => setProjectId(null) }, ...projects.map((p) => ({ label: p.name, onSelect: () => setProjectId(p.id) }))]} />
           <input type="date" aria-label="Due date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
             className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
         </div>
