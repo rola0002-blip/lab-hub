@@ -24,7 +24,7 @@ export function BoardCard({ issue, disabled }: { issue: IssueDto; disabled: bool
           </button>
         )}
         <div className="min-w-0 flex-1">
-          <Link href={`/issues/${issue.identifier}`} className="block text-2xs tabular-nums text-subtle hover:underline">{issue.identifier}</Link>
+          <Link href={`/issues/${issue.identifier}`} className="block rounded-sm text-2xs tabular-nums text-subtle hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">{issue.identifier}</Link>
           <p className={`text-sm text-default ${isDoneLike(issue.status) ? 'line-through text-muted' : ''}`}>{issue.title}</p>
           <div className="mt-1 flex items-center gap-1.5">
             <PriorityIcon priority={issue.priority} size={13} />
