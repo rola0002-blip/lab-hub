@@ -10,6 +10,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Menu } from '@/components/ui/menu'
 import { authClient } from '@/lib/auth-client'
+import { isNavItemActive } from '@/lib/nav-active'
 import type { Role } from '@/lib/session'
 
 export type NavItem = { href: string; label: string; icon: LucideIcon }
@@ -62,6 +63,9 @@ export function Sidebar({ org, user, unread, role }: {
 }) {
   const pathname = usePathname()
   const router = useRouter()
+  // Flat href list feeds the longest-prefix-wins active test (all sections,
+  // regardless of role visibility, so activeness is stable across roles).
+  const allHrefs = NAV_SECTIONS.flatMap((s) => s.items.map((i) => i.href))
   // Reuse the existing better-auth sign-out mechanism (was <SignOutButton/>).
   // Also drop this device's saved theme/accent so a shared machine never leaks
   // the previous user's appearance to the next (and their own server prefs win).
@@ -99,7 +103,7 @@ export function Sidebar({ org, user, unread, role }: {
               <p className="px-2 pb-1 pt-3 text-2xs font-semibold uppercase tracking-wide text-sidebar-muted">{sec.title}</p>
               <ul>
                 {items.map(({ href, label, icon: Icon }) => {
-                  const active = pathname === href || pathname.startsWith(href + '/')
+                  const active = isNavItemActive(pathname, href, allHrefs)
                   return (
                     <li key={href}>
                       <Link
