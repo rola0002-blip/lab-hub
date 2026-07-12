@@ -56,7 +56,7 @@ export function IssueListView({ issues, role, users, timezone, closedGrouped = f
       {groups.map((g, gi) => (
         <div key={g.key}>
           <div className="flex items-center gap-2 bg-surface-sunken px-3 py-1.5 text-xs font-semibold text-muted">
-            {g.status && <StatusIcon status={g.status} size={14} />}<span>{g.label}</span><span className="text-subtle">{g.items.length}</span>
+            {g.status && <StatusIcon status={g.status} size={14} decorative />}<span>{g.label}</span><span className="text-subtle">{g.items.length}</span>
           </div>
           {g.items.map((issue, j) => {
             const idx = starts[gi] + j

@@ -5,9 +5,13 @@ import { STATUS_TOKEN, STATUS_LABEL, PRIORITY_LABEL } from '@/features/issues/st
 const STATUS_GLYPH: Record<IssueStatus, LucideIcon> = {
   BACKLOG: CircleDashed, TODO: Circle, IN_PROGRESS: CircleDot, IN_REVIEW: CircleDotDashed, DONE: CircleCheck, CANCELED: CircleX,
 }
-export function StatusIcon({ status, size = 15 }: { status: IssueStatus; size?: number }) {
+// `decorative` drops the aria-label (and hides the glyph from AT) for contexts
+// where adjacent text already names the status — e.g. the list/board group
+// headers. There, an aria-labelled <svg> is an exposed graphics child, which is
+// disallowed directly under the issues `role="list"` (aria-required-children).
+export function StatusIcon({ status, size = 15, decorative = false }: { status: IssueStatus; size?: number; decorative?: boolean }) {
   const Icon = STATUS_GLYPH[status]
-  return <Icon size={size} aria-label={STATUS_LABEL[status]} style={{ color: `var(${STATUS_TOKEN[status]})` }} />
+  return <Icon size={size} aria-hidden={decorative || undefined} aria-label={decorative ? undefined : STATUS_LABEL[status]} style={{ color: `var(${STATUS_TOKEN[status]})` }} />
 }
 
 const PRIORITY_GLYPH: Record<IssuePriority, LucideIcon> = {

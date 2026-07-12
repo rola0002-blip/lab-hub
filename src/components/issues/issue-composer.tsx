@@ -36,7 +36,10 @@ export function IssueComposer({ issueId, users }: { issueId: string; users: Opt[
       <IssueMentionInput value={body} onChange={setBody} users={users} ariaLabel="Write a comment" placeholder="Leave a comment…  @ to mention" />
       <div className="mt-1 flex items-center gap-2">
         <button type="button" aria-label="Attach a file" onClick={() => fileRef.current?.click()} className="rounded-md p-1.5 text-muted hover:bg-hover hover:text-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]"><Paperclip size={16} aria-hidden /></button>
-        <input ref={fileRef} type="file" className="sr-only" onChange={onFiles} />
+        {/* `hidden` (not sr-only) keeps this ref-triggered input out of the a11y
+            tree — an unlabelled sr-only file input trips axe's form-label rule;
+            mirrors the chat composer. The adjacent "Attach a file" button drives it. */}
+        <input ref={fileRef} type="file" hidden onChange={onFiles} />
         <span className="flex-1" />
         <button type="button" onClick={submit} disabled={pending || !body.trim()} className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-on hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] disabled:opacity-50">
           <SendHorizontal size={15} aria-hidden />Comment
