@@ -391,6 +391,7 @@ model Project {
   description String        @default("")
   leadId      String?
   lead        User?         @relation("ProjectLead", fields: [leadId], references: [id], onDelete: SetNull)
+  startDate   DateTime?
   targetDate  DateTime?
   status      ProjectStatus @default(ACTIVE)
   createdAt   DateTime      @default(now())

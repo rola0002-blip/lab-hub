@@ -1,4 +1,5 @@
 'use server'
+import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/session'
 import { PolicyError } from '@/features/issues/issue-policy'
@@ -9,6 +10,26 @@ import type { IssueStatus, IssuePriority, ProjectStatus } from '@prisma/client'
 
 type Ok<T> = { ok: true } & T
 type Result<T = object> = Ok<T> | { ok: false; message: string }
+
+// Zod-validated project inputs. Dates arrive from the composer's <input type=date>
+// as calendar strings (YYYY-MM-DD) or null (cleared); a bad shape is rejected before
+// the service runs. `.nullish()` on the dates keeps the tri-state the composer relies
+// on: a string sets it, null clears it, undefined (create) / omission (update) leaves
+// it. The start<=target ordering itself is enforced in project-service, not here.
+const projectDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a valid date.').nullish()
+const projectStatus = z.enum(['ACTIVE', 'PAUSED', 'COMPLETED', 'CANCELED'])
+const createProjectSchema = z.object({
+  name: z.string().trim().min(1, 'Enter a project name.').max(120, 'Project name must be 1–120 characters.'),
+  description: z.string().max(4000).optional(),
+  leadId: z.string().nullish(),
+  startDate: projectDate,
+  targetDate: projectDate,
+  status: projectStatus.optional(),
+})
+const updateProjectSchema = createProjectSchema.partial()
+// string → Date; null → null (clear); undefined → undefined (leave untouched).
+const toDate = (s: string | null | undefined): Date | null | undefined => (s ? new Date(s) : s === null ? null : undefined)
+const firstIssue = (e: z.ZodError): string => e.issues[0]?.message ?? 'Invalid project.'
 
 // Run a service call as the signed-in user, translating PolicyError to a message.
 async function run<T>(fn: (u: { id: string; role: 'admin' | 'member' | 'guest' }) => Promise<T>): Promise<Result<{ data: T }>> {
@@ -61,11 +82,17 @@ export async function updateDescriptionAction(issueId: string, description: stri
 export async function createLabelAction(name: string, color: string) {
   return run((u) => issues.createLabel({ actorId: u.id, role: u.role, name, color }))
 }
-export async function createProjectAction(input: { name: string; description?: string; leadId?: string | null; targetDate?: string | null; status?: ProjectStatus }) {
-  return run((u) => projects.createProject({ actorId: u.id, role: u.role, name: input.name, description: input.description, leadId: input.leadId ?? null, targetDate: input.targetDate ? new Date(input.targetDate) : null, status: input.status }))
+export async function createProjectAction(input: { name: string; description?: string; leadId?: string | null; startDate?: string | null; targetDate?: string | null; status?: ProjectStatus }) {
+  const parsed = createProjectSchema.safeParse(input)
+  if (!parsed.success) return { ok: false as const, message: firstIssue(parsed.error) }
+  const v = parsed.data
+  return run((u) => projects.createProject({ actorId: u.id, role: u.role, name: v.name, description: v.description, leadId: v.leadId ?? null, startDate: toDate(v.startDate) ?? null, targetDate: toDate(v.targetDate) ?? null, status: v.status }))
 }
-export async function updateProjectAction(id: string, input: { name?: string; description?: string; leadId?: string | null; targetDate?: string | null; status?: ProjectStatus }) {
-  return run((u) => projects.updateProject({ actorId: u.id, role: u.role, id, name: input.name, description: input.description, leadId: input.leadId, targetDate: input.targetDate ? new Date(input.targetDate) : (input.targetDate === null ? null : undefined), status: input.status }))
+export async function updateProjectAction(id: string, input: { name?: string; description?: string; leadId?: string | null; startDate?: string | null; targetDate?: string | null; status?: ProjectStatus }) {
+  const parsed = updateProjectSchema.safeParse(input)
+  if (!parsed.success) return { ok: false as const, message: firstIssue(parsed.error) }
+  const v = parsed.data
+  return run((u) => projects.updateProject({ actorId: u.id, role: u.role, id, name: v.name, description: v.description, leadId: v.leadId, startDate: toDate(v.startDate), targetDate: toDate(v.targetDate), status: v.status }))
 }
 export async function deleteProjectAction(id: string) {
   return run((u) => projects.deleteProject({ role: u.role, id }))

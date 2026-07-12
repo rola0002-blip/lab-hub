@@ -76,4 +76,62 @@ describe('project-service', () => {
   it('404s when deleting a missing project as admin', async () => {
     await expect(deleteProject({ role: 'admin', id: 'nope' })).rejects.toMatchObject({ code: 'not_found' })
   })
+
+  it('persists startDate and exposes it (ISO) on the DTO', async () => {
+    const admin = await makeUser({ role: 'admin' })
+    const start = new Date('2026-09-01T00:00:00Z')
+    const target = new Date('2026-09-30T00:00:00Z')
+    const p = await createProject({ actorId: admin.id, role: 'admin', name: 'Dated', startDate: start, targetDate: target })
+    expect(p.startDate).toBe(start.toISOString())
+    expect(p.targetDate).toBe(target.toISOString())
+    // survives a fresh read
+    expect((await getProject(p.id))?.startDate).toBe(start.toISOString())
+    const [listed] = await listProjects()
+    expect(listed.startDate).toBe(start.toISOString())
+  })
+
+  it('allows startDate == targetDate and either date alone', async () => {
+    const admin = await makeUser({ role: 'admin' })
+    const same = new Date('2026-09-10T00:00:00Z')
+    const eq = await createProject({ actorId: admin.id, role: 'admin', name: 'Same-day', startDate: same, targetDate: same })
+    expect(eq.startDate).toBe(same.toISOString())
+    const startOnly = await createProject({ actorId: admin.id, role: 'admin', name: 'Start only', startDate: same })
+    expect(startOnly.startDate).toBe(same.toISOString())
+    expect(startOnly.targetDate).toBeNull()
+    const targetOnly = await createProject({ actorId: admin.id, role: 'admin', name: 'Target only', targetDate: same })
+    expect(targetOnly.startDate).toBeNull()
+    expect(targetOnly.targetDate).toBe(same.toISOString())
+  })
+
+  it('rejects startDate after targetDate on create with a 400 invalid', async () => {
+    const admin = await makeUser({ role: 'admin' })
+    await expect(createProject({
+      actorId: admin.id, role: 'admin', name: 'Inverted',
+      startDate: new Date('2026-10-01T00:00:00Z'), targetDate: new Date('2026-09-01T00:00:00Z'),
+    })).rejects.toMatchObject({ code: 'invalid' })
+  })
+
+  it('validates the merged pair on update (a single-date edit cannot invert the range)', async () => {
+    const admin = await makeUser({ role: 'admin' })
+    const p = await createProject({
+      actorId: admin.id, role: 'admin', name: 'Ranged',
+      startDate: new Date('2026-09-01T00:00:00Z'), targetDate: new Date('2026-09-30T00:00:00Z'),
+    })
+    // Moving only the start date past the existing target is rejected…
+    await expect(updateProject({ actorId: admin.id, role: 'admin', id: p.id, startDate: new Date('2026-10-15T00:00:00Z') }))
+      .rejects.toMatchObject({ code: 'invalid' })
+    // …and moving only the target before the existing start is rejected…
+    await expect(updateProject({ actorId: admin.id, role: 'admin', id: p.id, targetDate: new Date('2026-08-01T00:00:00Z') }))
+      .rejects.toMatchObject({ code: 'invalid' })
+    // …while a valid shift of both persists.
+    const moved = await updateProject({
+      actorId: admin.id, role: 'admin', id: p.id,
+      startDate: new Date('2026-11-01T00:00:00Z'), targetDate: new Date('2026-11-20T00:00:00Z'),
+    })
+    expect(moved.startDate).toBe(new Date('2026-11-01T00:00:00Z').toISOString())
+    // Clearing the start date leaves a lone target, which is always valid.
+    const cleared = await updateProject({ actorId: admin.id, role: 'admin', id: p.id, startDate: null })
+    expect(cleared.startDate).toBeNull()
+    expect(cleared.targetDate).toBe(new Date('2026-11-20T00:00:00Z').toISOString())
+  })
 })
