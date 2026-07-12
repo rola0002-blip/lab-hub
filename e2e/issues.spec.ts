@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { wipe, runWizard, signIn, ADMIN, createIssueViaUI } from './helpers'
+import { wipe, runWizard, signIn, ADMIN, createIssueViaUI, keyboardMoveCardRight, db } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 test.beforeEach(async () => { await wipe() })
@@ -41,17 +41,15 @@ test('issue lifecycle: project, create, board move, comment, complete, autolink'
 
   // Board view: keyboard-only cross-column move (grip → Space lift → ArrowRight into
   // the Todo column → Space drop). Exercises @dnd-kit's KeyboardSensor AND the /move
-  // route end-to-end, asserting BOTH the POST and the card's resulting column.
+  // route end-to-end, asserting BOTH the POST and the card's resulting column. The
+  // helper gates on dnd-kit's live-region so the ArrowRight lands after the sensor has
+  // measured the droppable rects (pressing it too early is a no-op that drops the card
+  // back in its own column). `overId` is the id of whatever card currently sits in the
+  // Todo column — derived, not a hardcoded identifier, so the gate can't drift.
   await page.goto('/issues')
   await page.getByRole('button', { name: 'Board' }).click()
-  const grip = page.getByRole('button', { name: 'Reorder COL-1' })
-  await grip.focus()
-  await page.keyboard.press('Space')       // lift
-  await page.keyboard.press('ArrowRight')  // move toward the adjacent Todo column
-  const [moveRes] = await Promise.all([
-    page.waitForResponse((r) => /\/api\/issues\/[^/]+\/move/.test(r.url()) && r.request().method() === 'POST'),
-    page.keyboard.press('Space'),          // drop → fires POST /api/issues/<id>/move
-  ])
+  const todoNeighbour = await db.issue.findFirstOrThrow({ where: { status: 'TODO' }, select: { id: true } })
+  const moveRes = await keyboardMoveCardRight(page, 'Reorder COL-1', todoNeighbour.id)
   expect(moveRes.ok()).toBeTruthy()
   // COL-1 now lives in the Todo column (the keyboard DnD changed its status).
   await expect(

@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
-import { expect, type Page } from '@playwright/test'
+import { expect, type Page, type Response } from '@playwright/test'
 
 const TEST_DB = 'postgresql://labhub:labhub@localhost:5432/labhub_test'
 
@@ -96,4 +96,31 @@ export async function createIssueViaUI(page: Page, title: string): Promise<void>
   const asInput = page.getByRole('textbox', { name: 'Issue title' })
   if (await asInput.count()) await expect(asInput).toHaveValue(title)
   else await expect(page.getByRole('heading', { name: title })).toBeVisible()
+}
+
+// Drive @dnd-kit's KeyboardSensor to move a board card one column to the right and
+// drop it, returning the /move POST response. The KeyboardSensor measures droppable
+// rects a frame AFTER the Space lift, so an ArrowRight fired immediately is a no-op
+// (dnd-kit's coordinate getter sees no rects) and the drop then POSTs a same-column
+// move — the source of the flake this helper exists to kill. We instead gate on
+// dnd-kit's own screen-reader live region: the initial self-over "was moved over
+// droppable area" announcement fires only once the rects are measured, and the cross
+// is confirmed when the announcement names the destination droppable (`overId`) — so
+// we press ArrowRight exactly until the move lands, never guessing a timeout. No fixed
+// sleeps; identifier-agnostic (the caller passes the destination droppable id).
+export async function keyboardMoveCardRight(page: Page, gripLabel: string, overId: string): Promise<Response> {
+  const live = page.locator('[id^="DndLiveRegion"]')
+  const grip = page.getByRole('button', { name: gripLabel })
+  await grip.focus()
+  await page.keyboard.press('Space')                                 // lift
+  await expect(live).toContainText('was moved over droppable area')  // rects measured (self-over)
+  await expect(async () => {
+    await page.keyboard.press('ArrowRight')                          // step toward the neighbour column
+    await expect(live).toContainText(overId, { timeout: 800 })       // announcement now names the destination
+  }).toPass({ timeout: 10_000 })
+  const [res] = await Promise.all([
+    page.waitForResponse((r) => /\/api\/issues\/[^/]+\/move/.test(r.url()) && r.request().method() === 'POST'),
+    page.keyboard.press('Space'),                                    // drop → POST /api/issues/<id>/move
+  ])
+  return res
 }
