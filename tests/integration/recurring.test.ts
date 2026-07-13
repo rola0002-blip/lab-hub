@@ -78,12 +78,17 @@ describe('recurring bookings', () => {
   })
 })
 
+// The series targets Mondays (daysOfWeek: [1]); pin firstDate to the next Monday
+// at least a few days out so the first occurrence is never in the past, and run the
+// series for 3 more weeks (4 Mondays total, matching the original fixed dates).
+const nextMonday = 3 + ((8 - addDays(new Date(), 3).getDay()) % 7)
+
 describe('createRecurringBooking follows the per-equipment policy (SP5 §3.4)', () => {
   beforeEach(resetDb)
 
   const recur = (userId: string, equipmentId: string) => createRecurringBooking({
     userId, equipmentId, purpose: 'series', daysOfWeek: [1], startMinutes: 9 * 60, durationMinutes: 60,
-    firstDate: '2026-08-03', untilDate: '2026-08-24',
+    firstDate: day(nextMonday), untilDate: day(nextMonday + 21),
   })
 
   it('NONE policy → the whole series inserts CONFIRMED with no manager notification', async () => {
