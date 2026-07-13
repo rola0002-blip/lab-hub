@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/session'
 import { isMember } from '@/features/chat/conversation-service'
-import { readUpload } from '@/lib/uploads'
+import { readUpload, contentDisposition } from '@/lib/uploads'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params
@@ -24,7 +24,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
   const isChat = path[0].toLowerCase() === 'chat'
   const isAvatar = path[0].toLowerCase() === 'avatars'
   const isIssue = path[0].toLowerCase() === 'issues'
-  const isPrivate = isChat || isAvatar || isIssue
+  const isDocument = path[0].toLowerCase() === 'documents'
+  const isPrivate = isChat || isAvatar || isIssue || isDocument
 
   // Chat attachments are chat reads of potentially confidential lab data, so
   // they go through the ConversationMember gate like every other chat read.
@@ -40,10 +41,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
     })
     if (!attachment) return new Response('Not found', { status: 404 })
     if (!(await isMember(user.id, attachment.message.conversationId))) return new Response('Forbidden', { status: 403 })
-  } else if (isAvatar || isIssue) {
-    // Avatars + issue attachments are private but workspace-visible: any
-    // authenticated session may read them. The traversal/case-fold guard above
-    // already proved path[0] names the same top-level dir readUpload will open.
+  } else if (isAvatar || isIssue || isDocument) {
+    // Avatars, issue attachments AND shared documents are private but workspace-
+    // visible: any authenticated session (incl. guests) may read them. The
+    // traversal/case-fold guard above already proved path[0] names the same
+    // top-level dir readUpload will open.
     const user = await getSessionUser()
     if (!user) return new Response('Unauthorized', { status: 401 })
   }
@@ -52,13 +54,23 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
   if (!file) return new Response('Not found', { status: 404 })
   const headers: Record<string, string> = {
     'Content-Type': file.mime,
-    // Chat files and avatars are private and must never be retained by
+    // Chat files, avatars and documents are private and must never be retained by
     // shared/proxy caches; SP1 public assets keep the long, shared cache.
     'Cache-Control': isPrivate ? 'private, no-store' : 'public, max-age=86400',
   }
-  if (!file.mime.startsWith('image/')) {
+  if (isDocument) {
+    // Recover the human filename (on-disk basename is a UUID) and 404 unknown paths.
+    const doc = await prisma.document.findFirst({ where: { path: '/uploads/' + path.join('/') }, select: { name: true } })
+    if (!doc) return new Response('Not found', { status: 404 })
+    // pdf + images view inline in a new tab; office files download. Either way the
+    // original name survives via filename* (RFC 5987).
+    const inline = file.mime === 'application/pdf' || file.mime.startsWith('image/')
+    headers['Content-Disposition'] = contentDisposition(inline ? 'inline' : 'attachment', doc.name)
+  } else if (!file.mime.startsWith('image/')) {
+    // Chat/issue/avatar non-image downloads keep the UUID basename, but stop mangling —
+    // the shared builder star-encodes it (harmless for an ASCII UUID).
     const name = path[path.length - 1] ?? 'download'
-    headers['Content-Disposition'] = `attachment; filename="${name.replace(/[^a-zA-Z0-9._-]/g, '')}"`
+    headers['Content-Disposition'] = contentDisposition('attachment', name)
   }
   return new Response(new Uint8Array(file.data), { headers })
 }

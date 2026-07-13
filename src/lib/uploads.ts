@@ -70,3 +70,16 @@ export async function removeUpload(publicPath: string): Promise<void> {
   if (!full.startsWith(uploadsDir())) return
   await rm(full, { force: true })
 }
+
+// Build a Content-Disposition that survives a non-ASCII filename (RFC 5987/6266):
+// an ASCII-only `filename="…"` fallback PLUS `filename*=UTF-8''<pct-encoded>`. Because
+// document on-disk basenames are UUIDs, serving Document.name is what makes a non-ASCII
+// name reachable, and the star-encoding is what lets it survive the download. Replaces
+// the old lossy `.replace(/[^a-zA-Z0-9._-]/g, '')` mangle on the uploads route.
+export function contentDisposition(disposition: 'inline' | 'attachment', filename: string): string {
+  const asciiFallback = filename.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_')
+  // encodeURIComponent leaves !'()* unescaped; RFC 5987 attr-char excludes them, so
+  // percent-encode those too for a strictly valid ext-value.
+  const star = encodeURIComponent(filename).replace(/['()*!]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase())
+  return `${disposition}; filename="${asciiFallback}"; filename*=UTF-8''${star}`
+}
