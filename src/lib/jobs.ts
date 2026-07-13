@@ -5,6 +5,7 @@ import { notify } from './notify'
 import { formatRange } from './time'
 import { drainOutbox } from './email/outbox'
 import { bookingReminderEmail } from './email/templates'
+import { formatIdentifier } from '@/features/issues/identifier'
 import * as bot from '@/features/bot'
 
 export async function expirePendingBookings(now: Date = new Date()): Promise<number> {
@@ -43,6 +44,24 @@ export async function sendBookingReminders(now: Date = new Date()): Promise<numb
   return soon.length
 }
 
+export async function pingDueSoonIssues(now: Date = new Date()): Promise<number> {
+  const horizon = new Date(now.getTime() + 24 * 3_600_000)
+  const due = await prisma.issue.findMany({
+    where: {
+      dueDate: { gte: now, lte: horizon }, dueSoonPingedAt: null,
+      assigneeId: { not: null }, status: { notIn: ['DONE', 'CANCELED'] },
+    },
+    select: { id: true, number: true, title: true, assigneeId: true },
+  })
+  if (due.length === 0) return 0
+  for (const i of due) {
+    const id = formatIdentifier(i.number)
+    await bot.dmUser(i.assigneeId!, `Heads up — ${id} "${i.title}" is due within 24 hours.`) // normal fan-out → single message_dm bell
+    await prisma.issue.update({ where: { id: i.id }, data: { dueSoonPingedAt: now } })
+  }
+  return due.length
+}
+
 export function startJobs(): void {
   if (env.DISABLE_JOBS) return
   const guard = (fn: () => Promise<unknown>) => {
@@ -56,4 +75,5 @@ export function startJobs(): void {
   setInterval(guard(() => drainOutbox()), 60_000)
   setInterval(guard(() => expirePendingBookings()), 60_000)
   setInterval(guard(() => sendBookingReminders()), 300_000)
+  setInterval(guard(() => pingDueSoonIssues()), 300_000)
 }
