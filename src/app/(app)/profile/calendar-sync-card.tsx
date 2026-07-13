@@ -36,12 +36,12 @@ export function CalendarSyncCard({ initialToken, host }: { initialToken: string;
         <div className={field}>
           {/* Spec §4.4: the webcal:// link is the ONE-CLICK path — clicking hands the
               scheme to the OS calendar handler. Keep the copy button beside it as a fallback. */}
-          <a href={webcalUrl} aria-label="Subscribe via webcal" className="min-w-0 flex-1 truncate text-sm text-[var(--text-accent)] underline outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">{webcalUrl}</a>
+          <a href={webcalUrl} aria-label="Subscribe via webcal" className="min-w-0 flex-1 truncate text-sm text-[var(--text-accent)] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">{webcalUrl}</a>
           <button type="button" onClick={() => copy(webcalUrl)} className={copyBtn} aria-label="Copy webcal URL"><Copy size={14} aria-hidden /></button>
         </div>
         <label className="block text-xs font-medium text-subtle">HTTPS (Google Calendar)</label>
         <div className={field}>
-          <input readOnly value={httpsUrl} aria-label="https subscription URL" className="min-w-0 flex-1 bg-transparent text-sm text-default outline-none" />
+          <input readOnly value={httpsUrl} aria-label="https subscription URL" className="min-w-0 flex-1 bg-transparent text-sm text-default outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
           <button type="button" onClick={() => copy(httpsUrl)} className={copyBtn} aria-label="Copy https URL"><Copy size={14} aria-hidden /></button>
         </div>
       </div>
