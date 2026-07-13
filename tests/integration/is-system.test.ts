@@ -12,18 +12,31 @@ vi.mock('@/lib/session', () => ({
 import { GET as chatUsers } from '@/app/api/chat/users/route'
 import { fanoutMessage } from '@/features/chat/fanout'
 import { getOrCreateDm } from '@/features/chat/conversation-service'
+import { humanUsers } from '@/features/chat/roster'
 import { COLOSSUS_BOT_ID } from '@/features/bot'
 
 describe('isSystem exclusions', () => {
   beforeEach(async () => { await resetDb(); await seedSystem(); mockUser.current = null })
 
-  it('the mention/DM picker (/api/chat/users) never lists the bot', async () => {
+  it('/api/chat/users includes the bot WITH an isSystem flag (for DM name resolution)', async () => {
     const u = await makeUser()
     mockUser.current = { id: u.id, name: u.name, email: u.email, role: u.role }
     const res = await chatUsers() // GET() takes no arguments
     const { users } = await res.json()
-    expect(users.some((x: { id: string }) => x.id === COLOSSUS_BOT_ID)).toBe(false)
-    expect(users.some((x: { id: string }) => x.id === u.id)).toBe(true)
+    // F2: the bot IS in the roster now (so a bot DM resolves to "COLOSSUS Bot",
+    // not "unknown") — carried with isSystem:true; humans carry isSystem:false.
+    const bot = users.find((x: { id: string }) => x.id === COLOSSUS_BOT_ID)
+    expect(bot?.isSystem).toBe(true)
+    expect(users.find((x: { id: string }) => x.id === u.id)?.isSystem).toBe(false)
+  })
+
+  it('humanUsers keeps the bot OUT of the human-facing choosers', async () => {
+    const u = await makeUser()
+    mockUser.current = { id: u.id, name: u.name, email: u.email, role: u.role }
+    const { users } = await (await chatUsers()).json()
+    const chooser = humanUsers(users)
+    expect(chooser.some((x: { id: string }) => x.id === COLOSSUS_BOT_ID)).toBe(false) // invisible in choosers
+    expect(chooser.some((x: { id: string }) => x.id === u.id)).toBe(true)             // humans still listed
   })
 
   it('fan-out never targets the bot even when it is a channel member', async () => {

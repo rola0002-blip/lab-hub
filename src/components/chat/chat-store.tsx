@@ -2,7 +2,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useEvents, type ClientEvent } from '@/components/use-events'
 
-export type ChatUser = { id: string; name: string; role: string; image: string | null }
+// isSystem lets DM name resolution keep the bot (so a bot DM never shows "unknown")
+// while the human-facing choosers filter it out via `humanUsers` (see roster.ts).
+export type ChatUser = { id: string; name: string; role: string; image: string | null; isSystem: boolean }
 export type ConversationItem = {
   id: string; type: 'CHANNEL' | 'DM'; name: string | null; topic: string; isPrivate: boolean
   archived: boolean; muted: boolean; memberIds: string[]

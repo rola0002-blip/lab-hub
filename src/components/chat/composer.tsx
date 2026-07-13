@@ -4,6 +4,7 @@ import { Bold, Italic, Strikethrough, Link as LinkIcon, Code, List, Quote, Smile
 import { IconButton } from '@/components/ui/icon-button'
 import { searchEmoji } from '@/features/chat/emoji'
 import { wrapSelection, detectTrigger } from '@/features/chat/compose-format'
+import { humanUsers } from '@/features/chat/roster'
 import { useChat } from './chat-store'
 import { EmojiPicker } from './emoji-picker'
 import type { Msg } from './message-item'
@@ -77,9 +78,11 @@ function ComposerBody({ draftKey, conversationId, selfRole, memberIds, parentId,
   const self = users.find((u) => u.id === selfId)
   const selfName = self?.name ?? 'You'
   const selfImage = self?.image ?? null
+  // Mention autocomplete: members of this conversation, minus the bot (humanUsers) —
+  // the bot is in the roster only for name resolution, never a mention target.
   const memberUsers = useMemo(() => {
     const ids = new Set(memberIds)
-    return users.filter((u) => ids.has(u.id))
+    return humanUsers(users).filter((u) => ids.has(u.id))
   }, [memberIds, users])
 
   // Persist the draft per (conversation, thread) so it survives a channel switch;
