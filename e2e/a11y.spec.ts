@@ -121,10 +121,13 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
   await auditBothThemes(page, 'profile')
 
   // /files carrying a folder + a document (spec §6.8). Seed directly so the table,
-  // drop zone and row menu render for the axe pass.
+  // drop zone and row menu render for the axe pass. The document lands at ROOT
+  // (folderId: null) — the audit visits /files (root), so a doc nested in the folder
+  // would leave root showing the EmptyState instead of the populated table + row menu.
+  // The folder itself still renders in the rail (with its folder-actions menu).
   const meFiles = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
-  const folder = await db.documentFolder.create({ data: { name: 'a11y protocols', createdById: meFiles.id } })
-  await db.document.create({ data: { name: 'a11y sop.pdf', path: '/uploads/documents/a11y.pdf', mime: 'application/pdf', size: 2048, uploaderId: meFiles.id, folderId: folder.id } })
+  await db.documentFolder.create({ data: { name: 'a11y protocols', createdById: meFiles.id } })
+  await db.document.create({ data: { name: 'a11y sop.pdf', path: '/uploads/documents/a11y.pdf', mime: 'application/pdf', size: 2048, uploaderId: meFiles.id, folderId: null } })
   await page.goto('/files')
   await expect(page.getByRole('heading', { name: 'Files' })).toBeVisible()
   await auditBothThemes(page, 'files')

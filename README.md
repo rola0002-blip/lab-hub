@@ -98,6 +98,18 @@ your own bookings and due-soon issues. Bot DMs for events you are already notifi
 about arrive silent, preserving the one-bell rule. Recurring bookings now follow the
 same per-instrument approval policy as single bookings.
 
+## Files — shared document library
+
+A workspace-wide document library at `/files`: one level of folders, drag-and-drop
+uploads of office files (images, PDF, Office, txt/csv, zip) up to 100 MB, and
+full-text filename search (also surfaced in ⌘K). Every signed-in user — including
+guests — can browse, search, and download; members and admins upload, rename, move,
+and create folders; a file is deleted by its uploader or an admin, and a folder by
+its creator or an admin (only when empty). PDFs and images open inline in a new tab,
+office files download (with the original, possibly non-ASCII, filename preserved).
+Each new upload is announced by the COLOSSUS Bot in `#lab-updates`. Storage reuses
+the existing uploads volume and backup — no new services.
+
 ## Install (any org)
 
 Requirements: Docker + Docker Compose. Optional: a Cloudflare Tunnel token for public access.
