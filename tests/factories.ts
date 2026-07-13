@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import { randomUUID } from 'node:crypto'
+import { COLOSSUS_BOT_ID, LAB_UPDATES_CHANNEL_ID } from '@/features/bot'
 
 export async function resetDb() {
   await prisma.$executeRawUnsafe(`
@@ -78,4 +79,25 @@ export async function makeIssue(creatorId: string, over: Record<string, unknown>
 
 export async function makeIssueComment(issueId: string, userId: string, over: Record<string, unknown> = {}) {
   return prisma.issueComment.create({ data: { issueId, userId, body: `note ${randomUUID().slice(0, 6)}`, ...over } })
+}
+
+// Re-create the system rows the SP5 seed migration installs (resetDb TRUNCATEs them
+// away). Idempotent — SP5 integration tests call this in their beforeEach after
+// resetDb when they need the bot / #lab-updates present.
+export async function seedSystem() {
+  await prisma.user.upsert({
+    where: { id: COLOSSUS_BOT_ID },
+    update: {},
+    create: { id: COLOSSUS_BOT_ID, name: 'COLOSSUS Bot', email: 'bot@colossus.local', emailVerified: true, role: 'member', isSystem: true },
+  })
+  await prisma.conversation.upsert({
+    where: { id: LAB_UPDATES_CHANNEL_ID },
+    update: {},
+    create: { id: LAB_UPDATES_CHANNEL_ID, type: 'CHANNEL', name: 'lab-updates', isPrivate: false, createdById: COLOSSUS_BOT_ID },
+  })
+  await prisma.conversationMember.upsert({
+    where: { conversationId_userId: { conversationId: LAB_UPDATES_CHANNEL_ID, userId: COLOSSUS_BOT_ID } },
+    update: {},
+    create: { conversationId: LAB_UPDATES_CHANNEL_ID, userId: COLOSSUS_BOT_ID },
+  })
 }

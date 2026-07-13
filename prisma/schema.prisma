@@ -21,6 +21,8 @@ model User {
   accentPreference String? // accent slug (src/lib/accents.ts); applied SSR when device localStorage is empty
   title            String? // free-text role/title, ≤100 chars, shown under the name on People
   timezone         String? // IANA tz id; drives the member's local time on People
+  isSystem         Boolean   @default(false) // true ONLY for the COLOSSUS Bot; excluded from every human enumeration (SP5 §5.6)
+  icsToken         String?   @unique // per-user calendar-feed token; nullable-unique (many NULLs coexist), minted lazily (SP5 §4.1)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -421,6 +423,7 @@ model Issue {
   // migration) so Postgres orders it by byte = base-62 order (rank.ts).
   rank            String
   completedAt     DateTime?
+  dueSoonPingedAt DateTime?                // set when the due-soon bot DM fires; cleared when dueDate changes (re-arms) (SP5 §5.7)
   // Backlink for create-from-message. SetNull: deleting the source message never
   // deletes the issue.
   originMessageId String?
