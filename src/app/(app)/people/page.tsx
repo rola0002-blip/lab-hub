@@ -7,7 +7,7 @@ export default async function PeoplePage() {
   const user = await requireUser()
   if (user.role === 'guest') redirect('/dashboard')
   const [users, invitations] = await Promise.all([
-    prisma.user.findMany({ orderBy: { createdAt: 'asc' }, select: { id: true, name: true, email: true, role: true, banned: true, title: true, timezone: true } }),
+    prisma.user.findMany({ where: { isSystem: false }, orderBy: { createdAt: 'asc' }, select: { id: true, name: true, email: true, role: true, banned: true, title: true, timezone: true } }),
     prisma.invitation.findMany({ where: { status: 'PENDING', expiresAt: { gt: new Date() } }, orderBy: { createdAt: 'desc' } }),
   ])
   return (

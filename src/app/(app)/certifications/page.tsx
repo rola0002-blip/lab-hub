@@ -7,7 +7,7 @@ export default async function CertificationsPage() {
   const me = await requireUser()
   if (me.role === 'guest') redirect('/dashboard')
   const [users, equipment, certs, myManaged] = await Promise.all([
-    prisma.user.findMany({ where: { banned: false }, select: { id: true, name: true, role: true }, orderBy: { name: 'asc' } }),
+    prisma.user.findMany({ where: { banned: false, isSystem: false }, select: { id: true, name: true, role: true }, orderBy: { name: 'asc' } }),
     prisma.equipment.findMany({ where: { status: 'ACTIVE' }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
     prisma.certification.findMany({ select: { userId: true, equipmentId: true } }),
     prisma.equipmentManager.findMany({ where: { userId: me.id }, select: { equipmentId: true } }),

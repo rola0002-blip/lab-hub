@@ -27,7 +27,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // (raised by the `c` shortcut, the ⌘K "Create issue" command, and any
   // "New issue" button); the modal itself gates opening for guests.
   const [issueUsers, issueProjects, issueLabels] = await Promise.all([
-    prisma.user.findMany({ where: { banned: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
+    prisma.user.findMany({ where: { banned: false, isSystem: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
     prisma.project.findMany({ orderBy: { createdAt: 'desc' }, select: { id: true, name: true } }),
     prisma.label.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true, color: true } }),
   ])

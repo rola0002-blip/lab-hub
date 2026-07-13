@@ -25,7 +25,7 @@ export async function fanoutMessage(
     const { message: m, conversation: c } = args
     const members = await prisma.conversationMember.findMany({
       where: { conversationId: c.id, userId: { not: m.userId } },
-      include: { user: { select: { id: true, name: true, banned: true } } },
+      include: { user: { select: { id: true, name: true, banned: true, isSystem: true } } },
     })
     const names = new Map(members.map((x) => [x.user.id, x.user.name]))
     const preview = (m.body ? renderBody(m.body, names) : '(attachment)').slice(0, 120)
@@ -35,7 +35,7 @@ export async function fanoutMessage(
     const url = `/chat/${c.id}`
 
     for (const member of members) {
-      if (member.user.banned) continue
+      if (member.user.banned || member.user.isSystem) continue
       const direct = m.mentionUserIds.includes(member.userId)
       // Mute suppresses everything except direct <@userId> mentions.
       // Channels: only mentions notify (direct or @channel). DMs: every message notifies.
