@@ -16,7 +16,8 @@ export const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: T
 
 export async function wipe() {
   await db.$executeRawUnsafe(`
-    TRUNCATE TABLE "IssueActivity","IssueAttachment","IssueComment","IssueLabel",
+    TRUNCATE TABLE "Document","DocumentFolder",
+      "IssueActivity","IssueAttachment","IssueComment","IssueLabel",
       "Label","Issue","Project",
       "Conversation","ConversationMember","Message","Reaction",
       "ChatAttachment","PushSubscription",

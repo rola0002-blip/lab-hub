@@ -45,6 +45,9 @@ model User {
   issueUploads    IssueAttachment[]
   issueActivities IssueActivity[]
 
+  documents       Document[]
+  documentFolders DocumentFolder[]
+
   @@map("user")
 }
 
@@ -501,4 +504,33 @@ model IssueActivity {
   createdAt DateTime @default(now())
 
   @@index([issueId, createdAt])
+}
+
+// ---------- Files: shared document library (sub-project 5, sub-feature D) ----------
+model DocumentFolder {
+  id          String   @id @default(cuid())
+  name        String   @unique // folder names are unique across the single level
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  documents Document[]
+}
+
+model Document {
+  id         String                   @id @default(cuid())
+  folderId   String? // null = root
+  folder     DocumentFolder?          @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  name       String // original filename, capped at 200 chars on write
+  path       String // served /uploads/documents/<uuid>.<ext>
+  mime       String
+  size       Int
+  uploaderId String
+  uploader   User                     @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  // Generated tsvector over `name`; the GIN index lives in the migration SQL only
+  // (like Issue.search) — this is what keeps the migration hand-written.
+  search     Unsupported("tsvector")?
+  createdAt  DateTime                 @default(now())
+
+  @@index([folderId])
 }

@@ -11,7 +11,8 @@ export async function resetDb() {
   for (let attempt = 0; ; attempt++) {
     try {
       await prisma.$executeRawUnsafe(`
-        TRUNCATE TABLE "IssueActivity","IssueAttachment","IssueComment","IssueLabel",
+        TRUNCATE TABLE "Document","DocumentFolder",
+          "IssueActivity","IssueAttachment","IssueComment","IssueLabel",
           "Label","Issue","Project",
           "Conversation","ConversationMember","Message","Reaction",
           "ChatAttachment","PushSubscription",
@@ -96,6 +97,18 @@ export async function makeIssue(creatorId: string, over: Record<string, unknown>
 
 export async function makeIssueComment(issueId: string, userId: string, over: Record<string, unknown> = {}) {
   return prisma.issueComment.create({ data: { issueId, userId, body: `note ${randomUUID().slice(0, 6)}`, ...over } })
+}
+
+export async function makeDocumentFolder(over: Record<string, unknown> = {}) {
+  const createdById = (over.createdById as string) ?? (await makeUser()).id
+  return prisma.documentFolder.create({ data: { name: `folder-${randomUUID().slice(0, 6)}`, createdById, ...over } })
+}
+
+export async function makeDocument(uploaderId: string, over: Record<string, unknown> = {}) {
+  const uuid = randomUUID().slice(0, 12)
+  return prisma.document.create({
+    data: { name: `doc-${uuid}.pdf`, path: `/uploads/documents/${uuid}.pdf`, mime: 'application/pdf', size: 1024, uploaderId, ...over },
+  })
 }
 
 // Re-create the system rows the SP5 seed migration installs (resetDb TRUNCATEs them
