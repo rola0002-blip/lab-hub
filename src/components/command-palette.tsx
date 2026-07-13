@@ -1,7 +1,7 @@
 'use client'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Hash, Lock, LayoutGrid, MessageSquare, ListTodo, Plus } from 'lucide-react'
+import { Search, Hash, Lock, LayoutGrid, MessageSquare, ListTodo, Plus, FileText } from 'lucide-react'
 import { NAV_SECTIONS, isNavVisible } from '@/components/sidebar'
 import { Avatar } from '@/components/ui/avatar'
 import { useChat, dmName } from '@/components/chat/chat-store'
@@ -59,6 +59,7 @@ function KindIcon({ cmd }: { cmd: Cmd }) {
   if (cmd.kind === 'person') return <MessageSquare size={16} aria-hidden className="shrink-0 text-subtle" />
   if (cmd.kind === 'issue') return <ListTodo size={16} aria-hidden className="shrink-0 text-subtle" />
   if (cmd.kind === 'command') return <Plus size={16} aria-hidden className="shrink-0 text-subtle" />
+  if (cmd.kind === 'document') return <FileText size={16} aria-hidden className="shrink-0 text-subtle" />
   return null // dm rows render an Avatar instead
 }
 
@@ -70,6 +71,7 @@ export function CommandPalette({ orgName = 'COLOSSUS', role }: { orgName?: strin
   const [active, setActive] = useState(0)
   const [recents, setRecents] = useState<string[]>([])
   const [issueHits, setIssueHits] = useState<Cmd[]>([])
+  const [docHits, setDocHits] = useState<Cmd[]>([])
   const dialogRef = useRef<HTMLDivElement>(null)
   const listId = useId()
   const optionId = (i: number) => `${listId}-opt-${i}`
@@ -106,8 +108,8 @@ export function CommandPalette({ orgName = 'COLOSSUS', role }: { orgName?: strin
     const commands: Cmd[] = role !== 'guest'
       ? [{ id: 'create-issue', label: 'Create issue', sub: 'Command', href: '', kind: 'command' as const }]
       : []
-    return [...commands, ...pages, ...channels, ...dms, ...people, ...issueHits]
-  }, [conversations, users, selfId, role, issueHits])
+    return [...commands, ...pages, ...channels, ...dms, ...people, ...issueHits, ...docHits]
+  }, [conversations, users, selfId, role, issueHits, docHits])
 
   const ordered = useMemo(() => (query.trim() ? items : recentsFirst(items, recents)), [items, recents, query])
   const results = useMemo(() => filterCommands(ordered, query), [ordered, query])
@@ -117,6 +119,7 @@ export function CommandPalette({ orgName = 'COLOSSUS', role }: { orgName?: strin
     setQuery('')
     setActive(0)
     setIssueHits([]) // drop any stale hits so a fresh empty-query open shows only destinations
+    setDocHits([])
     setOpen(true)
   }, [])
   const close = useCallback(() => setOpen(false), [])
@@ -140,6 +143,23 @@ export function CommandPalette({ orgName = 'COLOSSUS', role }: { orgName?: strin
     return () => clearTimeout(t)
   }, [query, router])
 
+  // Debounced document search: merges kind:'document' rows (label = filename); a
+  // selection opens the file in a new tab (see select()). Mirrors the issue-search
+  // effect above, minus the exact-identifier jump (documents have no COL-n).
+  useEffect(() => {
+    const q = query.trim()
+    if (!q) { return }
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/documents/search?q=${encodeURIComponent(q)}`)
+        if (!r.ok) return
+        const d = await r.json()
+        setDocHits((d.hits as { id: string; name: string; path: string }[]).map((h) => ({ id: h.id, label: h.name, sub: 'File', href: h.path, kind: 'document' as const })))
+      } catch { /* transient */ }
+    }, 250)
+    return () => clearTimeout(t)
+  }, [query])
+
   useGlobalHotkey('k', openPalette, { meta: true })
 
   const dmMember = (c: Cmd) => conversations.find((x) => x.id === c.id)
@@ -151,6 +171,7 @@ export function CommandPalette({ orgName = 'COLOSSUS', role }: { orgName?: strin
   async function select(cmd: Cmd) {
     setRecents(pushRecent(cmdKey(cmd)))
     close()
+    if (cmd.kind === 'document') { window.open(cmd.href, '_blank', 'noopener'); return }
     if (cmd.kind === 'command' && cmd.id === 'create-issue') { openIssueComposer(); return }
     if (cmd.kind === 'person') {
       // No static DM yet: create-or-open the 1:1, then navigate to it.
@@ -224,7 +245,7 @@ export function CommandPalette({ orgName = 'COLOSSUS', role }: { orgName?: strin
                 aria-label={`Search ${orgName}`}
                 aria-activedescendant={results[active] ? optionId(active) : undefined}
                 value={query}
-                onChange={(e) => { setQuery(e.target.value); setActive(0); if (!e.target.value.trim()) setIssueHits([]) }}
+                onChange={(e) => { setQuery(e.target.value); setActive(0); if (!e.target.value.trim()) { setIssueHits([]); setDocHits([]) } }}
                 onKeyDown={onInputKeyDown}
                 placeholder="Jump to a page, channel, or person…"
                 className="h-12 w-full bg-transparent text-sm text-default outline-none placeholder:text-subtle"

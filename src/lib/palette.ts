@@ -6,7 +6,7 @@ export type Cmd = {
   label: string
   sub?: string
   href: string
-  kind: 'page' | 'channel' | 'dm' | 'person' | 'issue' | 'command'
+  kind: 'page' | 'channel' | 'dm' | 'person' | 'issue' | 'command' | 'document'
 }
 
 // True when every char of `needle` appears in `hay` in order (case pre-lowered).
