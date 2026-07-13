@@ -5,7 +5,7 @@ import { createEquipmentAction } from '../actions'
 
 export default async function NewEquipmentPage() {
   await requireAdmin()
-  const users = await prisma.user.findMany({ where: { banned: false, role: { not: 'guest' } }, select: { id: true, name: true }, orderBy: { name: 'asc' } })
+  const users = await prisma.user.findMany({ where: { banned: false, role: { not: 'guest' }, isSystem: false }, select: { id: true, name: true }, orderBy: { name: 'asc' } })
   return (
     <div>
       <h1 className="text-2xl font-semibold text-default">Add equipment</h1>

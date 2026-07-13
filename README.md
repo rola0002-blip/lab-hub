@@ -84,6 +84,32 @@ tokens and conventions on top of the design system:
   `KeyboardSensor` makes every move keyboard-only (grip → Space to lift, arrows to
   move, Space to drop), and a per-card status Menu is the non-DnD fallback.
 
+## Calendar sync & the COLOSSUS Bot
+
+Read-only calendar integration: subscribe to a private per-user iCalendar feed of
+your bookings (`/api/calendar/<token>.ics`, unauthenticated by opaque token,
+regenerable from `/profile`), download a single booking as `.ics`
+(`/api/bookings/<id>/ics`, session-gated to owner / equipment manager / admin), or
+add one to Google or Outlook with a quick-add link. No OAuth, no two-way sync, no
+`.ics` email attachments. The COLOSSUS Bot — the sole `isSystem` account, which
+cannot sign in — posts lab activity (new projects and issues, and completions) to
+the seeded `#lab-updates` channel that every member auto-joins, and DMs you about
+your own bookings and due-soon issues. Bot DMs for events you are already notified
+about arrive silent, preserving the one-bell rule. Recurring bookings now follow the
+same per-instrument approval policy as single bookings.
+
+## Files — shared document library
+
+A workspace-wide document library at `/files`: one level of folders, drag-and-drop
+uploads of office files (images, PDF, Office, txt/csv, zip) up to 100 MB, and
+full-text filename search (also surfaced in ⌘K). Every signed-in user — including
+guests — can browse, search, and download; members and admins upload, rename, move,
+and create folders; a file is deleted by its uploader or an admin, and a folder by
+its creator or an admin (only when empty). PDFs and images open inline in a new tab,
+office files download (with the original, possibly non-ASCII, filename preserved).
+Each new upload is announced by the COLOSSUS Bot in `#lab-updates`. Storage reuses
+the existing uploads volume and backup — no new services.
+
 ## Install (any org)
 
 Requirements: Docker + Docker Compose. Optional: a Cloudflare Tunnel token for public access.

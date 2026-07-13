@@ -122,6 +122,18 @@ describe('decideBooking / cancelBooking', () => {
     const r = await createBooking({ userId: g.id, equipmentId: eq.id, purpose: 'x', ...slot(24, 28) })
     expect(r).toMatchObject({ ok: true, pending: true })
   })
+
+  it('an approved booking email carries calendar quick-add links; a rejection does not', async () => {
+    const owner = await makeUser()
+    const mgr = await makeUser({ role: 'admin' })
+    const eq = await makeEquipment({ name: 'CVD', location: 'Lab 2' })
+    const b = await prisma.booking.create({ data: { userId: owner.id, equipmentId: eq.id, status: 'PENDING', purpose: 'run', startsAt: new Date(Date.now() + 3_600_000), endsAt: new Date(Date.now() + 7_200_000) } })
+    await decideBooking({ bookingId: b.id, deciderId: mgr.id, decision: 'approve' })
+    const mail = await prisma.emailOutbox.findFirstOrThrow({ where: { toEmail: owner.email }, orderBy: { createdAt: 'desc' } })
+    expect(mail.html).toContain('calendar.google.com/calendar/render')
+    expect(mail.html).toContain('outlook.office.com/calendar')
+    expect(mail.html).toContain('/bookings')
+  })
 })
 
 describe('deactivation cascade (Task 8 extension)', () => {

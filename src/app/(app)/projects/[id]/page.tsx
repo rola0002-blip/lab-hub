@@ -14,7 +14,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const { id } = await params
   const [project, issues, users, org] = await Promise.all([
     getProject(id), listIssues({ projectId: id }),
-    prisma.user.findMany({ where: { banned: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
+    prisma.user.findMany({ where: { banned: false, isSystem: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
     getOrg(),
   ])
   if (!project) notFound()

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Ellipsis } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
+import { humanUsers } from '@/features/chat/roster'
 import { useChat } from './chat-store'
 
 type Props = {
@@ -117,8 +118,11 @@ export function MembersDialog({ conversationId, channelName, manage, onClose }: 
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
+  // "Add people" is a human-facing chooser: exclude the bot (humanUsers) even though
+  // it stays in `names` above for resolving existing members' labels. Without this,
+  // the bot would surface as an addable candidate in every channel it isn't in.
   const memberSet = new Set(memberIds)
-  const candidates = users.filter((u) => !memberSet.has(u.id))
+  const candidates = humanUsers(users).filter((u) => !memberSet.has(u.id))
 
   async function addMembers() {
     if (picked.size === 0 || busy) return

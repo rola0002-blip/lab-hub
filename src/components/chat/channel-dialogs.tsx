@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { Lock, Plus } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
 import { IconButton } from '@/components/ui/icon-button'
+import { humanUsers } from '@/features/chat/roster'
 import { useChat } from './chat-store'
 
 type ChannelRow = { id: string; name: string | null; topic: string; memberCount: number; isMember: boolean }
@@ -137,7 +138,8 @@ export function NewDmButton() {
 
   const candidates = useMemo(() => {
     const q = filter.trim().toLowerCase()
-    return users.filter((u) => u.id !== selfId && (!q || u.name.toLowerCase().includes(q)))
+    // humanUsers keeps the bot out of the new-DM picker (invisible in choosers).
+    return humanUsers(users).filter((u) => u.id !== selfId && (!q || u.name.toLowerCase().includes(q)))
   }, [users, selfId, filter])
 
   function close() { setOpen(false); setPicked(new Set()); setFilter(''); setError(null) }

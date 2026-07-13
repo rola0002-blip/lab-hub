@@ -9,7 +9,7 @@ export default async function EditEquipmentPage({ params }: { params: Promise<{ 
   const { id } = await params
   const eq = await prisma.equipment.findUnique({ where: { id }, include: { managers: true } })
   if (!eq) notFound()
-  const users = await prisma.user.findMany({ where: { banned: false, role: { not: 'guest' } }, select: { id: true, name: true }, orderBy: { name: 'asc' } })
+  const users = await prisma.user.findMany({ where: { banned: false, role: { not: 'guest' }, isSystem: false }, select: { id: true, name: true }, orderBy: { name: 'asc' } })
   const bound = updateEquipmentAction.bind(null, eq.id)
   return (
     <div>

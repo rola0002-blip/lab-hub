@@ -2,6 +2,7 @@ import 'server-only'
 import type { ProjectStatus } from '@prisma/client'
 import type { Role } from '@/lib/session'
 import { prisma } from '@/lib/db'
+import * as bot from '@/features/bot'
 import { assertCanMutate, canDeleteProject, PolicyError } from './issue-policy'
 
 export type ProjectDto = {
@@ -88,6 +89,7 @@ export async function createProject(args: {
     },
     include: { lead: LEAD_SELECT },
   })
+  void bot.announceToChannel(`New project: ${p.name} — /projects/${p.id}`)
   return toDto(p, 0, 0)
 }
 
@@ -117,6 +119,19 @@ export async function updateProject(args: {
     },
     include: { lead: LEAD_SELECT },
   })
+  // Announce lead / startDate / targetDate changes (not name/description/status).
+  const changes: string[] = []
+  if (args.leadId !== undefined && args.leadId !== existing.leadId) {
+    const lead = args.leadId ? await prisma.user.findUnique({ where: { id: args.leadId }, select: { name: true } }) : null
+    changes.push(args.leadId ? `lead set to ${lead?.name ?? 'someone'}` : 'lead cleared')
+  }
+  if (args.startDate !== undefined && args.startDate?.getTime() !== existing.startDate?.getTime()) {
+    changes.push(args.startDate ? `start date updated` : 'start date cleared')
+  }
+  if (args.targetDate !== undefined && args.targetDate?.getTime() !== existing.targetDate?.getTime()) {
+    changes.push(args.targetDate ? `target date updated` : 'target date cleared')
+  }
+  if (changes.length) void bot.announceToChannel(`Project ${p.name}: ${changes.join(', ')} — /projects/${p.id}`)
   const { done, total } = await progressFor(args.id)
   return toDto(p, done, total)
 }

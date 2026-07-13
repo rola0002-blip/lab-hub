@@ -64,7 +64,8 @@ export default async function EquipmentPage({ params, searchParams }: {
         <div className="min-w-0 flex-1">
           <WeekCalendar equipmentId={equipmentId} timezone={org.timezone} weekStartISO={new Date(+weekStart).toISOString()}
             slots={slots} canManage={canManage} selfId={me.id}
-            allowRecurring={eq.allowRecurring} retired={eq.status === 'RETIRED'} />
+            allowRecurring={eq.allowRecurring} retired={eq.status === 'RETIRED'}
+            equipmentName={eq.name} equipmentLocation={eq.location} />
         </div>
         <aside className="w-64 shrink-0 rounded-xl border border-border bg-surface p-4 text-sm shadow-xs">
           <h2 className="font-medium text-default">Policy</h2>
@@ -73,7 +74,7 @@ export default async function EquipmentPage({ params, searchParams }: {
             <li>Max <strong className="text-default">{eq.maxDurationMinutes / 60} h</strong> per booking</li>
             <li>{eq.certificationRequired ? 'Certification required' : 'No certification needed'}</li>
             <li>Approval: <strong className="text-default">{eq.approvalPolicy === 'NONE' ? 'instant for everyone' : eq.approvalPolicy === 'GUESTS' ? 'guests need approval' : 'everyone needs approval'}</strong></li>
-            <li>{eq.allowRecurring ? 'Recurring allowed (needs approval)' : 'No recurring bookings'}</li>
+            <li>{eq.allowRecurring ? 'Recurring bookings allowed' : 'No recurring bookings'}</li>
           </ul>
           {eq.description && <p className="mt-3 text-muted">{eq.description}</p>}
           {eq.location && <p className="mt-1 text-subtle">📍 {eq.location}</p>}

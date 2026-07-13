@@ -11,7 +11,7 @@ export default async function ProjectsPage() {
   const user = await requireUser()
   const [projects, users, org] = await Promise.all([
     listProjects(),
-    prisma.user.findMany({ where: { banned: false }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
+    prisma.user.findMany({ where: { banned: false, isSystem: false }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
     getOrg(),
   ])
   const timezone = org?.timezone ?? 'Asia/Singapore'

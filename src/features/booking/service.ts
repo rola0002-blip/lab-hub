@@ -1,11 +1,13 @@
 import 'server-only'
 import { Prisma } from '@prisma/client'
+import { env } from '@/lib/env'
 import { prisma } from '@/lib/db'
 import { notify } from '@/lib/notify'
 import { formatRange } from '@/lib/time'
 import { bookingPendingEmail, bookingDecidedEmail } from '@/lib/email/templates'
 import { isManagerOf } from '@/features/equipment/service'
 import { isCertified } from '@/features/certifications/service'
+import * as bot from '@/features/bot'
 import { evaluateBooking, type Verdict, type Role, type PolicyInput } from './policy'
 import { expandWeekly } from './recurrence'
 
@@ -66,6 +68,9 @@ export async function notifyManagersOfPending(equipmentId: string, requesterName
   const mail = bookingPendingEmail(orgName, requesterName, eq.name, when)
   await Promise.all(targets.map((id) =>
     notify(id, 'booking_pending', { message: `${requesterName} requested ${eq.name}, ${when}` }, mail),
+  ))
+  await Promise.all(targets.map((id) =>
+    bot.dmUser(id, `${requesterName} requested ${eq.name}, ${when} — needs your approval.`, { suppress: true }),
   ))
 }
 
@@ -135,7 +140,9 @@ export async function decideBooking(args: { bookingId: string; deciderId: string
   const when = formatRange(b.startsAt, b.endsAt, tz)
   await notify(b.userId, 'booking_decided',
     { message: `${b.equipment.name} ${when}: ${approved ? 'approved' : `rejected — ${args.reason}`}` },
-    bookingDecidedEmail(orgName, b.equipment.name, when, approved, args.reason))
+    bookingDecidedEmail(orgName, b.equipment.name, when, approved, args.reason,
+      { appUrl: env.APP_URL, event: { startsAt: b.startsAt, endsAt: b.endsAt, location: b.equipment.location } }))
+  await bot.dmUser(b.userId, `${b.equipment.name} ${when}: ${approved ? 'approved' : `rejected — ${args.reason}`}`, { suppress: true })
   return { ok: true }
 }
 
@@ -156,7 +163,7 @@ export type CreateRecurringInput = {
   firstDate: string; untilDate: string
 }
 export type CreateRecurringResult =
-  | { ok: true; ruleId: string; count: number }
+  | { ok: true; ruleId: string; count: number; pending: boolean }
   | { ok: false; error: 'blocked'; message: string }
   | { ok: false; error: 'conflicts'; conflicts: string[] }
   | { ok: false; error: 'not_found' }
@@ -167,11 +174,15 @@ export async function createRecurringBooking(input: CreateRecurringInput): Promi
   if (occurrences.length === 0) return { ok: false, error: 'blocked', message: 'The pattern produces no occurrences.' }
   if (occurrences.length > 200) return { ok: false, error: 'blocked', message: 'Too many occurrences (max 200). Shorten the date range.' }
 
-  // Policy check on the first occurrence (recurring=true covers routing + allowRecurring).
+  // Policy check on the first occurrence (recurring=true gates allowRecurring and
+  // skips the advance window; approval routing now follows the per-equipment policy).
   const ctx = await buildPolicyInput(input.userId, input.equipmentId, occurrences[0], true)
   if (!ctx) return { ok: false, error: 'not_found' }
   const verdict = evaluateBooking(ctx)
   if (verdict.kind === 'blocked') return { ok: false, error: 'blocked', message: verdict.message }
+  // The verdict is uniform across occurrences: role and approvalPolicy are per-
+  // equipment, and per-occurrence overlap/maintenance is checked separately below.
+  const pending = verdict.kind === 'approval'
 
   // Per-occurrence checks: booking + maintenance overlap, computed in bulk.
   const [bookings, windows] = await Promise.all([
@@ -204,16 +215,18 @@ export async function createRecurringBooking(input: CreateRecurringInput): Promi
         await tx.booking.create({
           data: {
             userId: input.userId, equipmentId: input.equipmentId, purpose: input.purpose.slice(0, 500),
-            startsAt: o.startsAt, endsAt: o.endsAt, status: 'PENDING', recurrenceRuleId: rule.id,
+            startsAt: o.startsAt, endsAt: o.endsAt, status: pending ? 'PENDING' : 'CONFIRMED', recurrenceRuleId: rule.id,
           },
         })
       }
       return rule
     })
-    const user = await prisma.user.findUniqueOrThrow({ where: { id: input.userId } })
-    const first = formatRange(occurrences[0].startsAt, occurrences[0].endsAt, tz)
-    await notifyManagersOfPending(input.equipmentId, user.name, `recurring ×${occurrences.length}, first ${first}`)
-    return { ok: true, ruleId: rule.id, count: occurrences.length }
+    if (pending) {
+      const user = await prisma.user.findUniqueOrThrow({ where: { id: input.userId } })
+      const first = formatRange(occurrences[0].startsAt, occurrences[0].endsAt, tz)
+      await notifyManagersOfPending(input.equipmentId, user.name, `recurring ×${occurrences.length}, first ${first}`)
+    }
+    return { ok: true, ruleId: rule.id, count: occurrences.length, pending }
   } catch (e) {
     if (isOverlapError(e)) return { ok: false, error: 'conflicts', conflicts: ['A slot was taken while submitting. Try again.'] }
     throw e
@@ -234,7 +247,8 @@ export async function decideRecurring(args: { ruleId: string; deciderId: string;
   const { name: orgName } = await orgInfo()
   await notify(rule.userId, 'booking_decided',
     { message: `Recurring booking of ${rule.equipment.name} (${count} slots): ${approved ? 'approved' : `rejected — ${args.reason}`}` },
-    bookingDecidedEmail(orgName, rule.equipment.name, `recurring ×${count}`, approved, args.reason))
+    bookingDecidedEmail(orgName, rule.equipment.name, `recurring ×${count}`, approved, args.reason, { appUrl: env.APP_URL }))
+  await bot.dmUser(rule.userId, `Recurring booking of ${rule.equipment.name} (${count} slots): ${approved ? 'approved' : `rejected — ${args.reason}`}`, { suppress: true })
   return { ok: true }
 }
 

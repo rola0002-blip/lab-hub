@@ -1,16 +1,35 @@
 import { prisma } from '@/lib/db'
 import { randomUUID } from 'node:crypto'
+import { COLOSSUS_BOT_ID, LAB_UPDATES_CHANNEL_ID } from '@/features/bot'
 
 export async function resetDb() {
-  await prisma.$executeRawUnsafe(`
-    TRUNCATE TABLE "IssueActivity","IssueAttachment","IssueComment","IssueLabel",
-      "Label","Issue","Project",
-      "Conversation","ConversationMember","Message","Reaction",
-      "ChatAttachment","PushSubscription",
-      "Notification","EmailOutbox","Booking","RecurrenceRule",
-      "MaintenanceWindow","Certification","EquipmentManager","Equipment",
-      "Invitation","Organization","session","account","verification","user" CASCADE
-  `)
+  // A fire-and-forget bot announce (`void bot.announceToChannel` in the issue/project
+  // services) from the just-finished test can still be executing when this TRUNCATE
+  // grabs its ACCESS EXCLUSIVE locks, racing into a transient deadlock (40P01). The
+  // straggler is short-lived, so retry the TRUNCATE — by the retry it has settled.
+  // (Mirrors the deadlock-as-retryable handling in booking createBooking.)
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await prisma.$executeRawUnsafe(`
+        TRUNCATE TABLE "Document","DocumentFolder",
+          "IssueActivity","IssueAttachment","IssueComment","IssueLabel",
+          "Label","Issue","Project",
+          "Conversation","ConversationMember","Message","Reaction",
+          "ChatAttachment","PushSubscription",
+          "Notification","EmailOutbox","Booking","RecurrenceRule",
+          "MaintenanceWindow","Certification","EquipmentManager","Equipment",
+          "Invitation","Organization","session","account","verification","user" CASCADE
+      `)
+      break
+    } catch (e) {
+      const msg = String(e).toLowerCase()
+      if (attempt < 5 && (msg.includes('deadlock') || msg.includes('40p01') || msg.includes('p2034'))) {
+        await new Promise((r) => setTimeout(r, 20 * (attempt + 1)))
+        continue
+      }
+      throw e
+    }
+  }
   await prisma.$executeRawUnsafe(`ALTER SEQUENCE "issue_number_seq" RESTART WITH 1`)
 }
 
@@ -78,4 +97,37 @@ export async function makeIssue(creatorId: string, over: Record<string, unknown>
 
 export async function makeIssueComment(issueId: string, userId: string, over: Record<string, unknown> = {}) {
   return prisma.issueComment.create({ data: { issueId, userId, body: `note ${randomUUID().slice(0, 6)}`, ...over } })
+}
+
+export async function makeDocumentFolder(over: Record<string, unknown> = {}) {
+  const createdById = (over.createdById as string) ?? (await makeUser()).id
+  return prisma.documentFolder.create({ data: { name: `folder-${randomUUID().slice(0, 6)}`, createdById, ...over } })
+}
+
+export async function makeDocument(uploaderId: string, over: Record<string, unknown> = {}) {
+  const uuid = randomUUID().slice(0, 12)
+  return prisma.document.create({
+    data: { name: `doc-${uuid}.pdf`, path: `/uploads/documents/${uuid}.pdf`, mime: 'application/pdf', size: 1024, uploaderId, ...over },
+  })
+}
+
+// Re-create the system rows the SP5 seed migration installs (resetDb TRUNCATEs them
+// away). Idempotent — SP5 integration tests call this in their beforeEach after
+// resetDb when they need the bot / #lab-updates present.
+export async function seedSystem() {
+  await prisma.user.upsert({
+    where: { id: COLOSSUS_BOT_ID },
+    update: {},
+    create: { id: COLOSSUS_BOT_ID, name: 'COLOSSUS Bot', email: 'bot@colossus.local', emailVerified: true, role: 'member', isSystem: true },
+  })
+  await prisma.conversation.upsert({
+    where: { id: LAB_UPDATES_CHANNEL_ID },
+    update: {},
+    create: { id: LAB_UPDATES_CHANNEL_ID, type: 'CHANNEL', name: 'lab-updates', isPrivate: false, createdById: COLOSSUS_BOT_ID },
+  })
+  await prisma.conversationMember.upsert({
+    where: { conversationId_userId: { conversationId: LAB_UPDATES_CHANNEL_ID, userId: COLOSSUS_BOT_ID } },
+    update: {},
+    create: { conversationId: LAB_UPDATES_CHANNEL_ID, userId: COLOSSUS_BOT_ID },
+  })
 }

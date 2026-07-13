@@ -22,7 +22,7 @@ export default async function IssueDetailPage({ params }: { params: Promise<{ id
   if (!row) notFound()
   const [detail, timeline, users, labels, projects, org] = await Promise.all([
     getIssueDetail(row.id), listTimeline(row.id),
-    prisma.user.findMany({ where: { banned: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
+    prisma.user.findMany({ where: { banned: false, isSystem: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
     listLabels(), listProjects(), getOrg(),
   ])
   if (!detail) notFound()

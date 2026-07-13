@@ -11,17 +11,18 @@ export default async function MyBookingsPage() {
   const [upcoming, past] = await Promise.all([
     prisma.booking.findMany({
       where: { userId: me.id, endsAt: { gte: now }, status: { in: ['PENDING', 'CONFIRMED'] } },
-      include: { equipment: { select: { name: true } } }, orderBy: { startsAt: 'asc' },
+      include: { equipment: { select: { name: true, location: true } } }, orderBy: { startsAt: 'asc' },
     }),
     prisma.booking.findMany({
       where: { userId: me.id, OR: [{ endsAt: { lt: now } }, { status: { in: ['REJECTED', 'CANCELLED', 'EXPIRED'] } }] },
-      include: { equipment: { select: { name: true } } }, orderBy: { startsAt: 'desc' }, take: 30,
+      include: { equipment: { select: { name: true, location: true } } }, orderBy: { startsAt: 'desc' }, take: 30,
     }),
   ])
   const shape = (b: (typeof upcoming)[number]) => ({
     id: b.id, equipmentName: b.equipment.name, when: formatRange(b.startsAt, b.endsAt, org.timezone),
     status: b.status, recurring: !!b.recurrenceRuleId, cancellable: b.startsAt > now && ['PENDING', 'CONFIRMED'].includes(b.status),
     reason: b.rejectionReason,
+    startsAt: b.startsAt.toISOString(), endsAt: b.endsAt.toISOString(), purpose: b.purpose, location: b.equipment.location,
   })
   return (
     <div>

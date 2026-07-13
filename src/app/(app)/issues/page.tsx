@@ -18,7 +18,7 @@ export default async function IssuesPage({ searchParams }: { searchParams: Promi
   const f = parseIssueFilters(sp)
   const [issues, users, labels, projects, org] = await Promise.all([
     listIssues({ status: f.status, assigneeId: f.assignee, projectId: f.project, labelId: f.label, priority: f.priority }),
-    prisma.user.findMany({ where: { banned: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
+    prisma.user.findMany({ where: { banned: false, isSystem: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
     listLabels(), listProjects(), getOrg(),
   ])
   const timezone = org?.timezone ?? 'Asia/Singapore'

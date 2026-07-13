@@ -1,6 +1,6 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
-import { wipe, runWizard, signIn, ADMIN, createIssueViaUI } from './helpers'
+import { wipe, runWizard, signIn, ADMIN, createIssueViaUI, db } from './helpers'
 
 // axe-core accessibility floor. For each core surface — the sign-in page, the
 // dashboard, a channel view, an open modal (the ⌘K command palette), and the
@@ -119,6 +119,28 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
   await page.goto('/profile')
   await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible()
   await auditBothThemes(page, 'profile')
+
+  // /files carrying a folder + a document (spec §6.8). Seed directly so the table,
+  // drop zone and row menu render for the axe pass. The document lands at ROOT
+  // (folderId: null) — the audit visits /files (root), so a doc nested in the folder
+  // would leave root showing the EmptyState instead of the populated table + row menu.
+  // The folder itself still renders in the rail (with its folder-actions menu).
+  const meFiles = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  await db.documentFolder.create({ data: { name: 'a11y protocols', createdById: meFiles.id } })
+  await db.document.create({ data: { name: 'a11y sop.pdf', path: '/uploads/documents/a11y.pdf', mime: 'application/pdf', size: 2048, uploaderId: meFiles.id, folderId: null } })
+  await page.goto('/files')
+  await expect(page.getByRole('heading', { name: 'Files' })).toBeVisible()
+  await auditBothThemes(page, 'files')
+
+  // /bookings carrying the add-to-calendar control (spec §4.5). Instant-confirm a
+  // booking on a NONE-policy instrument for the signed-in admin so the control renders.
+  const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  const eqA11y = await db.equipment.create({ data: { name: 'a11y furnace', approvalPolicy: 'NONE' } })
+  const startsA11y = new Date(Date.now() + 24 * 3_600_000)
+  await db.booking.create({ data: { userId: me.id, equipmentId: eqA11y.id, status: 'CONFIRMED', purpose: 'a11y run', startsAt: startsA11y, endsAt: new Date(+startsA11y + 2 * 3_600_000) } })
+  await page.goto('/bookings')
+  await expect(page.getByRole('button', { name: 'Add to calendar' }).first()).toBeVisible()
+  await auditBothThemes(page, 'bookings')
 
   // SP4 surfaces — issues list/board, projects, issue detail, create modal.
   // Seed one issue so the list/board/detail render populated (createIssueViaUI

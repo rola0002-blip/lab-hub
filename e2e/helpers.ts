@@ -1,6 +1,9 @@
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { expect, type Page, type Response } from '@playwright/test'
+// Import the bot ids from the pure ./ids module — importing `@/features/bot`
+// itself pulls `server-only` into Playwright's Node runner and throws at load.
+import { COLOSSUS_BOT_ID, LAB_UPDATES_CHANNEL_ID } from '@/features/bot/ids'
 
 const TEST_DB = 'postgresql://labhub:labhub@localhost:5432/labhub_test'
 
@@ -13,7 +16,8 @@ export const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: T
 
 export async function wipe() {
   await db.$executeRawUnsafe(`
-    TRUNCATE TABLE "IssueActivity","IssueAttachment","IssueComment","IssueLabel",
+    TRUNCATE TABLE "Document","DocumentFolder",
+      "IssueActivity","IssueAttachment","IssueComment","IssueLabel",
       "Label","Issue","Project",
       "Conversation","ConversationMember","Message","Reaction",
       "ChatAttachment","PushSubscription",
@@ -123,4 +127,24 @@ export async function keyboardMoveCardRight(page: Page, gripLabel: string, overI
     page.keyboard.press('Space'),                                    // drop → POST /api/issues/<id>/move
   ])
   return res
+}
+
+// Re-install the SP5 system rows after wipe() so the bot e2e journey has a
+// #lab-updates channel to auto-join into and post to (mirrors the seed migration).
+export async function seedSystem() {
+  await db.user.upsert({
+    where: { id: COLOSSUS_BOT_ID },
+    update: {},
+    create: { id: COLOSSUS_BOT_ID, name: 'COLOSSUS Bot', email: 'bot@colossus.local', emailVerified: true, role: 'member', isSystem: true },
+  })
+  await db.conversation.upsert({
+    where: { id: LAB_UPDATES_CHANNEL_ID },
+    update: {},
+    create: { id: LAB_UPDATES_CHANNEL_ID, type: 'CHANNEL', name: 'lab-updates', isPrivate: false, createdById: COLOSSUS_BOT_ID },
+  })
+  await db.conversationMember.upsert({
+    where: { conversationId_userId: { conversationId: LAB_UPDATES_CHANNEL_ID, userId: COLOSSUS_BOT_ID } },
+    update: {},
+    create: { conversationId: LAB_UPDATES_CHANNEL_ID, userId: COLOSSUS_BOT_ID },
+  })
 }
