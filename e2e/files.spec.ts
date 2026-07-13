@@ -42,7 +42,28 @@ test('the command palette finds an uploaded file', async ({ browser }) => {
   // Open the palette via its search trigger (robust across OS keyboard mappings).
   await page.getByRole('button', { name: /Search/ }).first().click()
   await page.getByRole('combobox').fill('graphene')
-  await expect(page.getByRole('option', { name: /graphene SOP\.pdf/ })).toBeVisible()
+  const option = page.getByRole('option', { name: /graphene SOP\.pdf/ })
+  await expect(option).toBeVisible()
+  // Selecting a document option jumps to the file in a NEW TAB (command-palette.tsx
+  // select(): window.open(href, '_blank', 'noopener')). Observed (instrumented)
+  // headless contract: the noopener popup opens detached (never commits a URL), the
+  // navigation GETs /uploads/documents/<uuid>.pdf (200), and — headless-shell
+  // Chromium having no PDF viewer — the inline pdf becomes a DOWNLOAD that Chromium
+  // attributes to the OPENER page, arriving even before the context's 'page' event.
+  // So pre-arm BOTH waiters alongside the click: the context 'page' event proves a
+  // new tab opened; the opener's 'download' carries the URL the jump landed on.
+  const [popup, download] = await Promise.all([
+    page.context().waitForEvent('page'),
+    page.waitForEvent('download'),
+    option.click(),
+  ])
+  expect(popup).toBeTruthy() // the palette really opened a new tab
+  expect(download.url()).toContain('/uploads/documents/')
+  // Served round-trip: the same session GETs that URL through the real uploads
+  // route — 200 + the pdf mime (pdf serves inline per the SP5 invariant).
+  const served = await page.request.get(download.url())
+  expect(served.ok()).toBeTruthy()
+  expect(served.headers()['content-type']).toContain('application/pdf')
 })
 
 test('a guest sees the Files nav + table but no upload or row-menu affordances', async ({ browser }) => {
@@ -60,5 +81,6 @@ test('a guest sees the Files nav + table but no upload or row-menu affordances',
   await expect(gp.getByRole('link', { name: 'graphene SOP.pdf' })).toBeVisible()     // can browse + download
   await expect(gp.getByRole('button', { name: 'Upload' })).toHaveCount(0)            // no upload affordance
   await expect(gp.getByRole('button', { name: /actions/ })).toHaveCount(0)           // no row/folder menu
+  await expect(gp.getByRole('button', { name: 'New folder' })).toHaveCount(0)        // no folder creation
   await guestCtx.close()
 })
