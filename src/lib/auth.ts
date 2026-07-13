@@ -8,6 +8,7 @@ import { prisma } from './db'
 import { env } from './env'
 import { enqueueEmail } from './email/outbox'
 import { resetPasswordEmail } from './email/templates'
+import { LAB_UPDATES_CHANNEL_ID } from '@/features/bot'
 
 async function isSetupComplete() {
   const org = await prisma.organization.findFirst()
@@ -53,8 +54,24 @@ export const auth = betterAuth({
           if (inv) {
             await prisma.invitation.update({ where: { id: inv.id }, data: { status: 'ACCEPTED' } })
             await prisma.user.update({ where: { id: user.id }, data: { role: inv.role } })
-          } else if ((await prisma.user.count()) === 1) {
+          } else if ((await prisma.user.count({ where: { isSystem: false } })) === 1) {
+            // Scope the first-admin bootstrap to non-system users: a pre-seeded bot
+            // (created by a migration at deploy, before setup) must never consume the
+            // first-admin slot under any ordering.
             await prisma.user.update({ where: { id: user.id }, data: { role: 'admin' } })
+          }
+          // Auto-join every new human account to #lab-updates. Best-effort + idempotent:
+          // this is the single choke point through which the setup admin and every
+          // invitation acceptance is created. Non-fatal — a missing channel (e.g. a
+          // test DB whose seed was truncated) must never break sign-up.
+          try {
+            await prisma.conversationMember.upsert({
+              where: { conversationId_userId: { conversationId: LAB_UPDATES_CHANNEL_ID, userId: user.id } },
+              update: {},
+              create: { conversationId: LAB_UPDATES_CHANNEL_ID, userId: user.id },
+            })
+          } catch (e) {
+            console.error('lab-updates auto-join failed', e)
           }
         },
       },
