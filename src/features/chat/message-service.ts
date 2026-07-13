@@ -33,6 +33,11 @@ export type SendInput = {
   // is just another root Message.
   broadcast?: boolean
   attachments?: { path: string; name: string; mime: string; size: number }[]
+  // Internal-only (bot module). When true, sendMessage SKIPS fanoutMessage (bell +
+  // offline email + Web Push) and nothing else — the Message row, the emitEvent
+  // 'msg' SSE event and unread counting are preserved. NEVER settable over HTTP:
+  // the /api/chat/messages zod schema has no such field (zod strips unknown keys).
+  suppressNotify?: boolean
 }
 export type SendResult = { ok: true; message: MessageDto } | { ok: false; error: 'forbidden' | 'rate_limited' | 'invalid'; message: string }
 
@@ -107,7 +112,10 @@ export async function sendMessage(input: SendInput): Promise<SendResult> {
       return { ok: false, error: 'invalid', message: 'Thread replies attach to a message in this conversation.' }
     }
   }
-  if (!checkRate(input.userId)) return { ok: false, error: 'rate_limited', message: 'Slow down — limit is 30 messages per minute.' }
+  // The bot (isSystem) may burst — many managers to DM, bulk issue creation — so it
+  // is exempt from the 30/min limiter. Safe: no human is isSystem and the HTTP route
+  // cannot forge one (it always passes the session user's id).
+  if (!sender.isSystem && !checkRate(input.userId)) return { ok: false, error: 'rate_limited', message: 'Slow down — limit is 30 messages per minute.' }
 
   const { mentionUserIds, mentionsChannel } = await resolveMentions(body, input.conversationId, input.userId, sender.role)
   const created = await prisma.message.create({
@@ -119,7 +127,7 @@ export async function sendMessage(input: SendInput): Promise<SendResult> {
     include: MSG_INCLUDE,
   })
   await emitEvent({ t: 'msg', cid: input.conversationId, mid: created.id })
-  void fanoutMessage({ message: created, conversation: convo, senderName: sender.name })
+  if (!input.suppressNotify) void fanoutMessage({ message: created, conversation: convo, senderName: sender.name })
 
   // "Also send to #channel": mirror a thread reply into the channel as its own
   // root message so members not watching the thread still see it. Purely additive
@@ -133,7 +141,7 @@ export async function sendMessage(input: SendInput): Promise<SendResult> {
       include: MSG_INCLUDE,
     })
     await emitEvent({ t: 'msg', cid: input.conversationId, mid: copy.id })
-    void fanoutMessage({ message: copy, conversation: convo, senderName: sender.name })
+    if (!input.suppressNotify) void fanoutMessage({ message: copy, conversation: convo, senderName: sender.name })
   }
   return { ok: true, message: toDto(created) }
 }

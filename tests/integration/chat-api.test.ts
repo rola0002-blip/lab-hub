@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { prisma } from '@/lib/db'
-import { resetDb, makeUser, makeChannel, makeMember } from '../factories'
+import { resetDb, makeUser, makeChannel, makeMember, makeDm } from '../factories'
 import { resetRate } from '@/features/chat/rate-limit'
 import { _resetForTests } from '@/lib/events'
 
@@ -20,6 +20,13 @@ import { POST as attachRoute } from '@/app/api/chat/attachments/route'
 const jreq = (url: string, body: unknown) =>
   new Request(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 
+// sendMessage fires fanoutMessage as `void`, so the message_dm bell lands a few DB
+// round-trips after the route resolves. Poll for it rather than assert synchronously.
+const until = async (fn: () => Promise<boolean>, ms = 2000) => {
+  const t0 = Date.now()
+  while (Date.now() - t0 < ms) { if (await fn()) return; await new Promise((r) => setTimeout(r, 15)) }
+}
+
 describe('chat API', () => {
   beforeEach(async () => { await resetDb(); resetRate(); mockUser.current = null })
   afterEach(() => _resetForTests())
@@ -35,6 +42,16 @@ describe('chat API', () => {
     expect(ok.status).toBe(201)
     expect((await ok.json()).message.body).toBe('hello')
     expect((await sendRoute(jreq('http://t/api/chat/messages', { conversationId: ch.id, body: '   ' }))).status).toBe(422)
+  })
+
+  it('ignores a suppressNotify field supplied in the HTTP body (still notifies)', async () => {
+    const a = await makeUser(); const b = await makeUser()
+    const dm = await makeDm([a.id, b.id])
+    mockUser.current = { id: a.id, name: a.name, email: a.email, role: a.role }
+    const res = await sendRoute(jreq('http://localhost/api/chat/messages', { conversationId: dm.id, body: 'sneaky', suppressNotify: true }))
+    expect(res.status).toBe(201)
+    await until(async () => (await prisma.notification.count({ where: { userId: b.id, type: 'message_dm' } })) === 1)
+    expect(await prisma.notification.count({ where: { userId: b.id, type: 'message_dm' } })).toBe(1) // zod stripped suppressNotify
   })
 
   it('list messages is member-gated (403) and returns pages for members', async () => {
