@@ -2,6 +2,7 @@ import 'server-only'
 import { prisma } from '@/lib/db'
 import { getOrCreateDm } from '@/features/chat/conversation-service'
 import { sendMessage } from '@/features/chat/message-service'
+import { neutralizeMentions } from '@/features/chat/mentions'
 
 // COLOSSUS Bot — the single isSystem=true account. The fixed ids live in the pure
 // ./ids module (no `server-only`) so the seed migration, runtime code, and the
@@ -24,10 +25,13 @@ async function ensureBotInChannel(): Promise<void> {
 
 // Post to #lab-updates as the bot. Normal (non-suppressed) send path: a CHANNEL post
 // with no @-mention fans out but notifies no one (fanout.ts) — posted, not pinged.
+// The body interpolates user-controlled text (issue/project/document/user names), so
+// neutralize any literal mention tokens first: the bot must never @-mention (§5.4),
+// and without this a title like `<!channel>` would bell + email + push the whole org.
 export async function announceToChannel(text: string): Promise<void> {
   try {
     await ensureBotInChannel()
-    await sendMessage({ userId: COLOSSUS_BOT_ID, conversationId: LAB_UPDATES_CHANNEL_ID, body: text })
+    await sendMessage({ userId: COLOSSUS_BOT_ID, conversationId: LAB_UPDATES_CHANNEL_ID, body: neutralizeMentions(text) })
   } catch (e) {
     console.error('bot.announceToChannel failed', e)
   }
@@ -40,7 +44,9 @@ export async function dmUser(userId: string, text: string, opts: { suppress?: bo
   try {
     const dm = await getOrCreateDm({ userIds: [COLOSSUS_BOT_ID, userId], byId: COLOSSUS_BOT_ID })
     if (!dm.ok) return
-    await sendMessage({ userId: COLOSSUS_BOT_ID, conversationId: dm.conversationId, body: text, suppressNotify: opts.suppress })
+    // Same neutralization as announceToChannel: the bot never produces a mention,
+    // so a token in the interpolated text can't bypass a peer's mute via <@id>.
+    await sendMessage({ userId: COLOSSUS_BOT_ID, conversationId: dm.conversationId, body: neutralizeMentions(text), suppressNotify: opts.suppress })
   } catch (e) {
     console.error('bot.dmUser failed', e)
   }
