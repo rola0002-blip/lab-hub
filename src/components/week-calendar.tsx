@@ -14,9 +14,10 @@ const START_HOUR = 7, END_HOUR = 23, ROWS = (END_HOUR - START_HOUR) * 2, ROW_PX 
 type Props = {
   equipmentId: string; timezone: string; weekStartISO: string
   slots: CalSlot[]; canManage: boolean; selfId: string; allowRecurring: boolean; retired: boolean
+  equipmentName: string; equipmentLocation: string
 }
 
-export default function WeekCalendar({ equipmentId, timezone, weekStartISO, slots, allowRecurring, retired }: Props) {
+export default function WeekCalendar({ equipmentId, timezone, weekStartISO, slots, allowRecurring, retired, equipmentName, equipmentLocation }: Props) {
   const weekStart = useMemo(() => new TZDate(new Date(weekStartISO), timezone), [weekStartISO, timezone])
   const [drag, setDrag] = useState<{ day: number; from: number; to: number } | null>(null)
   const [dialog, setDialog] = useState<{ start: Date; end: Date } | null>(null)
@@ -117,6 +118,7 @@ export default function WeekCalendar({ equipmentId, timezone, weekStartISO, slot
       {retired && <p className="p-2 text-sm text-muted">This instrument is retired — no new bookings.</p>}
       {dialog && (
         <BookingDialog equipmentId={equipmentId} timezone={timezone} allowRecurring={allowRecurring}
+          equipmentName={equipmentName} equipmentLocation={equipmentLocation}
           initialStart={dialog.start} initialEnd={dialog.end} onClose={() => setDialog(null)} />
       )}
     </div>

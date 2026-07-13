@@ -1,5 +1,6 @@
 import 'server-only'
 import { Prisma } from '@prisma/client'
+import { env } from '@/lib/env'
 import { prisma } from '@/lib/db'
 import { notify } from '@/lib/notify'
 import { formatRange } from '@/lib/time'
@@ -135,7 +136,8 @@ export async function decideBooking(args: { bookingId: string; deciderId: string
   const when = formatRange(b.startsAt, b.endsAt, tz)
   await notify(b.userId, 'booking_decided',
     { message: `${b.equipment.name} ${when}: ${approved ? 'approved' : `rejected — ${args.reason}`}` },
-    bookingDecidedEmail(orgName, b.equipment.name, when, approved, args.reason))
+    bookingDecidedEmail(orgName, b.equipment.name, when, approved, args.reason,
+      { appUrl: env.APP_URL, event: { startsAt: b.startsAt, endsAt: b.endsAt, location: b.equipment.location } }))
   return { ok: true }
 }
 
@@ -240,7 +242,7 @@ export async function decideRecurring(args: { ruleId: string; deciderId: string;
   const { name: orgName } = await orgInfo()
   await notify(rule.userId, 'booking_decided',
     { message: `Recurring booking of ${rule.equipment.name} (${count} slots): ${approved ? 'approved' : `rejected — ${args.reason}`}` },
-    bookingDecidedEmail(orgName, rule.equipment.name, `recurring ×${count}`, approved, args.reason))
+    bookingDecidedEmail(orgName, rule.equipment.name, `recurring ×${count}`, approved, args.reason, { appUrl: env.APP_URL }))
   return { ok: true }
 }
 

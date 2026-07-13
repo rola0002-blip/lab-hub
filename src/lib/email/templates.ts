@@ -1,3 +1,5 @@
+import { googleCalendarLink, outlookCalendarLink } from '@/features/calendar/links'
+
 type Tpl = { subject: string; html: string }
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 const wrap = (body: string) => `<div style="font-family:sans-serif;max-width:560px;margin:0 auto">${body}</div>`
@@ -14,10 +16,26 @@ export function resetPasswordEmail(orgName: string, link: string): Tpl {
 export function bookingPendingEmail(orgName: string, requesterName: string, equipmentName: string, when: string): Tpl {
   return { subject: `[${orgName}] Booking approval needed: ${equipmentName}`, html: wrap(`<p><strong>${esc(requesterName)}</strong> requested <strong>${esc(equipmentName)}</strong><br>${esc(when)}</p><p>Review it in the Approvals queue.</p>`) }
 }
-export function bookingDecidedEmail(orgName: string, equipmentName: string, when: string, approved: boolean, reason?: string): Tpl {
+export function bookingDecidedEmail(
+  orgName: string, equipmentName: string, when: string, approved: boolean, reason?: string,
+  cal?: { appUrl: string; event?: { startsAt: Date; endsAt: Date; location: string } },
+): Tpl {
+  // Calendar links only on APPROVAL. A single-event decide (decideBooking) supplies
+  // cal.event → Google + Outlook quick-add anchors + an Open-in-COLOSSUS deep link.
+  // A recurring decide (decideRecurring) supplies cal WITHOUT event → only the Open
+  // link (the subscription feed is the right tool for a series). Rejections: no links.
+  let extra = ''
+  if (approved && cal) {
+    if (cal.event) {
+      const g = googleCalendarLink({ summary: equipmentName, start: cal.event.startsAt, end: cal.event.endsAt, details: '', location: cal.event.location })
+      const o = outlookCalendarLink({ summary: equipmentName, start: cal.event.startsAt, end: cal.event.endsAt, details: '', location: cal.event.location })
+      extra += `<p>Add to your calendar: <a href="${g}">Google</a> &middot; <a href="${o}">Outlook</a></p>`
+    }
+    extra += `<p><a href="${cal.appUrl}/bookings">Open in ${esc(orgName)}</a></p>`
+  }
   return {
     subject: `[${orgName}] Booking ${approved ? 'approved' : 'rejected'}: ${equipmentName}`,
-    html: wrap(`<p>Your booking of <strong>${esc(equipmentName)}</strong> (${esc(when)}) was <strong>${approved ? 'approved' : 'rejected'}</strong>.</p>${reason ? `<p>Reason: ${esc(reason)}</p>` : ''}`),
+    html: wrap(`<p>Your booking of <strong>${esc(equipmentName)}</strong> (${esc(when)}) was <strong>${approved ? 'approved' : 'rejected'}</strong>.</p>${reason ? `<p>Reason: ${esc(reason)}</p>` : ''}${extra}`),
   }
 }
 export function bookingCancelledMaintenanceEmail(orgName: string, equipmentName: string, when: string, reason: string): Tpl {

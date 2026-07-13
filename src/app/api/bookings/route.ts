@@ -19,7 +19,7 @@ export async function POST(req: Request) {
   }
 
   const r = await createBooking({ userId: user.id, equipmentId: b.equipmentId, startsAt: b.startsAt, endsAt: b.endsAt, purpose: b.purpose })
-  if (r.ok) return NextResponse.json({ ok: true, pending: r.pending }, { status: 201 })
+  if (r.ok) return NextResponse.json({ ok: true, pending: r.pending, bookingId: r.bookingId }, { status: 201 })
   if (r.error === 'slot_taken') return NextResponse.json({ error: 'slot_taken', message: 'That time was just taken. Pick another slot.' }, { status: 409 })
   if (r.error === 'not_found') return NextResponse.json({ error: 'not_found' }, { status: 404 })
   return NextResponse.json({ error: 'blocked', message: r.message }, { status: 422 })

@@ -64,7 +64,8 @@ export default async function EquipmentPage({ params, searchParams }: {
         <div className="min-w-0 flex-1">
           <WeekCalendar equipmentId={equipmentId} timezone={org.timezone} weekStartISO={new Date(+weekStart).toISOString()}
             slots={slots} canManage={canManage} selfId={me.id}
-            allowRecurring={eq.allowRecurring} retired={eq.status === 'RETIRED'} />
+            allowRecurring={eq.allowRecurring} retired={eq.status === 'RETIRED'}
+            equipmentName={eq.name} equipmentLocation={eq.location} />
         </div>
         <aside className="w-64 shrink-0 rounded-xl border border-border bg-surface p-4 text-sm shadow-xs">
           <h2 className="font-medium text-default">Policy</h2>

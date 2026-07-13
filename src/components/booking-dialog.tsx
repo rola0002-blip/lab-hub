@@ -5,19 +5,22 @@ import { TZDate } from '@date-fns/tz'
 import { format } from 'date-fns'
 import { Modal } from '@/components/ui/modal'
 import { toast } from '@/components/ui/toast'
+import { AddToCalendar } from '@/components/calendar/add-to-calendar'
 
 type Props = {
   equipmentId: string; timezone: string; allowRecurring: boolean
+  equipmentName: string; equipmentLocation: string
   initialStart: Date; initialEnd: Date; onClose: () => void
 }
 type Verdict = { kind: 'instant' } | { kind: 'approval'; why: string } | { kind: 'blocked'; reason: string; message: string }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-export default function BookingDialog({ equipmentId, timezone, allowRecurring, initialStart, initialEnd, onClose }: Props) {
+export default function BookingDialog({ equipmentId, timezone, allowRecurring, equipmentName, equipmentLocation, initialStart, initialEnd, onClose }: Props) {
   const router = useRouter()
   const [purpose, setPurpose] = useState('')
   const [recurring, setRecurring] = useState(false)
+  const [done, setDone] = useState<{ bookingId: string } | null>(null)
   const local = useMemo(() => new TZDate(initialStart, timezone), [initialStart, timezone])
   const [days, setDays] = useState<number[]>([local.getDay()])
   const [until, setUntil] = useState(format(new TZDate(new Date(+initialStart + 28 * 86_400_000), timezone), 'yyyy-MM-dd'))
@@ -57,7 +60,12 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, i
         }),
       })
       const body = await r.json() // may throw on a non-JSON 5xx — caught below
-      if (r.ok) { onClose(); router.refresh(); return }
+      if (r.ok) {
+        // Instant-confirmed bookings send no email — offer an in-app calendar path.
+        // Pending requests are not yet an event, so close + refresh as before.
+        if (body.pending === false && body.bookingId) { router.refresh(); setDone({ bookingId: body.bookingId }); return }
+        onClose(); router.refresh(); return
+      }
       if (body.error === 'conflicts') setConflicts(body.conflicts)
       else setError(body.message ?? 'Booking failed')
       if (r.status === 409 && body.error === 'slot_taken') router.refresh() // show the fresh calendar behind the dialog
@@ -74,6 +82,16 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, i
 
   return (
     <Modal title="Book this slot" onClose={() => { if (!busy) onClose() }}>
+      {done ? (
+        <div className="mt-2 space-y-3">
+          <p className="text-sm text-default">Booked — <strong>{equipmentName}</strong>, {when}.</p>
+          <AddToCalendar bookingId={done.bookingId} summary={equipmentName} startsAt={initialStart.toISOString()} endsAt={initialEnd.toISOString()} purpose={purpose} location={equipmentLocation} />
+          <div className="flex justify-end">
+            <button onClick={onClose} className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-on transition-colors hover:bg-accent-hover">Done</button>
+          </div>
+        </div>
+      ) : (
+        <>
         <p className="mt-1 text-sm text-muted">{when} ({(durationMinutes / 60).toFixed(1)} h)</p>
 
         <label className="mt-4 block text-sm text-default">Purpose
@@ -124,6 +142,8 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, i
             {busy ? 'Booking…' : verdict?.kind === 'approval' ? 'Request booking' : 'Book'}
           </button>
         </div>
+        </>
+      )}
     </Modal>
   )
 }
