@@ -3,15 +3,32 @@ import { randomUUID } from 'node:crypto'
 import { COLOSSUS_BOT_ID, LAB_UPDATES_CHANNEL_ID } from '@/features/bot'
 
 export async function resetDb() {
-  await prisma.$executeRawUnsafe(`
-    TRUNCATE TABLE "IssueActivity","IssueAttachment","IssueComment","IssueLabel",
-      "Label","Issue","Project",
-      "Conversation","ConversationMember","Message","Reaction",
-      "ChatAttachment","PushSubscription",
-      "Notification","EmailOutbox","Booking","RecurrenceRule",
-      "MaintenanceWindow","Certification","EquipmentManager","Equipment",
-      "Invitation","Organization","session","account","verification","user" CASCADE
-  `)
+  // A fire-and-forget bot announce (`void bot.announceToChannel` in the issue/project
+  // services) from the just-finished test can still be executing when this TRUNCATE
+  // grabs its ACCESS EXCLUSIVE locks, racing into a transient deadlock (40P01). The
+  // straggler is short-lived, so retry the TRUNCATE — by the retry it has settled.
+  // (Mirrors the deadlock-as-retryable handling in booking createBooking.)
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await prisma.$executeRawUnsafe(`
+        TRUNCATE TABLE "IssueActivity","IssueAttachment","IssueComment","IssueLabel",
+          "Label","Issue","Project",
+          "Conversation","ConversationMember","Message","Reaction",
+          "ChatAttachment","PushSubscription",
+          "Notification","EmailOutbox","Booking","RecurrenceRule",
+          "MaintenanceWindow","Certification","EquipmentManager","Equipment",
+          "Invitation","Organization","session","account","verification","user" CASCADE
+      `)
+      break
+    } catch (e) {
+      const msg = String(e).toLowerCase()
+      if (attempt < 5 && (msg.includes('deadlock') || msg.includes('40p01') || msg.includes('p2034'))) {
+        await new Promise((r) => setTimeout(r, 20 * (attempt + 1)))
+        continue
+      }
+      throw e
+    }
+  }
   await prisma.$executeRawUnsafe(`ALTER SEQUENCE "issue_number_seq" RESTART WITH 1`)
 }
 

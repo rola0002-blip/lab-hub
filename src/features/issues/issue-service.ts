@@ -9,6 +9,7 @@ import {
 } from '@/lib/email/templates'
 import { parseMentions } from '@/features/chat/mentions'
 import { isMember } from '@/features/chat/conversation-service'
+import * as bot from '@/features/bot'
 import { assertCanMutate, PolicyError } from './issue-policy'
 import { rankBetween, rebalance, REBALANCE_THRESHOLD } from './rank'
 import { formatIdentifier } from './identifier'
@@ -149,6 +150,7 @@ export async function createIssue(args: {
 
   await emitEvent({ t: 'issue', id: created.id, projectId: created.projectId ?? undefined })
   const dto = toDto(created)
+  void bot.announceToChannel(`New issue ${dto.identifier}: ${dto.title}`)
   // Mention-wins de-dup (matches comment-service): if the assignee is also @-mentioned
   // in the description, the mention notification covers them — don't also fire
   // issue_assigned (one create → one notification for that user), never self.
@@ -173,11 +175,14 @@ async function applyStatus(tx: P.TransactionClient, issue: Loaded, actorId: stri
   return u
 }
 async function maybeNotifyDone(issue: Loaded, prevStatus: IssueStatus, status: IssueStatus, actorId: string): Promise<void> {
-  if (status === 'DONE' && prevStatus !== 'DONE' && issue.creatorId !== actorId) {
-    const actor = await prisma.user.findUnique({ where: { id: actorId }, select: { name: true } })
+  if (status === 'DONE' && prevStatus !== 'DONE') {
     const id = formatIdentifier(issue.number)
-    await pushIssueNotif(issue.creatorId, 'issue_done', `${actor?.name ?? 'Someone'} completed ${id}`,
-      issue.id, id, issueDoneEmail(await orgName(), actor?.name ?? 'Someone', id, issue.title))
+    void bot.announceToChannel(`${id} done: ${issue.title}`)
+    if (issue.creatorId !== actorId) {
+      const actor = await prisma.user.findUnique({ where: { id: actorId }, select: { name: true } })
+      await pushIssueNotif(issue.creatorId, 'issue_done', `${actor?.name ?? 'Someone'} completed ${id}`,
+        issue.id, id, issueDoneEmail(await orgName(), actor?.name ?? 'Someone', id, issue.title))
+    }
   }
 }
 

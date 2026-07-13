@@ -7,6 +7,7 @@ import { formatRange } from '@/lib/time'
 import { bookingPendingEmail, bookingDecidedEmail } from '@/lib/email/templates'
 import { isManagerOf } from '@/features/equipment/service'
 import { isCertified } from '@/features/certifications/service'
+import * as bot from '@/features/bot'
 import { evaluateBooking, type Verdict, type Role, type PolicyInput } from './policy'
 import { expandWeekly } from './recurrence'
 
@@ -67,6 +68,9 @@ export async function notifyManagersOfPending(equipmentId: string, requesterName
   const mail = bookingPendingEmail(orgName, requesterName, eq.name, when)
   await Promise.all(targets.map((id) =>
     notify(id, 'booking_pending', { message: `${requesterName} requested ${eq.name}, ${when}` }, mail),
+  ))
+  await Promise.all(targets.map((id) =>
+    bot.dmUser(id, `${requesterName} requested ${eq.name}, ${when} — needs your approval.`, { suppress: true }),
   ))
 }
 
@@ -138,6 +142,7 @@ export async function decideBooking(args: { bookingId: string; deciderId: string
     { message: `${b.equipment.name} ${when}: ${approved ? 'approved' : `rejected — ${args.reason}`}` },
     bookingDecidedEmail(orgName, b.equipment.name, when, approved, args.reason,
       { appUrl: env.APP_URL, event: { startsAt: b.startsAt, endsAt: b.endsAt, location: b.equipment.location } }))
+  await bot.dmUser(b.userId, `${b.equipment.name} ${when}: ${approved ? 'approved' : `rejected — ${args.reason}`}`, { suppress: true })
   return { ok: true }
 }
 
@@ -243,6 +248,7 @@ export async function decideRecurring(args: { ruleId: string; deciderId: string;
   await notify(rule.userId, 'booking_decided',
     { message: `Recurring booking of ${rule.equipment.name} (${count} slots): ${approved ? 'approved' : `rejected — ${args.reason}`}` },
     bookingDecidedEmail(orgName, rule.equipment.name, `recurring ×${count}`, approved, args.reason, { appUrl: env.APP_URL }))
+  await bot.dmUser(rule.userId, `Recurring booking of ${rule.equipment.name} (${count} slots): ${approved ? 'approved' : `rejected — ${args.reason}`}`, { suppress: true })
   return { ok: true }
 }
 

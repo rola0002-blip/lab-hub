@@ -5,6 +5,7 @@ import { notify } from './notify'
 import { formatRange } from './time'
 import { drainOutbox } from './email/outbox'
 import { bookingReminderEmail } from './email/templates'
+import * as bot from '@/features/bot'
 
 export async function expirePendingBookings(now: Date = new Date()): Promise<number> {
   const overdue = await prisma.booking.findMany({
@@ -36,6 +37,7 @@ export async function sendBookingReminders(now: Date = new Date()): Promise<numb
     const when = formatRange(b.startsAt, b.endsAt, tz)
     await notify(b.userId, 'booking_reminder', { message: `Upcoming: ${b.equipment.name} ${when}` },
       bookingReminderEmail(org?.name ?? 'COLOSSUS', b.equipment.name, when))
+    await bot.dmUser(b.userId, `Upcoming: ${b.equipment.name} ${when}.`, { suppress: true })
     await prisma.booking.update({ where: { id: b.id }, data: { reminderSentAt: now } })
   }
   return soon.length
