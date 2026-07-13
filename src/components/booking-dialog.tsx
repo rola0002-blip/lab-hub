@@ -83,7 +83,7 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, i
 
         {allowRecurring && (
           <div className="mt-3 rounded-lg border border-border p-3 text-sm text-default">
-            <label className="flex items-center gap-2"><input type="checkbox" checked={recurring} onChange={(e) => setRecurring(e.target.checked)} />Repeat weekly (whole series needs approval)</label>
+            <label className="flex items-center gap-2"><input type="checkbox" checked={recurring} onChange={(e) => setRecurring(e.target.checked)} />Repeat weekly</label>
             {recurring && (
               <div className="mt-2 space-y-2">
                 <div className="flex flex-wrap gap-2">
@@ -105,7 +105,7 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, i
         {verdict && (
           <p className={`mt-3 rounded-md p-2 text-sm text-default ${verdict.kind === 'blocked' ? 'bg-[var(--color-danger)]/10' : verdict.kind === 'approval' ? 'bg-[var(--color-warning)]/12' : 'bg-[var(--color-success)]/12'}`}>
             {verdict.kind === 'instant' && 'This booking will confirm instantly.'}
-            {verdict.kind === 'approval' && (verdict.why === 'recurring' ? 'Recurring series — an equipment manager must approve it.' : verdict.why === 'guest_policy' ? 'Guests need approval on this instrument.' : 'This instrument requires approval for every booking.')}
+            {verdict.kind === 'approval' && (verdict.why === 'guest_policy' ? 'Guests need approval on this instrument.' : 'This instrument requires approval for every booking.')}
             {verdict.kind === 'blocked' && verdict.message}
           </p>
         )}

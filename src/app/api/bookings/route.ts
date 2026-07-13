@@ -12,7 +12,7 @@ export async function POST(req: Request) {
 
   if (b.recurring) {
     const r = await createRecurringBooking({ userId: user.id, equipmentId: b.equipmentId, purpose: b.purpose, ...b.recurring })
-    if (r.ok) return NextResponse.json({ ok: true, pending: true, count: r.count }, { status: 201 })
+    if (r.ok) return NextResponse.json({ ok: true, pending: r.pending, count: r.count }, { status: 201 })
     if (r.error === 'conflicts') return NextResponse.json({ error: 'conflicts', conflicts: r.conflicts }, { status: 409 })
     if (r.error === 'not_found') return NextResponse.json({ error: 'not_found' }, { status: 404 })
     return NextResponse.json({ error: 'blocked', message: r.message }, { status: 422 })

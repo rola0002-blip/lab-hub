@@ -54,10 +54,6 @@ describe('evaluateBooking — blocking rules', () => {
     const slot = { startsAt: h(30 * 24), endsAt: h(30 * 24 + 2) }
     expect(evaluateBooking(input({ isManager: true, slot }))).toEqual({ kind: 'instant' })
   })
-  it('recurring requests skip the advance-window check (approval covers them)', () => {
-    const v = evaluateBooking(input({ recurring: true, slot: { startsAt: h(30 * 24), endsAt: h(30 * 24 + 2) }, eq: { allowRecurring: true } }))
-    expect(v).toEqual({ kind: 'approval', why: 'recurring' })
-  })
   it('enforces max duration for non-managers; managers bypass', () => {
     const slot = { startsAt: h(24), endsAt: h(24 + 9) } // 9h > 480min
     expect(evaluateBooking(input({ slot }))).toMatchObject({ kind: 'blocked', reason: 'max_duration' })
@@ -87,10 +83,6 @@ describe('evaluateBooking — approval routing', () => {
   })
   it('ALL policy: everyone queues, including managers (spec §6.2)', () => {
     expect(evaluateBooking(input({ role: 'admin', isManager: true, eq: { approvalPolicy: 'ALL' } }))).toEqual({ kind: 'approval', why: 'all_policy' })
-  })
-  it('recurring always routes to approval even on NONE policy', () => {
-    const v = evaluateBooking(input({ recurring: true, eq: { approvalPolicy: 'NONE', allowRecurring: true } }))
-    expect(v).toEqual({ kind: 'approval', why: 'recurring' })
   })
   it('certified guest on certification-required + GUESTS policy → approval (spec §6.1 table)', () => {
     const v = evaluateBooking(input({ role: 'guest', isCertified: true, eq: { certificationRequired: true } }))
@@ -130,5 +122,31 @@ describe('evaluateBooking — edge-semantics pins', () => {
   it('in_past seam: a slot starting at exactly now is allowed (check is strict <)', () => {
     const v = evaluateBooking(input({ slot: { startsAt: NOW, endsAt: h(2) } }))
     expect(v).toEqual({ kind: 'instant' })
+  })
+})
+
+describe('recurring follows the per-equipment policy (SP5 §3.4)', () => {
+  it('NONE → instant for a recurring series', () => {
+    expect(evaluateBooking(input({ recurring: true, eq: { allowRecurring: true, approvalPolicy: 'NONE' } })))
+      .toEqual({ kind: 'instant' })
+  })
+  it('ALL → approval (all_policy) for a recurring series', () => {
+    expect(evaluateBooking(input({ recurring: true, eq: { allowRecurring: true, approvalPolicy: 'ALL' } })))
+      .toEqual({ kind: 'approval', why: 'all_policy' })
+  })
+  it('GUESTS + guest → approval (guest_policy); GUESTS + member → instant, even recurring', () => {
+    expect(evaluateBooking(input({ recurring: true, role: 'guest', eq: { allowRecurring: true } })))
+      .toEqual({ kind: 'approval', why: 'guest_policy' })
+    expect(evaluateBooking(input({ recurring: true, role: 'member', eq: { allowRecurring: true } })))
+      .toEqual({ kind: 'instant' })
+  })
+  it('allowRecurring=false still hard-blocks recurring before any approval routing', () => {
+    expect(evaluateBooking(input({ recurring: true, eq: { allowRecurring: false } })))
+      .toEqual({ kind: 'blocked', reason: 'recurring_not_allowed', message: 'This instrument does not allow recurring bookings.' })
+  })
+  it('advance window stays skipped for a recurring series (far-future first occurrence)', () => {
+    const far = { startsAt: h(180 * 24), endsAt: h(180 * 24 + 1) }
+    expect(evaluateBooking(input({ recurring: true, slot: far, eq: { allowRecurring: true, approvalPolicy: 'NONE' } })))
+      .toEqual({ kind: 'instant' }) // not blocked by advance_window
   })
 })

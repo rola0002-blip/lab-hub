@@ -21,7 +21,7 @@ describe('recurring bookings', () => {
   it('creates rule + PENDING occurrences and one manager notification', async () => {
     const u = await makeUser()
     const admin = await makeUser({ role: 'admin' })
-    const eq = await makeEquipment({ allowRecurring: true })
+    const eq = await makeEquipment({ allowRecurring: true, approvalPolicy: 'ALL' })
     const r = await createRecurringBooking(baseInput(u.id, eq.id))
     expect(r.ok).toBe(true)
     if (!r.ok) return
@@ -52,7 +52,7 @@ describe('recurring bookings', () => {
   it('approve/reject covers all occurrences with one decision', async () => {
     const u = await makeUser()
     const mgr = await makeUser({ role: 'admin' })
-    const eq = await makeEquipment({ allowRecurring: true })
+    const eq = await makeEquipment({ allowRecurring: true, approvalPolicy: 'ALL' })
     const r = await createRecurringBooking(baseInput(u.id, eq.id))
     if (!r.ok) throw new Error('setup failed')
     await decideRecurring({ ruleId: r.ruleId, deciderId: mgr.id, decision: 'approve' })
@@ -63,7 +63,7 @@ describe('recurring bookings', () => {
   it('cancel scope one vs future', async () => {
     const u = await makeUser()
     const mgr = await makeUser({ role: 'admin' })
-    const eq = await makeEquipment({ allowRecurring: true })
+    const eq = await makeEquipment({ allowRecurring: true, approvalPolicy: 'ALL' })
     const r = await createRecurringBooking(baseInput(u.id, eq.id))
     if (!r.ok) throw new Error('setup failed')
     await decideRecurring({ ruleId: r.ruleId, deciderId: mgr.id, decision: 'approve' })
@@ -75,5 +75,37 @@ describe('recurring bookings', () => {
     for (const o of occ.slice(1)) {
       expect((await prisma.booking.findUniqueOrThrow({ where: { id: o.id } })).status).toBe('CANCELLED')
     }
+  })
+})
+
+describe('createRecurringBooking follows the per-equipment policy (SP5 §3.4)', () => {
+  beforeEach(resetDb)
+
+  const recur = (userId: string, equipmentId: string) => createRecurringBooking({
+    userId, equipmentId, purpose: 'series', daysOfWeek: [1], startMinutes: 9 * 60, durationMinutes: 60,
+    firstDate: '2026-08-03', untilDate: '2026-08-24',
+  })
+
+  it('NONE policy → the whole series inserts CONFIRMED with no manager notification', async () => {
+    const u = await makeUser({ role: 'member' })
+    const eq = await makeEquipment({ allowRecurring: true, approvalPolicy: 'NONE' })
+    const r = await recur(u.id, eq.id)
+    expect(r).toMatchObject({ ok: true, pending: false }) // instant series → result.pending false
+    const rows = await prisma.booking.findMany({ where: { equipmentId: eq.id } })
+    expect(rows.length).toBeGreaterThan(0)
+    expect(rows.every((b) => b.status === 'CONFIRMED')).toBe(true)
+    expect(await prisma.notification.count({ where: { type: 'booking_pending' } })).toBe(0)
+  })
+
+  it('ALL policy → the series inserts PENDING and notifies managers', async () => {
+    const u = await makeUser({ role: 'member' })
+    const mgr = await makeUser({ role: 'member' })
+    const eq = await makeEquipment({ allowRecurring: true, approvalPolicy: 'ALL' })
+    await prisma.equipmentManager.create({ data: { userId: mgr.id, equipmentId: eq.id } })
+    const r = await recur(u.id, eq.id)
+    expect(r).toMatchObject({ ok: true, pending: true }) // approval series → result.pending true
+    const rows = await prisma.booking.findMany({ where: { equipmentId: eq.id } })
+    expect(rows.every((b) => b.status === 'PENDING')).toBe(true)
+    expect(await prisma.notification.count({ where: { userId: mgr.id, type: 'booking_pending' } })).toBe(1)
   })
 })

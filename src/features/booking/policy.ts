@@ -5,7 +5,7 @@ export type BlockReason =
 export type Verdict =
   | { kind: 'blocked'; reason: BlockReason; message: string }
   | { kind: 'instant' }
-  | { kind: 'approval'; why: 'guest_policy' | 'all_policy' | 'recurring' }
+  | { kind: 'approval'; why: 'guest_policy' | 'all_policy' }
 
 export interface PolicyInput {
   now: Date
@@ -49,7 +49,6 @@ export function evaluateBooking(i: PolicyInput): Verdict {
   const clash = i.maintenance.some((m) => m.startsAt < slot.endsAt && m.endsAt > slot.startsAt)
   if (clash) return blocked('maintenance_overlap', 'The requested time overlaps scheduled maintenance.')
 
-  if (i.recurring) return { kind: 'approval', why: 'recurring' }
   if (eq.approvalPolicy === 'ALL') return { kind: 'approval', why: 'all_policy' }
   if (eq.approvalPolicy === 'GUESTS' && i.role === 'guest') return { kind: 'approval', why: 'guest_policy' }
   return { kind: 'instant' }

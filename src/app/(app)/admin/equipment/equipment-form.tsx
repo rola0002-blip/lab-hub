@@ -40,12 +40,12 @@ export default function EquipmentForm({ action, users, initial }: Props) {
       <label className="flex items-center gap-2 text-sm"><input name="certificationRequired" type="checkbox" defaultChecked={initial?.certificationRequired} />Certification required to book</label>
       <label className="block text-sm">Approval required for
         <select name="approvalPolicy" defaultValue={initial?.approvalPolicy ?? 'GUESTS'} className={input}>
-          <option value="NONE">No one (instant booking)</option>
-          <option value="GUESTS">Guests only</option>
-          <option value="ALL">Everyone</option>
+          <option value="NONE">No approval needed</option>
+          <option value="GUESTS">Only guests need approval</option>
+          <option value="ALL">Everyone needs approval</option>
         </select>
       </label>
-      <label className="flex items-center gap-2 text-sm"><input name="allowRecurring" type="checkbox" defaultChecked={initial?.allowRecurring} />Allow recurring bookings (always need approval)</label>
+      <label className="flex items-center gap-2 text-sm"><input name="allowRecurring" type="checkbox" defaultChecked={initial?.allowRecurring} />Allow recurring bookings</label>
       <label className="block text-sm">Equipment managers
         <select name="managers" multiple defaultValue={initial?.managerIds ?? []} className={`${input} h-28`}>
           {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
