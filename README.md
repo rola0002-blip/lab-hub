@@ -84,6 +84,20 @@ tokens and conventions on top of the design system:
   `KeyboardSensor` makes every move keyboard-only (grip → Space to lift, arrows to
   move, Space to drop), and a per-card status Menu is the non-DnD fallback.
 
+## Calendar sync & the COLOSSUS Bot
+
+Read-only calendar integration: subscribe to a private per-user iCalendar feed of
+your bookings (`/api/calendar/<token>.ics`, unauthenticated by opaque token,
+regenerable from `/profile`), download a single booking as `.ics`
+(`/api/bookings/<id>/ics`, session-gated to owner / equipment manager / admin), or
+add one to Google or Outlook with a quick-add link. No OAuth, no two-way sync, no
+`.ics` email attachments. The COLOSSUS Bot — the sole `isSystem` account, which
+cannot sign in — posts lab activity (new projects and issues, and completions) to
+the seeded `#lab-updates` channel that every member auto-joins, and DMs you about
+your own bookings and due-soon issues. Bot DMs for events you are already notified
+about arrive silent, preserving the one-bell rule. Recurring bookings now follow the
+same per-instrument approval policy as single bookings.
+
 ## Install (any org)
 
 Requirements: Docker + Docker Compose. Optional: a Cloudflare Tunnel token for public access.

@@ -1,6 +1,6 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
-import { wipe, runWizard, signIn, ADMIN, createIssueViaUI } from './helpers'
+import { wipe, runWizard, signIn, ADMIN, createIssueViaUI, db } from './helpers'
 
 // axe-core accessibility floor. For each core surface — the sign-in page, the
 // dashboard, a channel view, an open modal (the ⌘K command palette), and the
@@ -119,6 +119,16 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
   await page.goto('/profile')
   await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible()
   await auditBothThemes(page, 'profile')
+
+  // /bookings carrying the add-to-calendar control (spec §4.5). Instant-confirm a
+  // booking on a NONE-policy instrument for the signed-in admin so the control renders.
+  const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  const eqA11y = await db.equipment.create({ data: { name: 'a11y furnace', approvalPolicy: 'NONE' } })
+  const startsA11y = new Date(Date.now() + 24 * 3_600_000)
+  await db.booking.create({ data: { userId: me.id, equipmentId: eqA11y.id, status: 'CONFIRMED', purpose: 'a11y run', startsAt: startsA11y, endsAt: new Date(+startsA11y + 2 * 3_600_000) } })
+  await page.goto('/bookings')
+  await expect(page.getByRole('button', { name: 'Add to calendar' }).first()).toBeVisible()
+  await auditBothThemes(page, 'bookings')
 
   // SP4 surfaces — issues list/board, projects, issue detail, create modal.
   // Seed one issue so the list/board/detail render populated (createIssueViaUI

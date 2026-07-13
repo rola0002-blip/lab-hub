@@ -1,7 +1,9 @@
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { expect, type Page, type Response } from '@playwright/test'
-import { COLOSSUS_BOT_ID, LAB_UPDATES_CHANNEL_ID } from '@/features/bot'
+// Import the bot ids from the pure ./ids module — importing `@/features/bot`
+// itself pulls `server-only` into Playwright's Node runner and throws at load.
+import { COLOSSUS_BOT_ID, LAB_UPDATES_CHANNEL_ID } from '@/features/bot/ids'
 
 const TEST_DB = 'postgresql://labhub:labhub@localhost:5432/labhub_test'
 

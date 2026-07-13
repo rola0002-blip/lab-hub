@@ -56,7 +56,13 @@ test('member books instantly via API-backed dialog flow', async ({ page }) => {
   await expect(page.getByText('confirm instantly')).toBeVisible()
   await page.fill('input[placeholder*="growth"]', 'e2e run')
   await page.click('button:has-text("Book")')
-  await expect(page.getByText('Book this slot')).not.toBeVisible()
+  // SP5 Task 7: an instant confirm no longer closes the dialog — it swaps to a
+  // "Booked — …" success state carrying the Add-to-calendar affordance. Assert that
+  // confirmed-booking success state in-browser, then close it via Done.
+  const dialog = page.getByRole('dialog', { name: 'Book this slot' })
+  await expect(dialog.getByRole('button', { name: 'Add to calendar' })).toBeVisible()
+  await dialog.getByRole('button', { name: 'Done' }).click()
+  await expect(page.getByText('Book this slot')).not.toBeVisible() // dialog closed
   // The header banner also renders the signed-in user's name, so scope the
   // assertion to <main> (the calendar) to hit the rendered booking block only.
   await expect(page.getByRole('main').getByText('Roland')).toBeVisible() // booking block rendered

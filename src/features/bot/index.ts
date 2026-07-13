@@ -3,10 +3,12 @@ import { prisma } from '@/lib/db'
 import { getOrCreateDm } from '@/features/chat/conversation-service'
 import { sendMessage } from '@/features/chat/message-service'
 
-// COLOSSUS Bot — the single isSystem=true account. Fixed ids so the seed migration
-// (prisma/migrations/20260713000000_sp5_calendar_bot_policy) and runtime code agree.
-export const COLOSSUS_BOT_ID = 'colossus-bot'
-export const LAB_UPDATES_CHANNEL_ID = 'colossus-lab-updates'
+// COLOSSUS Bot — the single isSystem=true account. The fixed ids live in the pure
+// ./ids module (no `server-only`) so the seed migration, runtime code, and the
+// Playwright e2e runner agree; re-export them here for existing `@/features/bot`
+// importers.
+import { COLOSSUS_BOT_ID, LAB_UPDATES_CHANNEL_ID } from './ids'
+export { COLOSSUS_BOT_ID, LAB_UPDATES_CHANNEL_ID }
 
 // Every bot call is NON-FATAL: internal try/catch + console.error, never throws, so a
 // bot failure can never break the host mutation (mirrors notify()/fanoutMessage).
