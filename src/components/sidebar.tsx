@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import {
   ChevronDown, LayoutDashboard, MessageCircle, CalendarDays, CalendarCheck,
   ClipboardCheck, Award, Users, Microscope, Settings, ListTodo, Inbox,
-  FolderKanban, type LucideIcon,
+  FolderKanban, Files, type LucideIcon,
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -22,6 +22,7 @@ export const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   { title: 'Workspace', items: [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/chat', label: 'Chat', icon: MessageCircle },
+    { href: '/files', label: 'Files', icon: Files },
   ] },
   { title: 'Projects', items: [
     { href: '/issues/me', label: 'My issues', icon: Inbox },
