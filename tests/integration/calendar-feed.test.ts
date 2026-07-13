@@ -46,4 +46,16 @@ describe('calendar feed route', () => {
     const u = await makeUser()
     expect(await ensureIcsToken(u.id)).toBe(await ensureIcsToken(u.id))
   })
+
+  // Note: requireUser reads the session; this test checks regenerateIcsToken
+  // directly (the action is a thin session wrapper). The feed-route test above already
+  // proves rotation end-to-end (old 404s, new works).
+  it('regenerateIcsToken rotates the stored token', async () => {
+    const u = await makeUser()
+    const a = await ensureIcsToken(u.id)
+    const b = await regenerateIcsToken(u.id)
+    expect(b).not.toBe(a)
+    const row = await prisma.user.findUniqueOrThrow({ where: { id: u.id }, select: { icsToken: true } })
+    expect(row.icsToken).toBe(b)
+  })
 })
