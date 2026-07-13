@@ -33,7 +33,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
     headers: {
       'Content-Type': 'text/calendar; charset=utf-8',
       'Content-Disposition': 'inline; filename="colossus.ics"',
-      'Cache-Control': 'max-age=300',
+      // `private`: personal booking data behind a capability URL must never be
+      // retained by a shared/intermediary cache (only the end client may cache it).
+      'Cache-Control': 'private, max-age=300',
     },
   })
 }

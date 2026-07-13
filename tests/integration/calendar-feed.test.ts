@@ -23,12 +23,33 @@ describe('calendar feed route', () => {
     const res = await call(`${token}.ics`)
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('text/calendar; charset=utf-8')
+    // M5.2: personal data behind a capability URL must be `private` (no shared cache).
+    expect(res.headers.get('Cache-Control')).toBe('private, max-age=300')
     const text = await res.text()
     expect(text).toContain(`UID:${conf.id}@`)
     expect(text).toContain(`UID:${pend.id}@`)
     expect((text.match(/BEGIN:VEVENT/g) ?? []).length).toBe(2) // old + cancelled excluded
     expect(text).toContain('STATUS:CONFIRMED')
     expect(text).toContain('STATUS:TENTATIVE')
+  })
+
+  // M5.1: owner-scoping is the feed's sole security property — one user's token must
+  // never surface another user's bookings. Guard against a dropped userId filter.
+  it("a user's feed contains only their own bookings, never another user's", async () => {
+    const a = await makeUser()
+    const b = await makeUser()
+    const eq = await makeEquipment({ name: 'Raman' })
+    const now = Date.now()
+    // Distinct slots — the booking_no_overlap exclusion constraint forbids two
+    // overlapping bookings on the same equipment regardless of owner.
+    const mine = await prisma.booking.create({ data: { userId: a.id, equipmentId: eq.id, status: 'CONFIRMED', purpose: 'mine', startsAt: new Date(now + 3_600_000), endsAt: new Date(now + 7_200_000) } })
+    const theirs = await prisma.booking.create({ data: { userId: b.id, equipmentId: eq.id, status: 'CONFIRMED', purpose: 'theirs', startsAt: new Date(now + 10_800_000), endsAt: new Date(now + 14_400_000) } })
+
+    const token = await ensureIcsToken(a.id)
+    const text = await (await call(`${token}.ics`)).text()
+    expect(text).toContain(`UID:${mine.id}@`)         // A's own booking is present
+    expect(text).not.toContain(`UID:${theirs.id}@`)   // B's booking must never leak
+    expect((text.match(/BEGIN:VEVENT/g) ?? []).length).toBe(1)
   })
 
   it('returns a generic 404 for unknown, malformed and revoked tokens', async () => {
