@@ -63,7 +63,7 @@ export default function PeopleClient({ users, invitations, isAdmin, selfId }: { 
           <ul className="mt-2 divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface shadow-xs">
             {invitations.map((i) => (
               <li key={i.id} className="flex items-center justify-between p-3 text-sm text-default transition-colors hover:bg-hover">
-                <span>{i.email} · {i.role}</span>
+                <span className="min-w-0 truncate">{i.email} · {i.role}</span>
                 <span className="flex min-w-0 flex-1 items-center justify-end gap-2">
                   <input readOnly value={i.url} aria-label="Invite link"
                     onFocus={(e) => e.currentTarget.select()}
