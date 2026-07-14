@@ -34,6 +34,18 @@ left blank on purpose (see step 8 — invitations use copyable links).
 > a dead address. If you deliberately choose a non-80 `APP_PORT`, put that **same** port
 > in `APP_URL` (e.g. `APP_PORT=8080` → `APP_URL=http://colossus-lab:8080/`).
 
+> **`AUTH_RATE_LIMIT_MAX` — the sign-in/up throttle is lab-wide here.** better-auth rate
+> limits per client IP, but the directly-published Docker port (§4) SNATs **every** LAN
+> browser to one Docker-gateway source IP, so the whole lab shares **one** sign-in bucket
+> and one sign-up bucket. At the code default of `10`/60 s that means an onboarding burst
+> (≥11 invitees accepting within a minute) — or a single user mistyping their password 10
+> times — returns HTTP 429 "Too many requests" **for everyone** for the rest of the window,
+> reading like an outage. `init-env.ps1` therefore writes `AUTH_RATE_LIMIT_MAX=100` for the
+> LAN beta. Tune it to lab size if needed; do **not** set it blank (that fails validation)
+> and do **not** remove it to "disable" limiting — the limiter stays on by design. Per-IP
+> identity buys almost nothing behind the published port, and invitation-only sign-up keeps
+> the surface bounded, so a higher ceiling on a trusted LAN is the right trade.
+
 ## 4. Clean port-80 mapping
 `docker-compose.yml` maps `'${APP_PORT:-3000}:3000'`; `init-env.ps1` writes `APP_PORT=80`
 so members hit `http://<host>/` with no `:3000`. First check nothing else holds port 80:

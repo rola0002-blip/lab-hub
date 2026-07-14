@@ -55,6 +55,10 @@ $lines = @(
   "APP_PORT=$AppPort"
   "BETTER_AUTH_SECRET=$secret"
   'UPLOADS_DIR=/data/uploads'
+  '# Shared-IP LAN: the published port SNATs every client to one gateway IP, so the per-IP'
+  '# sign-in/up limiter is lab-wide. Raise it so one onboarding burst / fat-fingered password'
+  '# does not 429 sign-in for everyone. The limiter stays ON; code default is 10 (dev/CI).'
+  'AUTH_RATE_LIMIT_MAX=100'
   '# SMTP intentionally blank on day one — invitations use copyable links.'
   'SMTP_HOST='
   'SMTP_PORT=587'
