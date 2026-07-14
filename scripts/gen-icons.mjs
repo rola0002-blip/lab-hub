@@ -49,3 +49,30 @@ for (const [file, size] of [['icon-192.png', 192], ['icon-512.png', 512], ['appl
   writeFileSync(new URL(`../public/${file}`, import.meta.url), iconPng(size))
   console.log('wrote public/' + file)
 }
+
+// Maskable 512 with ~20% safe-zone padding so launcher masks never crop the "L".
+function iconPngMaskable(size) {
+  const pad = Math.round(size * 0.2)
+  const inner = size - pad * 2
+  const stroke = Math.round(inner * 0.12)
+  const x0 = pad + Math.round(inner * 0.34), y0 = pad + Math.round(inner * 0.26)
+  const y1 = pad + Math.round(inner * 0.74), x2 = pad + Math.round(inner * 0.66)
+  const raw = Buffer.alloc(size * (1 + size * 3))
+  let o = 0
+  for (let y = 0; y < size; y++) {
+    raw[o++] = 0
+    for (let x = 0; x < size; x++) {
+      const onGlyph = (x >= x0 && x < x0 + stroke && y >= y0 && y < y1)
+        || (y >= y1 - stroke && y < y1 && x >= x0 && x < x2)
+      if (onGlyph) { raw[o++] = 255; raw[o++] = 255; raw[o++] = 255 }
+      else { raw[o++] = TEAL[0]; raw[o++] = TEAL[1]; raw[o++] = TEAL[2] }
+    }
+  }
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(size, 0); ihdr.writeUInt32BE(size, 4)
+  ihdr[8] = 8; ihdr[9] = 2
+  const sig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
+  return Buffer.concat([sig, chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))])
+}
+writeFileSync(new URL('../public/icon-maskable-512.png', import.meta.url), iconPngMaskable(512))
+console.log('wrote public/icon-maskable-512.png')
