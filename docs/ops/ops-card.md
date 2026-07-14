@@ -29,9 +29,13 @@ piping one into the still-populated DB drops and recreates every object. (Dumps 
 ```powershell
 # 1. Stop the app (keep the db running).
 docker compose --profile prod stop app
-# 2. Restore the chosen DB dump into Postgres.
+# 2. Restore the chosen DB dump into Postgres. Copy the .sql INTO the db container and run
+#    psql -f THERE, so the UTF-8 dump never transits PowerShell's string/ANSI pipeline
+#    (Get-Content + a native-process pipe mojibake non-ASCII rows on Windows PowerShell 5.1).
 Expand-Archive .\backups\labhub-<stamp>.sql.zip -DestinationPath .\backups\_restore -Force
-Get-Content .\backups\_restore\labhub-<stamp>.sql | docker compose --profile prod exec -T db psql -U labhub labhub
+docker compose --profile prod cp .\backups\_restore\labhub-<stamp>.sql db:/tmp/restore.sql
+docker compose --profile prod exec -T db psql -U labhub -d labhub -f /tmp/restore.sql
+docker compose --profile prod exec -T db rm -f /tmp/restore.sql
 Remove-Item .\backups\_restore -Recurse -Force
 # 3. (If needed) restore uploads into the volume.
 Expand-Archive .\backups\uploads-<stamp>.zip -DestinationPath .\backups\_uploads -Force

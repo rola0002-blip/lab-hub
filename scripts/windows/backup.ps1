@@ -15,16 +15,28 @@ $backups = Join-Path $repo 'backups'
 New-Item -ItemType Directory -Force -Path $backups | Out-Null
 $stamp = Get-Date -Format 'yyyy-MM-dd-HHmm'
 
-# --- DB dump (plain SQL, UTF-8 no BOM via WriteAllLines) → zip ---
+# --- DB dump (plain SQL) → zip ---
+# Dump to a file INSIDE the db container, then byte-copy it out with `docker compose cp`.
+# The UTF-8 dump must NEVER transit a PowerShell string: Windows PowerShell 5.1 decodes
+# native-command stdout with the legacy OEM/ANSI code page (not UTF-8), so capturing
+# pg_dump's output into a variable mojibake's every multi-byte character (chat emoji +
+# reactions, CJK/accented member names, non-ASCII org + Files document titles) BEFORE it is
+# ever written to disk. `docker compose cp` copies raw bytes and is encoding-agnostic.
 # --clean --if-exists makes the dump SELF-CLEANING: it drops each object before
 # recreating it, so a catastrophe restore can pipe straight into a populated DB
 # (docs/ops/ops-card.md) without CREATE TABLE collisions.
 $sqlPath = Join-Path $backups "labhub-$stamp.sql"
 $zipPath = Join-Path $backups "labhub-$stamp.sql.zip"
 Write-Host "Dumping database → $zipPath"
-$dump = docker compose exec -T db pg_dump --clean --if-exists -U labhub labhub
-if ($LASTEXITCODE -ne 0) { throw 'pg_dump failed (is the db service up?)' }
-[System.IO.File]::WriteAllLines($sqlPath, [string[]]@($dump))   # string[] overload; UTF-8 no BOM; CRLF is harmless for psql
+docker compose exec -T db pg_dump --clean --if-exists -U labhub -f /tmp/labhub.sql labhub
+if ($LASTEXITCODE -ne 0) {
+  docker compose exec -T db rm -f /tmp/labhub.sql 2>$null   # drop any partial dump
+  throw 'pg_dump failed (is the db service up?)'
+}
+docker compose cp db:/tmp/labhub.sql $sqlPath
+$copyExit = $LASTEXITCODE
+docker compose exec -T db rm -f /tmp/labhub.sql 2>$null     # never leave the dump in the container
+if ($copyExit -ne 0) { throw 'copying the dump out of the db container failed' }
 Compress-Archive -Path $sqlPath -DestinationPath $zipPath -Force
 Remove-Item -LiteralPath $sqlPath -Force
 $new = @($zipPath)

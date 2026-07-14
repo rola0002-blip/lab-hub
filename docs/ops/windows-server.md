@@ -121,6 +121,7 @@ Run once during provisioning and after any script change (there is no Windows CI
 - [ ] `update.ps1` on the current (no-op) tag: backs up, rebuilds, health-polls to the matching version, reports SUCCESS.
 - [ ] `update.ps1` on a deliberately-bad tag: prints the exact `rollback.ps1 -Tag <prev>` + `logs` guidance and exits non-zero.
 - [ ] `backup.ps1` writes `labhub-<stamp>.sql.zip` (+ `uploads-<stamp>.zip` once uploads exist), honors keep-last-14, and mirrors to OneDrive when configured.
+- [ ] **Non-ASCII backup round-trip (encoding safety).** Seed a chat message with an emoji (and/or a member whose name uses CJK/accented characters, e.g. 陈 / José), run `backup.ps1`, then restore that dump per the operator card (`docs/ops/ops-card.md`) into a scratch/test stack and confirm the emoji and name come back **byte-identical** — not mojibake or `?`. The ASCII-only checks above cannot see a code-page-decode corruption; this is the row that does.
 - [ ] The Task Scheduler 03:00 job fires and produces an artifact.
 - [ ] `rollback.ps1 -Tag <prev>` returns the app to the prior version with data intact.
 - [ ] Members reach `http://<host>/` cleanly (no `:3000`); the stack auto-restarts after a reboot.
