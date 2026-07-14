@@ -15,6 +15,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 
   app:
     build: .
@@ -35,7 +36,7 @@ services:
     volumes:
       - uploads:/data/uploads
     ports:
-      - '3000:3000'
+      - '${APP_PORT:-3000}:3000'
     restart: unless-stopped
 
   cloudflared:
