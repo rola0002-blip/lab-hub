@@ -2,6 +2,7 @@ import { requireAdmin } from '@/lib/session'
 import { getOrg } from '@/lib/org'
 import { ThemeToggle } from '@/components/theme-toggle'
 import SettingsForm from './settings-form'
+import { APP_VERSION } from '@/lib/version'
 
 export default async function SettingsPage() {
   await requireAdmin()
@@ -19,6 +20,11 @@ export default async function SettingsPage() {
           <p className="text-sm text-muted">Theme — Light or dark. Your choice follows you across devices.</p>
           <ThemeToggle />
         </div>
+      </section>
+
+      <section className="mt-8 max-w-md rounded-lg border border-border p-4">
+        <h2 className="text-sm font-semibold text-default">About</h2>
+        <p className="mt-3 text-sm text-muted">COLOSSUS v{APP_VERSION}</p>
       </section>
     </div>
   )

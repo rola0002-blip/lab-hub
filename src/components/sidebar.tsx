@@ -56,11 +56,12 @@ export function isNavVisible(href: string, role: Role): boolean {
   return true
 }
 
-export function Sidebar({ org, user, unread, role }: {
+export function Sidebar({ org, user, unread, role, version }: {
   org: { name: string; logoPath: string | null }
   user: { id: string; name: string; image: string | null }
   unread: number
   role: Role
+  version: string
 }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -128,9 +129,12 @@ export function Sidebar({ org, user, unread, role }: {
           )
         })}
       </nav>
-      <div className="flex items-center gap-2 border-t border-[var(--sidebar-border)] px-1 pt-2">
-        <Avatar name={user.name} id={user.id} image={user.image} size={24} presence="active" />
-        <span className="truncate text-sm text-sidebar-fg">{user.name}</span>
+      <div className="flex flex-col gap-1 border-t border-[var(--sidebar-border)] px-1 pt-2">
+        <div className="flex items-center gap-2">
+          <Avatar name={user.name} id={user.id} image={user.image} size={24} presence="active" />
+          <span className="truncate text-sm text-sidebar-fg">{user.name}</span>
+        </div>
+        <span className="px-0.5 text-2xs text-sidebar-muted">v{version}</span>
       </div>
     </div>
   )
