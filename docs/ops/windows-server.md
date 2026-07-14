@@ -81,6 +81,10 @@ Create a Task Scheduler job:
 Backups land in `.\backups\` (gitignored), keep the last **14** of each class, and — if
 `ONEDRIVE_BACKUP_PATH` is set (env or `-OneDriveBackupPath`) — mirror to a OneDrive folder.
 
+**Caveat:** Docker Desktop runs in the interactive user session, so the server account must
+stay **logged in** (per the §6 auto-start setup — lock the screen, don't sign out) or the
+03:00 job cannot reach the Docker engine and `backup.ps1` fails at `pg_dump`.
+
 ## 10. Health monitoring
 `http://<host>/api/health` returns `{ ok, version }` — the quick "is it up and on the right
 version" check (also what `update.ps1` polls after a patch).

@@ -16,10 +16,13 @@ New-Item -ItemType Directory -Force -Path $backups | Out-Null
 $stamp = Get-Date -Format 'yyyy-MM-dd-HHmm'
 
 # --- DB dump (plain SQL, UTF-8 no BOM via WriteAllLines) → zip ---
+# --clean --if-exists makes the dump SELF-CLEANING: it drops each object before
+# recreating it, so a catastrophe restore can pipe straight into a populated DB
+# (docs/ops/ops-card.md) without CREATE TABLE collisions.
 $sqlPath = Join-Path $backups "labhub-$stamp.sql"
 $zipPath = Join-Path $backups "labhub-$stamp.sql.zip"
 Write-Host "Dumping database → $zipPath"
-$dump = docker compose exec -T db pg_dump -U labhub labhub
+$dump = docker compose exec -T db pg_dump --clean --if-exists -U labhub labhub
 if ($LASTEXITCODE -ne 0) { throw 'pg_dump failed (is the db service up?)' }
 [System.IO.File]::WriteAllLines($sqlPath, [string[]]@($dump))   # string[] overload; UTF-8 no BOM; CRLF is harmless for psql
 Compress-Archive -Path $sqlPath -DestinationPath $zipPath -Force

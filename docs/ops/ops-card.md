@@ -8,7 +8,7 @@ Run from the repo root (`C:\colossus`). All commands are PowerShell.
 | **Update** (specific) | `.\scripts\windows\update.ps1 -Tag vX.Y.Z` |
 | **Roll back** | `.\scripts\windows\rollback.ps1 -Tag vX.Y.Z` |
 | **Back up** (also nightly) | `.\scripts\windows\backup.ps1` |
-| **Check health** | open `http://<host>/api/health` (or `curl`) |
+| **Check health** | `Invoke-RestMethod http://<host>/api/health` (or open in a browser) |
 | **View logs** | `docker compose --profile prod logs -f app` |
 
 > **Tags must match `package.json`.** A release tag = `v` + the `package.json` version. Cut
@@ -22,17 +22,20 @@ Run from the repo root (`C:\colossus`). All commands are PowerShell.
 
 ## Restore (catastrophe only — data corruption, NOT a version rollback)
 Version rollbacks are data-safe (additive-only migrations); a DB restore is only for a
-genuine data catastrophe. From the repo root:
+genuine data catastrophe. Dumps are **self-cleaning** (`pg_dump --clean --if-exists`):
+piping one into the still-populated DB drops and recreates every object. (Dumps taken
+**before** the self-cleaning change need a manual
+`DROP SCHEMA public CASCADE; CREATE SCHEMA public;` in psql first.) From the repo root:
 ```powershell
 # 1. Stop the app (keep the db running).
 docker compose --profile prod stop app
 # 2. Restore the chosen DB dump into Postgres.
 Expand-Archive .\backups\labhub-<stamp>.sql.zip -DestinationPath .\backups\_restore -Force
-Get-Content .\backups\_restore\labhub-<stamp>.sql | docker compose exec -T db psql -U labhub labhub
+Get-Content .\backups\_restore\labhub-<stamp>.sql | docker compose --profile prod exec -T db psql -U labhub labhub
 Remove-Item .\backups\_restore -Recurse -Force
 # 3. (If needed) restore uploads into the volume.
 Expand-Archive .\backups\uploads-<stamp>.zip -DestinationPath .\backups\_uploads -Force
-docker compose cp .\backups\_uploads\. app:/data/uploads
+docker compose --profile prod cp .\backups\_uploads\. app:/data/uploads
 Remove-Item .\backups\_uploads -Recurse -Force
 # 4. Bring the app back.
 docker compose --profile prod up -d app
