@@ -32,4 +32,13 @@ describe('email outbox', () => {
     await drainOutbox(vi.fn().mockRejectedValue(new Error('smtp down')))
     expect((await prisma.emailOutbox.findFirstOrThrow()).status).toBe('FAILED')
   })
+
+  it('no SMTP configured: enqueue holds QUEUED and drainOutbox() no-ops without throwing or incrementing attempts', async () => {
+    await enqueueEmail('a@test.local', 'Hi', '<p>hi</p>')
+    const n = await drainOutbox() // no send fn → defaultSend() returns null (SMTP_HOST blank)
+    expect(n).toBe(0)
+    const row = await prisma.emailOutbox.findFirstOrThrow()
+    expect(row.status).toBe('QUEUED')
+    expect(row.attempts).toBe(0)
+  })
 })

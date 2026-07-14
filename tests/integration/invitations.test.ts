@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { prisma } from '@/lib/db'
 import { resetDb, makeUser } from '../factories'
-import { createInvitation, revokeInvitation, resendInvitation, getPendingInvitation } from '@/features/invitations/service'
+import { createInvitation, revokeInvitation, resendInvitation, getPendingInvitation, acceptInviteUrl } from '@/features/invitations/service'
 
 describe('invitations', () => {
   beforeEach(resetDb)
@@ -15,6 +15,13 @@ describe('invitations', () => {
     const mail = await prisma.emailOutbox.findFirstOrThrow()
     expect(mail.toEmail).toBe('fyp@ntu.test')
     expect(mail.html).toContain(`/accept-invite/${token}`)
+  })
+
+  it('acceptInviteUrl builds the APP_URL accept link for a token', async () => {
+    const admin = await makeUser({ role: 'admin' })
+    const { token } = await createInvitation('link@a.test', 'member', admin.id)
+    // env.APP_URL is the integration default (http://localhost:3000).
+    expect(acceptInviteUrl(token)).toBe(`http://localhost:3000/accept-invite/${token}`)
   })
 
   it('refuses duplicate pending invitation or existing user', async () => {

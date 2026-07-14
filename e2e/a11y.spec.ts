@@ -147,6 +147,13 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
   await expect(page.getByRole('heading', { name: 'Organisation settings' })).toBeVisible()
   await auditBothThemes(page, 'settings')
 
+  // /people carrying a pending invitation so the Copy-link control renders for axe.
+  const meP = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  await db.invitation.create({ data: { email: 'pending@lab.test', role: 'member', token: 'a11y-invite-tok', invitedById: meP.id, expiresAt: new Date(Date.now() + 86_400_000) } })
+  await page.goto('/people')
+  await expect(page.getByRole('heading', { name: 'People' })).toBeVisible()
+  await auditBothThemes(page, 'people')
+
   // SP4 surfaces — issues list/board, projects, issue detail, create modal.
   // Seed one issue so the list/board/detail render populated (createIssueViaUI
   // opens the composer, creates, and redirects to /issues/COL-1).

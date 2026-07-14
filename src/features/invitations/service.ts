@@ -9,6 +9,10 @@ import { env } from '@/lib/env'
 const EXPIRY_MS = 7 * 24 * 3_600_000
 const newToken = () => randomBytes(32).toString('base64url')
 
+export function acceptInviteUrl(token: string): string {
+  return `${env.APP_URL}/accept-invite/${token}`
+}
+
 // The partial unique index `invitation_pending_email_unique` (one PENDING row
 // per email) is the concurrency backstop for the pre-check TOCTOU. Detect its
 // violation the same way `isOverlapError` handles booking_no_overlap: a Prisma
@@ -23,7 +27,7 @@ function isDuplicateInviteError(e: unknown): boolean {
 
 async function sendInvite(email: string, token: string) {
   const org = await prisma.organization.findFirst()
-  const t = inviteEmail(org?.name ?? 'COLOSSUS', `${env.APP_URL}/accept-invite/${token}`)
+  const t = inviteEmail(org?.name ?? 'COLOSSUS', acceptInviteUrl(token))
   await enqueueEmail(email, t.subject, t.html)
 }
 
