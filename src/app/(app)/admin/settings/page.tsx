@@ -2,6 +2,8 @@ import { requireAdmin } from '@/lib/session'
 import { getOrg } from '@/lib/org'
 import { ThemeToggle } from '@/components/theme-toggle'
 import SettingsForm from './settings-form'
+import { APP_VERSION } from '@/lib/version'
+import { env } from '@/lib/env'
 
 export default async function SettingsPage() {
   await requireAdmin()
@@ -20,6 +22,18 @@ export default async function SettingsPage() {
           <ThemeToggle />
         </div>
       </section>
+
+      <section className="mt-8 max-w-md rounded-lg border border-border p-4">
+        <h2 className="text-sm font-semibold text-default">About</h2>
+        <p className="mt-3 text-sm text-muted">COLOSSUS v{APP_VERSION}</p>
+      </section>
+
+      {!env.SMTP_HOST && (
+        <section className="mt-8 max-w-md rounded-lg border border-border p-4">
+          <h2 className="text-sm font-semibold text-default">Email delivery</h2>
+          <p className="mt-3 text-sm text-muted">Email delivery: disabled — no SMTP configured. Invitations and notifications will not be sent by email; share invite links directly.</p>
+        </section>
+      )}
     </div>
   )
 }

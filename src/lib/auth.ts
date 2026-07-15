@@ -6,6 +6,7 @@ import { APIError } from 'better-auth/api'
 import { hash, verify } from '@node-rs/argon2'
 import { prisma } from './db'
 import { env } from './env'
+import { authRateLimitRules } from './auth-rate-limit'
 import { enqueueEmail } from './email/outbox'
 import { resetPasswordEmail } from './email/templates'
 import { LAB_UPDATES_CHANNEL_ID } from '@/features/bot'
@@ -79,11 +80,10 @@ export const auth = betterAuth({
   },
   rateLimit: {
     enabled: true,
-    customRules: {
-      '/sign-in/email': { window: 60, max: 10 },
-      '/sign-up/email': { window: 60, max: 10 },
-      '/request-password-reset': { window: 300, max: 5 },
-    },
+    // Per-IP limits; the sign-in/up bucket is deploy-tunable via AUTH_RATE_LIMIT_MAX
+    // because the LAN beta collapses every client onto one Docker-gateway IP (see
+    // ./auth-rate-limit + docs/ops/windows-server.md). Default 10 keeps dev/e2e behaviour.
+    customRules: authRateLimitRules(env.AUTH_RATE_LIMIT_MAX),
   },
   plugins: [admin({ adminRoles: ['admin'], defaultRole: 'guest' }), nextCookies()],
 })

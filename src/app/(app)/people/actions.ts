@@ -2,24 +2,24 @@
 import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/session'
-import { createInvitation, revokeInvitation, resendInvitation } from '@/features/invitations/service'
+import { createInvitation, revokeInvitation, resendInvitation, acceptInviteUrl } from '@/features/invitations/service'
 import { deactivateUser, reactivateUser, setUserRole } from '@/features/people/service'
 
 const roleSchema = z.enum(['admin', 'member', 'guest'])
 
-export async function inviteAction(email: string, role: string): Promise<{ ok: boolean; message?: string }> {
+export async function inviteAction(email: string, role: string): Promise<{ ok: boolean; message?: string; url?: string }> {
   const admin = await requireAdmin()
   const r = roleSchema.safeParse(role)
   const e = z.string().email().safeParse(email.trim())
   if (!r.success || !e.success) return { ok: false, message: 'Enter a valid email and role.' }
   try {
-    await createInvitation(e.data, r.data, admin.id)
+    const { token } = await createInvitation(e.data, r.data, admin.id)
+    revalidatePath('/people')
+    return { ok: true, url: acceptInviteUrl(token) }
   } catch (err) {
     if (err instanceof Error && err.message === 'already_exists') return { ok: false, message: 'That email already has an account or a pending invitation.' }
     throw err
   }
-  revalidatePath('/people')
-  return { ok: true }
 }
 
 export async function revokeInviteAction(id: string) {

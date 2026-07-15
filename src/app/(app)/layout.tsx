@@ -3,6 +3,7 @@ import { requireUser } from '@/lib/session'
 import { prisma } from '@/lib/db'
 import { totalUnread } from '@/features/chat/conversation-service'
 import { Sidebar } from '@/components/sidebar'
+import { APP_VERSION } from '@/lib/version'
 import Bell from '@/components/bell'
 import { ThemeToggle, ThemeSync } from '@/components/theme-toggle'
 import { AccentSync } from '@/components/accent-picker'
@@ -47,6 +48,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             user={{ id: user.id, name: user.name, image: pref?.image ?? null }}
             unread={chatUnread}
             role={user.role}
+            version={APP_VERSION}
           />
         </MobileNavDrawer>
         <div id="app-content" className="flex min-w-0 flex-1 flex-col">

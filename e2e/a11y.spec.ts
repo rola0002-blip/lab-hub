@@ -85,7 +85,7 @@ test('sign-in: no serious/critical axe violations, both themes', async ({ browse
 })
 
 test('app surfaces: no serious/critical axe violations, both themes', async ({ browser }) => {
-  test.setTimeout(240_000) // core surfaces + 5 SP4 surfaces, each audited in both themes
+  test.setTimeout(300_000) // core + SP4 + SP5 (files/bookings) + SP6 (settings/people), each audited in both themes
   const page = await newPage(browser)
   await runWizard(page)
   await signIn(page, ADMIN.email, ADMIN.password)
@@ -141,6 +141,18 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
   await page.goto('/bookings')
   await expect(page.getByRole('button', { name: 'Add to calendar' }).first()).toBeVisible()
   await auditBothThemes(page, 'bookings')
+
+  // /admin/settings — About block + (SMTP-unset) no-SMTP indicator + sidebar version.
+  await page.goto('/admin/settings')
+  await expect(page.getByRole('heading', { name: 'Organisation settings' })).toBeVisible()
+  await auditBothThemes(page, 'settings')
+
+  // /people carrying a pending invitation so the Copy-link control renders for axe.
+  const meP = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  await db.invitation.create({ data: { email: 'pending@lab.test', role: 'member', token: 'a11y-invite-tok', invitedById: meP.id, expiresAt: new Date(Date.now() + 86_400_000) } })
+  await page.goto('/people')
+  await expect(page.getByRole('heading', { name: 'People' })).toBeVisible()
+  await auditBothThemes(page, 'people')
 
   // SP4 surfaces — issues list/board, projects, issue detail, create modal.
   // Seed one issue so the list/board/detail render populated (createIssueViaUI

@@ -2,13 +2,24 @@
 import { useState, useTransition } from 'react'
 import { inviteAction, revokeInviteAction, resendInviteAction, setRoleAction, deactivateAction, reactivateAction } from './actions'
 import { LocalTime } from '@/components/local-time'
+import { toast } from '@/components/ui/toast'
 
 type U = { id: string; name: string; email: string; role: string; banned: boolean; title: string | null; timezone: string | null }
-type I = { id: string; email: string; role: string }
+type I = { id: string; email: string; role: string; url: string }
 
 export default function PeopleClient({ users, invitations, isAdmin, selfId }: { users: U[]; invitations: I[]; isAdmin: boolean; selfId: string }) {
   const [msg, setMsg] = useState<string | null>(null)
   const [pending, start] = useTransition()
+  const [lastUrl, setLastUrl] = useState<string | null>(null)
+  // navigator.clipboard is a SECURE-CONTEXT API — it is `undefined` on the plain-HTTP LAN
+  // beta (the same non-secure context that dorms the service worker, spec §5.2), so the write
+  // below throws there and we fall back to the toast. The accept URL is therefore ALSO rendered
+  // as a selectable readonly <input> next to every Copy button (onFocus selects all), so the
+  // admin can always select + copy it manually; clipboard copy is progressive enhancement.
+  async function copyLink(url: string) {
+    try { await navigator.clipboard.writeText(url); toast('Invite link copied') }
+    catch { toast('Copy failed — select and copy the link manually') }
+  }
 
   return (
     <div className="mt-6 space-y-8">
@@ -20,6 +31,7 @@ export default function PeopleClient({ users, invitations, isAdmin, selfId }: { 
             start(async () => {
               const r = await inviteAction(String(fd.get('email')), String(fd.get('role')))
               setMsg(r.ok ? 'Invitation sent.' : (r.message ?? 'Failed'))
+              setLastUrl(r.ok ? (r.url ?? null) : null)
             })
           }}>
           <label className="text-sm text-default">Email<br /><input name="email" type="email" required className="rounded-md border border-border bg-surface px-3 py-2" /></label>
@@ -30,19 +42,35 @@ export default function PeopleClient({ users, invitations, isAdmin, selfId }: { 
           </label>
           <button disabled={pending} className="rounded-md bg-accent px-4 py-2 font-medium text-accent-on transition-colors hover:bg-accent-hover disabled:opacity-50">Invite</button>
           {msg && <span className="text-sm text-muted">{msg}</span>}
+          {lastUrl && (
+            <span className="flex w-full items-center gap-2">
+              <input readOnly value={lastUrl} aria-label="Invite link"
+                onFocus={(e) => e.currentTarget.select()}
+                className="min-w-0 flex-1 rounded border border-border bg-surface px-2 py-1 text-xs text-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
+              <button type="button" onClick={() => copyLink(lastUrl)} aria-label="Copy invite link"
+                className="rounded whitespace-nowrap text-sm text-[var(--text-accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
+                Copy link
+              </button>
+            </span>
+          )}
         </form>
       )}
 
       {isAdmin && invitations.length > 0 && (
         <section>
           <h2 className="font-medium text-default">Pending invitations</h2>
+          <p className="mt-1 text-xs text-muted">Copy a link to share it directly (works without email). Resending an invite makes a new link and invalidates the old one.</p>
           <ul className="mt-2 divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface shadow-xs">
             {invitations.map((i) => (
               <li key={i.id} className="flex items-center justify-between p-3 text-sm text-default transition-colors hover:bg-hover">
-                <span>{i.email} · {i.role}</span>
-                <span className="flex gap-2">
-                  <button onClick={() => start(() => resendInviteAction(i.id))} className="text-[var(--text-accent)] hover:underline">Resend</button>
-                  <button onClick={() => start(() => revokeInviteAction(i.id))} className="text-[var(--text-danger)] hover:underline">Revoke</button>
+                <span className="min-w-0 truncate">{i.email} · {i.role}</span>
+                <span className="flex min-w-0 flex-1 items-center justify-end gap-2">
+                  <input readOnly value={i.url} aria-label="Invite link"
+                    onFocus={(e) => e.currentTarget.select()}
+                    className="min-w-0 flex-1 rounded border border-border bg-surface px-2 py-1 text-xs text-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
+                  <button type="button" onClick={() => copyLink(i.url)} aria-label="Copy invite link" className="rounded whitespace-nowrap text-[var(--text-accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">Copy link</button>
+                  <button onClick={() => start(() => resendInviteAction(i.id))} className="whitespace-nowrap text-[var(--text-accent)] hover:underline">Resend</button>
+                  <button onClick={() => start(() => revokeInviteAction(i.id))} className="whitespace-nowrap text-[var(--text-danger)] hover:underline">Revoke</button>
                 </span>
               </li>
             ))}

@@ -180,3 +180,21 @@ For the full freeze → export → verify → announce → rollback procedure, s
 - `npm run test:e2e` — Playwright journeys, incl. `e2e/a11y.spec.ts` (axe-core, both themes)
 - `npm run coverage` — ≥85% gate on src/lib + src/features (unit + integration)
 - `npm run contrast` — WCAG contrast gate over the token pairs + all 10 accents × both themes
+
+## Beta release & Windows-server deployment (SP6)
+
+COLOSSUS versions with SemVer from `package.json` (single source of truth), a
+Keep-a-Changelog `CHANGELOG.md`, and `npm run release -- patch|minor|major`, which bumps
+the version, rolls `[Unreleased]` into a dated section, commits, and creates an annotated
+tag — and **never pushes** (it prints the exact `git push origin main --follow-tags` for
+you to run after review). The running version shows in **Settings → About** and the sidebar
+footer, and at `GET /api/health` (`{ ok, version }`, unauthenticated) — the probe the update
+script uses to confirm a patch landed.
+
+The multi-week beta runs on an unused Windows laptop as an always-on LAN server over plain
+HTTP; see `docs/ops/windows-server.md` (provisioning) and `docs/ops/ops-card.md` (day-to-day
+operation). Operators use `scripts\windows\{init-env,backup,update,rollback}.ps1`; the Mac
+stays the development + release-cutting machine. Onboarding needs no SMTP — the People page
+offers copyable invite links, and Settings shows an email-delivery indicator when SMTP is
+unconfigured. PWA install + Web Push are dormant on plain HTTP and light up unchanged the
+day an HTTPS ingress is added.

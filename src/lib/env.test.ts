@@ -11,6 +11,7 @@ describe('parseEnv', () => {
     })
     expect(e.SMTP_PORT).toBe(587)
     expect(e.DISABLE_JOBS).toBe(false)
+    expect(e.AUTH_RATE_LIMIT_MAX).toBe(10) // safe default; LAN beta raises it (see auth-rate-limit)
     expect(e.BETTER_AUTH_SECRET).toHaveLength(32)
   })
   it('throws on missing DATABASE_URL', () => {

@@ -11,6 +11,12 @@ const schema = z.object({
   SMTP_FROM: z.string().default('COLOSSUS <no-reply@localhost>'),
   VAPID_PUBLIC_KEY: z.string().default(''),
   VAPID_PRIVATE_KEY: z.string().default(''),
+  // Max sign-in + sign-up attempts per 60 s in better-auth's per-IP rate limiter
+  // (src/lib/auth.ts). Deploy-tunable because behind the LAN beta's directly-published
+  // Docker port every client shares ONE gateway source IP, so this bucket is lab-wide, not
+  // per-user (see .env.example + docs/ops/windows-server.md). Default 10 preserves the
+  // dev/e2e behaviour; a LAN beta should raise it (e.g. 100).
+  AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
   DISABLE_JOBS: z
     .string()
     .optional()
