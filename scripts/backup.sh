@@ -29,15 +29,32 @@ for pat in "labhub-*.sql.gz" "uploads-*.tar.gz"; do
 done
 
 # --- Optional local-disk mirror ---
+# A mirror hiccup must NEVER fail the backup (the primary in ./backups already succeeded), but we
+# must NEVER claim a mirror success that did not happen (DR honesty — the backup you discover is
+# empty when you finally need it). Capture each copy result and report per-artifact; a failure
+# goes to stderr as a WARNING. Prune the mirror to keep-last-14 too, so the second disk can't fill
+# and then silently reject every future copy while still printing success.
 if [ -n "${BACKUP_MIRROR_PATH:-}" ]; then
   if [ -d "$BACKUP_MIRROR_PATH" ]; then
-    cp -f "backups/labhub-${STAMP}.sql.gz" "$BACKUP_MIRROR_PATH"/ 2>/dev/null || true
-    if [ -f "backups/uploads-${STAMP}.tar.gz" ]; then
-      cp -f "backups/uploads-${STAMP}.tar.gz" "$BACKUP_MIRROR_PATH"/ 2>/dev/null || true
+    if cp -f "backups/labhub-${STAMP}.sql.gz" "$BACKUP_MIRROR_PATH"/ 2>/dev/null; then
+      echo "Mirrored backups/labhub-${STAMP}.sql.gz to $BACKUP_MIRROR_PATH"
+    else
+      echo "WARNING: mirror copy of labhub-${STAMP}.sql.gz to $BACKUP_MIRROR_PATH FAILED" >&2
     fi
-    echo "Mirrored backup(s) to $BACKUP_MIRROR_PATH"
+    if [ -f "backups/uploads-${STAMP}.tar.gz" ]; then
+      if cp -f "backups/uploads-${STAMP}.tar.gz" "$BACKUP_MIRROR_PATH"/ 2>/dev/null; then
+        echo "Mirrored backups/uploads-${STAMP}.tar.gz to $BACKUP_MIRROR_PATH"
+      else
+        echo "WARNING: mirror copy of uploads-${STAMP}.tar.gz to $BACKUP_MIRROR_PATH FAILED" >&2
+      fi
+    fi
+    # Retention on the mirror (keep newest 14 of each class), mirroring the ./backups policy above.
+    for pat in "labhub-*.sql.gz" "uploads-*.tar.gz"; do
+      # shellcheck disable=SC2012
+      ls -1t "$BACKUP_MIRROR_PATH"/$pat 2>/dev/null | tail -n +15 | while IFS= read -r f; do rm -f "$f"; done || true
+    done
   else
-    echo "note: BACKUP_MIRROR_PATH '$BACKUP_MIRROR_PATH' not found — skipped mirror."
+    echo "WARNING: BACKUP_MIRROR_PATH '$BACKUP_MIRROR_PATH' not found — mirror skipped (no second copy made)." >&2
   fi
 fi
 
