@@ -35,6 +35,11 @@ RUN npx prisma generate && npm run build
 FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production
+# Next's standalone server binds to process.env.HOSTNAME || '0.0.0.0'. Docker auto-sets
+# HOSTNAME to the container id, which would pin the listener to the container's eth0 IP and
+# leave 127.0.0.1 unbound — so the loopback HEALTHCHECK below (and Task 4's service_healthy
+# gate) could never pass. Force the all-interfaces bind (canonical Next standalone Docker fix).
+ENV HOSTNAME=0.0.0.0
 # Next.js standalone output (server.js + traced modules), static assets, public.
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
@@ -47,6 +52,17 @@ COPY --from=build /app/prisma.config.ts ./prisma.config.ts
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build /app/node_modules/@prisma/client ./node_modules/@prisma/client
+# Internet-facing posture (SP7 §7.2): create the uploads dir, hand /app + /data/uploads to
+# the built-in unprivileged `node` user (uid 1000), then drop privileges. migrate deploy
+# (DB over the network) and the standalone server (writes only to /data/uploads) both run
+# fine as node. On first mount the fresh named `uploads` volume inherits this node:node
+# ownership, so the non-root process can write with no host chown (assumption 4: fresh start).
+RUN mkdir -p /data/uploads && chown -R node:node /app /data/uploads
+USER node
+# Liveness for `docker compose ps` health + the cloudflared service_healthy gate (§4.1).
+# Node 22 global fetch — no busybox wget/curl dependency.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 EXPOSE 3000
 # Apply pending migrations, then start the standalone server. The CLI is
 # invoked by its entry file directly: no node_modules/.bin lookup needed.
