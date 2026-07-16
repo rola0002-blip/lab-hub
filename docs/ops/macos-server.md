@@ -19,8 +19,15 @@ Zero Trust → Networks → Tunnels → **create a tunnel**. Copy the **connecto
 
 ## 4. Colima + docker CLI
     brew install colima docker docker-compose
+    # brew installs the compose plugin BINARY but does NOT register it with the Docker CLI, so
+    # `docker compose ...` (first deploy + all four ops scripts + both LaunchAgents) fails with
+    # "'compose' is not a docker command" until you wire it in. Symlink it into the CLI plugins
+    # dir (or add {"cliPluginsExtraDirs":["/opt/homebrew/lib/docker/cli-plugins"]} to
+    # ~/.docker/config.json):
+    mkdir -p ~/.docker/cli-plugins
+    ln -sf /opt/homebrew/bin/docker-compose ~/.docker/cli-plugins/docker-compose
     colima start --memory 6 --cpu 4      # record this exact command for the boot wrapper
-    docker version                        # verify the engine is reachable
+    docker compose version                # verify the engine AND the compose plugin are wired
 
 ## 5. Clone (read-only PAT)
 Create a fine-grained GitHub PAT scoped to THIS repo only, permission **Contents: Read** (the
