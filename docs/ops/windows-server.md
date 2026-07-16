@@ -1,5 +1,9 @@
 # COLOSSUS — Windows Laptop Server (LAN beta) Provisioning Runbook
 
+> **LEGACY (superseded).** The Windows-laptop LAN / plain-HTTP beta is retired. Current
+> deployment is the macOS/Colima Cloudflare-tunnel server — see `docs/ops/macos-server.md`.
+> This document is kept for the SP6 restore knowledge only.
+
 The beta runs COLOSSUS on an unused Windows laptop as an always-on server on the NTU
 LAN, reachable over **plain HTTP** at `http://<host>/`. Updates are pulled from a
 **private** GitHub repo and applied with `scripts\windows\update.ps1`. On plain HTTP,
