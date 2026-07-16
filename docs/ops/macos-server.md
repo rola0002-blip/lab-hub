@@ -76,6 +76,16 @@ paste the **`SETUP_TOKEN`** that `init-env.sh` printed in §6 into the wizard's 
 use **Copy link** to share accept URLs (SMTP is off).
 
 ## 9. Automation + host settings
+
+> **Precondition — FileVault must be OFF (or an unlock path must exist).** Reboot survival
+> depends on **automatic login** (loginwindow → LaunchAgents → Colima → stack). macOS **disables
+> automatic login whenever FileVault is ON** (the setting greys out — the boot volume can't be
+> unlocked before login). On a FileVault-encrypted Studio, after any reboot or power blip the
+> machine sits at the unlock screen: no auto-login, no LaunchAgents, no Colima, stack down until
+> someone physically unlocks it — and the 03:00 backup (which presumes the stack is up) stops too.
+> So either **turn FileVault OFF** (accepting the security trade-off of an unencrypted server
+> disk) or provide an unattended-unlock / LaunchDaemon alternative before relying on auto-login.
+
 Install the two LaunchAgents (substitute your clone path), enable automatic login, disable sleep:
 
     REPO="$HOME/colossus"   # your clone path
@@ -144,6 +154,7 @@ line when you deliberately upgrade the connector.
 - [ ] `backup.sh` writes `labhub-<stamp>.sql.gz` (+ `uploads-<stamp>.tar.gz` once uploads exist), honors keep-last-14, and mirrors to `BACKUP_MIRROR_PATH` when set.
 - [ ] **Non-ASCII backup round-trip.** Seed a chat message with an emoji and a member whose name uses CJK/accented characters (e.g. 陈 / José); run `backup.sh`; restore that dump per the ops card into a scratch stack; confirm the emoji and name come back **byte-identical** (not mojibake / `?`).
 - [ ] `rollback.sh <prev>` returns the app to the prior version with data intact.
+- [ ] **FileVault is disabled** (or a documented unattended-unlock path exists) — required for the automatic login that reboot survival depends on (§9); macOS greys out auto-login when FileVault is on.
 - [ ] The two `launchd` agents survive a **reboot**: after power-cycling, `colima` + the stack come up automatically and `https://colossus.<domain>` is reachable; the 03:00 backup agent fires and produces an artifact.
 - [ ] **Security headers:** `curl -sI https://colossus.<domain>/` shows HSTS, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, and the report-only CSP; a document fetch via `/uploads/...` shows `nosniff`.
 - [ ] **Lighthouse "Installable" PWA audit** (Chrome DevTools) passes over HTTPS — the previously deferred check, now runnable.
