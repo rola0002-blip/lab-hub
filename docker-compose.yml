@@ -6,7 +6,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-labhub}
       POSTGRES_DB: labhub
     ports:
-      - '5432:5432'
+      # Loopback-only (SP7 §4.1): reachable on-box (Mac dev, integration tests, Playwright)
+      # but NOT from the LAN or internet. Ingress is exclusively the outbound tunnel.
+      - '127.0.0.1:5432:5432'
     volumes:
       - db-data:/var/lib/postgresql/data
       - ./docker/initdb:/docker-entrypoint-initdb.d:ro
@@ -32,19 +34,35 @@ services:
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
-      SMTP_FROM: ${SMTP_FROM:-LabHub <no-reply@localhost>}
+      SMTP_FROM: ${SMTP_FROM:-COLOSSUS <no-reply@localhost>}
+      # SP7 §6.1 — the load-bearing passthrough. Without these, .env's VAPID/rate-limit/
+      # trusted-IP values never reach the container and it silently falls back to zod
+      # defaults ('' ⇒ push dead; 10; x-forwarded-for). The :- defaults keep Mac dev
+      # unaffected (blank VAPID ⇒ push dormant; 10 ⇒ current limiter; blank header ⇒ XFF).
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-10}
+      AUTH_TRUSTED_IP_HEADER: ${AUTH_TRUSTED_IP_HEADER:-}
     volumes:
       - uploads:/data/uploads
     ports:
-      - '${APP_PORT:-3000}:3000'
+      # Loopback-only (SP7 §4.1): keeps the on-box /api/health poll for update.sh/rollback.sh
+      # and the Mac dev workflow, while exposing nothing off-box. APP_PORT is the loopback
+      # health-poll port only (default 3000) — NOT the public ingress port (the tunnel serves that).
+      - '127.0.0.1:${APP_PORT:-3000}:3000'
     restart: unless-stopped
 
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    # Pinned to a released tag (SP7 §4.1) so the internet-facing connector is reproducible.
+    # Pin derived 2026-07-16 from `docker run --rm cloudflare/cloudflared:latest --version`.
+    image: cloudflare/cloudflared:2026.7.2
     profiles: ['tunnel']
     command: tunnel run --token ${TUNNEL_TOKEN}
     depends_on:
-      - app
+      # Wait for the app HEALTHCHECK (Dockerfile, §7.2) so the tunnel never advertises a
+      # not-yet-ready origin on a cold `up`.
+      app:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
