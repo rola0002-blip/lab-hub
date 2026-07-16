@@ -26,8 +26,16 @@ Zero Trust → Networks → Tunnels → **create a tunnel**. Copy the **connecto
     # ~/.docker/config.json):
     mkdir -p ~/.docker/cli-plugins
     ln -sf /opt/homebrew/bin/docker-compose ~/.docker/cli-plugins/docker-compose
-    colima start --memory 6 --cpu 4      # record this exact command for the boot wrapper
+    colima start --memory 12 --cpu 4     # sizes the VM; persisted, so the boot wrapper's bare `colima start` reuses it
     docker compose version                # verify the engine AND the compose plugin are wired
+
+> **VM size (F8).** The in-VM production build (`prisma generate && next build` of the whole app,
+> on top of BuildKit + Postgres) peaks at multiple GB of Node heap; 6 GiB is borderline and OOMs
+> surface as a cryptic first-deploy / "UPDATE FAILED". On a 512 GB Studio 12 GiB is cheap headroom.
+> The boot wrapper (`stack-up.sh`) runs **bare `colima start`** and relies on this **persisted**
+> config — it does NOT re-pass the flags — so if the VM is ever recreated at the 2 GiB default,
+> `stack-up.sh` warns (it reads `colima list --json` against a 12 GiB floor). Recreate a
+> too-small VM with `colima stop && colima start --memory 12 --cpu 4`.
 
 ## 5. Clone (read-only PAT)
 Create a fine-grained GitHub PAT scoped to THIS repo only, permission **Contents: Read** (the
