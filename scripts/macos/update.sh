@@ -25,8 +25,10 @@ if ! ./scripts/backup.sh; then
   exit 1
 fi
 
-# 4. Fetch tags; resolve the target (arg, else newest by version sort).
-git fetch --tags --force
+# 4. Fetch tags; resolve the target (arg, else newest by version sort). Best-effort fetch (F9
+#    symmetry): a network/PAT blip must not abort under `set -e` — the checkout below still fails
+#    loudly if the resolved tag is genuinely absent locally, and the backup (step 3) already ran.
+git fetch --tags --force || echo 'warning: tag fetch failed; using local tags.' >&2
 tag="${1:-}"
 [ -n "$tag" ] || tag="$(git tag --list 'v*' --sort=-v:refname | head -1)"
 [ -n "$tag" ] || { echo 'No v* tags found to deploy.' >&2; exit 1; }

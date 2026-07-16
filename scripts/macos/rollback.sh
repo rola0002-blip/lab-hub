@@ -18,7 +18,11 @@ fi
 
 expect="${tag#v}"
 echo "Rolling back to $tag (version $expect) ..."
-git fetch --tags --force
+# Best-effort fetch: rollback runs DURING an incident, and $tag is by construction a
+# previously-deployed tag already present locally. A fetch failure (GitHub/DNS/Cloudflare down,
+# expired read-only PAT, transient blip) must NOT abort recovery under `set -e` — `git checkout`
+# below is the authority and still fails loudly/safely if the tag is genuinely absent locally.
+git fetch --tags --force || echo 'warning: tag fetch failed; using local tags.' >&2
 git checkout "$tag"
 # Capture the compose outcome so a failed build/start falls through to the guidance block
 # instead of aborting under `set -e` (mirrors rollback.ps1's $LASTEXITCODE check).
