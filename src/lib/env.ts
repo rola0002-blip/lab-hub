@@ -12,11 +12,17 @@ const schema = z.object({
   VAPID_PUBLIC_KEY: z.string().default(''),
   VAPID_PRIVATE_KEY: z.string().default(''),
   // Max sign-in + sign-up attempts per 60 s in better-auth's per-IP rate limiter
-  // (src/lib/auth.ts). Deploy-tunable because behind the LAN beta's directly-published
-  // Docker port every client shares ONE gateway source IP, so this bucket is lab-wide, not
-  // per-user (see .env.example + docs/ops/windows-server.md). Default 10 preserves the
-  // dev/e2e behaviour; a LAN beta should raise it (e.g. 100).
+  // (src/lib/auth.ts). Behind the SP7 Cloudflare tunnel, AUTH_TRUSTED_IP_HEADER=cf-connecting-ip
+  // makes the limiter genuinely per-client, so the code default of 10 is correct in production
+  // (the SP6 LAN workaround value of 100 is retired). Default 10 also preserves dev/e2e
+  // behaviour; the password-reset bucket stays fixed at 5/300 s.
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  // Optional. When set (production value: 'cf-connecting-ip'), better-auth reads ONLY this
+  // header for the client IP (rate-limit key + session.ipAddress). CF-Connecting-IP is a single,
+  // Cloudflare-set, unspoofable value, so per-client limiting works behind the tunnel with no
+  // trustedProxies. Unset/blank ⇒ better-auth keeps its x-forwarded-for default (dev behaviour).
+  // Consumed via trustedIpConfig() in src/lib/auth.ts.
+  AUTH_TRUSTED_IP_HEADER: z.string().optional(),
   DISABLE_JOBS: z
     .string()
     .optional()

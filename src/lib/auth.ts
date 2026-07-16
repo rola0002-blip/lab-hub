@@ -7,6 +7,7 @@ import { hash, verify } from '@node-rs/argon2'
 import { prisma } from './db'
 import { env } from './env'
 import { authRateLimitRules } from './auth-rate-limit'
+import { trustedIpConfig } from './auth-ip'
 import { enqueueEmail } from './email/outbox'
 import { resetPasswordEmail } from './email/templates'
 import { LAB_UPDATES_CHANNEL_ID } from '@/features/bot'
@@ -78,11 +79,17 @@ export const auth = betterAuth({
       },
     },
   },
+  // Client-IP source for rate-limit keying + session.ipAddress. Behind the SP7 Cloudflare
+  // tunnel, AUTH_TRUSTED_IP_HEADER=cf-connecting-ip makes better-auth read the single,
+  // Cloudflare-set, unspoofable CF-Connecting-IP header — restoring genuine per-client
+  // sign-in/up limiting with no trustedProxies. Unset (dev) ⇒ undefined ⇒ x-forwarded-for
+  // default. See src/lib/auth-ip.ts.
+  advanced: trustedIpConfig(env.AUTH_TRUSTED_IP_HEADER),
   rateLimit: {
     enabled: true,
-    // Per-IP limits; the sign-in/up bucket is deploy-tunable via AUTH_RATE_LIMIT_MAX
-    // because the LAN beta collapses every client onto one Docker-gateway IP (see
-    // ./auth-rate-limit + docs/ops/windows-server.md). Default 10 keeps dev/e2e behaviour.
+    // Per-endpoint sign-in/up ceiling from AUTH_RATE_LIMIT_MAX (default 10). With per-client
+    // IP keying restored by `advanced` above, 10/60 s is a real per-client limit behind the
+    // tunnel; password reset stays fixed at 5/300 s (see ./auth-rate-limit).
     customRules: authRateLimitRules(env.AUTH_RATE_LIMIT_MAX),
   },
   plugins: [admin({ adminRoles: ['admin'], defaultRole: 'guest' }), nextCookies()],
