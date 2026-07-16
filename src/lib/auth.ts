@@ -10,6 +10,7 @@ import { authRateLimitRules } from './auth-rate-limit'
 import { trustedIpConfig } from './auth-ip'
 import { enqueueEmail } from './email/outbox'
 import { resetPasswordEmail } from './email/templates'
+import { setupTokenConfigured, inAuthorizedBootstrap } from './setup-token'
 import { LAB_UPDATES_CHANNEL_ID } from '@/features/bot'
 
 async function isSetupComplete() {
@@ -40,7 +41,19 @@ export const auth = betterAuth({
     user: {
       create: {
         before: async (user) => {
-          if (!(await isSetupComplete())) return // first-admin bootstrap via setup wizard
+          if (!(await isSetupComplete())) {
+            // First-admin bootstrap window. When a SETUP_TOKEN gate is configured, the ONLY
+            // legitimate sign-up here is the one completeSetup() authorizes AFTER validating
+            // the token (it wraps its internal admin sign-up in runAuthorizedBootstrap). Reject
+            // any other, direct/un-invited sign-up so an internet party cannot claim the
+            // first-admin slot over the public tunnel before provisioning finishes (SP7 F1).
+            // Gate unset ⇒ today's behaviour (dev/local + existing deployments unaffected).
+            if (setupTokenConfigured() && !inAuthorizedBootstrap())
+              throw new APIError('FORBIDDEN', {
+                message: 'Setup is protected. Complete provisioning through the setup wizard with the setup token.',
+              })
+            return
+          }
           const inv = await prisma.invitation.findFirst({
             where: { email: user.email.toLowerCase(), status: 'PENDING', expiresAt: { gt: new Date() } },
           })

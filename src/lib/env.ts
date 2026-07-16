@@ -23,6 +23,12 @@ const schema = z.object({
   // trustedProxies. Unset/blank ⇒ better-auth keeps its x-forwarded-for default (dev behaviour).
   // Consumed via trustedIpConfig() in src/lib/auth.ts.
   AUTH_TRUSTED_IP_HEADER: z.string().optional(),
+  // Optional one-time bootstrap gate (SP7 F1). When set, provisioning the first admin requires
+  // presenting this exact token (setup wizard field), so an un-invited internet party cannot
+  // seize workspace admin over the public tunnel before setup is complete. Unset/blank ⇒ gate
+  // disabled ⇒ current behaviour (Mac dev + existing deployments unaffected). Consumed at call
+  // time in src/lib/setup-token.ts (auth.ts before-hook + setup/actions.ts).
+  SETUP_TOKEN: z.string().optional(),
   DISABLE_JOBS: z
     .string()
     .optional()

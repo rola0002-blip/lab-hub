@@ -43,6 +43,10 @@ services:
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-10}
       AUTH_TRUSTED_IP_HEADER: ${AUTH_TRUSTED_IP_HEADER:-}
+      # SP7 F1 — optional one-time bootstrap gate. Set (init-env.sh mints it) ⇒ the setup wizard
+      # requires the token before creating the first admin, so no un-invited party can seize admin
+      # over the public tunnel during provisioning. Blank ⇒ gate off (Mac dev unaffected).
+      SETUP_TOKEN: ${SETUP_TOKEN:-}
     volumes:
       - uploads:/data/uploads
     ports:

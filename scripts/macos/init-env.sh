@@ -24,6 +24,7 @@ fi
 # --- Secrets (hex: shell-safe, no +,/,=) ---
 SECRET=$(openssl rand -hex 32)   # 64 hex chars >= 32 (BETTER_AUTH_SECRET floor)
 PGPASS=$(openssl rand -hex 24)   # 48 hex chars
+SETUP_TOKEN=$(openssl rand -hex 32)  # F1 one-time bootstrap gate — entered once in the wizard
 
 # --- APP_URL (https, exact scheme+host; trailing slash trimmed so Origin/baseURL match) ---
 read -r -p 'APP_URL (public https origin, e.g. https://colossus.example.com): ' APP_URL
@@ -71,6 +72,9 @@ UPLOADS_DIR=/data/uploads
 # per-client sign-in/up limiter works at the code default of 10 (see src/lib/auth-ip.ts).
 AUTH_TRUSTED_IP_HEADER=cf-connecting-ip
 AUTH_RATE_LIMIT_MAX=10
+# One-time bootstrap gate (F1): the setup wizard requires this token before creating the first
+# admin, so no un-invited party can seize admin over the public tunnel during provisioning.
+SETUP_TOKEN=${SETUP_TOKEN}
 # SMTP intentionally blank — invitations use copyable links.
 SMTP_HOST=
 SMTP_PORT=587
@@ -83,4 +87,11 @@ TUNNEL_TOKEN=${TUNNEL_TOKEN}
 DISABLE_JOBS=
 EOF
 echo "Wrote $ENV_PATH"
+echo ''
+echo '=== SETUP TOKEN (enter this once in the setup wizard) ==='
+echo "  SETUP_TOKEN=${SETUP_TOKEN}"
+echo '  Keep it private. It stops an un-invited party claiming admin over the public tunnel'
+echo '  before you finish setup. It is only needed for the one-time wizard.'
+echo '========================================================'
+echo ''
 echo "Next: docker compose --profile prod --profile tunnel up -d --build   (then open $APP_URL)"

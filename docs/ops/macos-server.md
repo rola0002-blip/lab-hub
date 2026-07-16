@@ -30,7 +30,16 @@ host only ever pulls tags), then `git clone https://<PAT>@github.com/<owner>/<re
 Run `./scripts/macos/init-env.sh`. It mints `BETTER_AUTH_SECRET` + `POSTGRES_PASSWORD` and a
 VAPID keypair (**fatal if minting fails** — push is a real deliverable under HTTPS), prompts for
 the **https** `APP_URL` and the `TUNNEL_TOKEN`, and sets `AUTH_TRUSTED_IP_HEADER=cf-connecting-ip`,
-`AUTH_RATE_LIMIT_MAX=10`, `APP_PORT=3000`.
+`AUTH_RATE_LIMIT_MAX=10`, `APP_PORT=3000`. It also mints a one-time **`SETUP_TOKEN`** and
+**prints it at the end** — copy it now; you enter it once in the setup wizard (§8).
+
+> **Why `SETUP_TOKEN`.** The tunnel goes live together with the app (§7), and the public hostname
+> is discoverable via Certificate-Transparency log scanners within minutes of §3 — potentially
+> before you finish setup. Without the gate, anyone who reaches `https://colossus.<domain>` first
+> could POST the sign-up / setup endpoints and claim the first admin. With `SETUP_TOKEN` set, the
+> wizard (and the bootstrap sign-up path) reject any provisioning attempt that does not present
+> the exact token, so only you can create the first admin. It is a one-time provisioning control;
+> after setup completes it is unused.
 
 > **APP_URL is exact.** It must equal `https://colossus.<domain>` — scheme + host, https, no
 > trailing slash, no path, no port. Every emitted URL, better-auth `baseURL`, Secure-cookie
@@ -42,8 +51,10 @@ The container runs `prisma migrate deploy` against the fresh DB, then boots; `cl
 for the app HEALTHCHECK before advertising the origin.
 
 ## 8. Setup wizard → invite members
-Open `https://colossus.<domain>`, complete the **setup wizard** (creates the org + first admin),
-then on **People** create invites and use **Copy link** to share accept URLs (SMTP is off).
+Open `https://colossus.<domain>`, complete the **setup wizard** (creates the org + first admin) —
+paste the **`SETUP_TOKEN`** that `init-env.sh` printed in §6 into the wizard's *Setup token* field
+(the wizard rejects setup without it while the gate is set) — then on **People** create invites and
+use **Copy link** to share accept URLs (SMTP is off).
 
 ## 9. Automation + host settings
 Install the two LaunchAgents (substitute your clone path), enable automatic login, disable sleep:
@@ -105,8 +116,9 @@ line when you deliberately upgrade the connector.
 
 ## 13. Manual verification checklist
 
-- [ ] `init-env.sh` writes a valid `.env` (secrets minted; VAPID minted **non-blank**; `APP_URL=https://colossus.<domain>`; `TUNNEL_TOKEN` set; `AUTH_TRUSTED_IP_HEADER=cf-connecting-ip`; `AUTH_RATE_LIMIT_MAX=10`; `APP_PORT=3000`).
+- [ ] `init-env.sh` writes a valid `.env` (secrets minted; VAPID minted **non-blank**; `SETUP_TOKEN` minted **and printed**; `APP_URL=https://colossus.<domain>`; `TUNNEL_TOKEN` set; `AUTH_TRUSTED_IP_HEADER=cf-connecting-ip`; `AUTH_RATE_LIMIT_MAX=10`; `APP_PORT=3000`).
 - [ ] First `docker compose --profile prod --profile tunnel up -d --build` reaches the **setup wizard** at `https://colossus.<domain>` (tunnel healthy; TLS valid).
+- [ ] **Setup-token gate:** the wizard shows a *Setup token* field and **rejects** a wrong/blank token; setup succeeds only with the `SETUP_TOKEN` printed by `init-env.sh`.
 - [ ] **Server Action** end-to-end over the tunnel (e.g. create an invite on People) succeeds — no Origin/Host error. If it errors, add `experimental: { serverActions: { allowedOrigins: ['colossus.<domain>'] } }` to `next.config.ts` and re-verify (§4.4).
 - [ ] `update.sh` on the current (no-op) tag: backs up, rebuilds, health-polls to the matching version, reports success.
 - [ ] `update.sh` on a deliberately-bad tag: prints the exact `rollback.sh <prev>` + `logs` guidance and exits non-zero.
