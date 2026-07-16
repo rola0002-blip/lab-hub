@@ -8,7 +8,9 @@ services:
     ports:
       # Loopback-only (SP7 §4.1): reachable on-box (Mac dev, integration tests, Playwright)
       # but NOT from the LAN or internet. Ingress is exclusively the outbound tunnel.
-      - '127.0.0.1:5432:5432'
+      # DB_PORT (default 5432) lets a shared host move the host-side publish off a busy 5432
+      # (F3) — a fresh clone is a new compose project, so its ports must be free on the Studio.
+      - '127.0.0.1:${DB_PORT:-5432}:5432'
     volumes:
       - db-data:/var/lib/postgresql/data
       - ./docker/initdb:/docker-entrypoint-initdb.d:ro

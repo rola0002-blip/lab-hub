@@ -53,6 +53,18 @@ the **https** `APP_URL` and the `TUNNEL_TOKEN`, and sets `AUTH_TRUSTED_IP_HEADER
 > enablement, and Origin/CSRF check derives from this string; a mismatch **403s** sign-in POSTs.
 
 ## 7. First deploy
+**Port-collision preflight (shared Studio).** A fresh clone at a new path is a *new* compose
+project, so its `db` (host `${DB_PORT:-5432}`) and app (`${APP_PORT:-3000}`) host-publish ports
+must be free — another project already holding 5432 makes `up -d` fail with `bind: address
+already in use`. Both must print nothing:
+
+    lsof -nP -iTCP:5432 -sTCP:LISTEN
+    lsof -nP -iTCP:3000 -sTCP:LISTEN
+
+If either is occupied, set a free `DB_PORT` and/or `APP_PORT` in `.env` before deploying (the app
+still reaches Postgres over the compose network at `db:5432`; `APP_PORT` is only the on-box
+health-poll port). Then:
+
     docker compose --profile prod --profile tunnel up -d --build
 The container runs `prisma migrate deploy` against the fresh DB, then boots; `cloudflared` waits
 for the app HEALTHCHECK before advertising the origin.
