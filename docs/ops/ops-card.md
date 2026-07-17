@@ -1,4 +1,4 @@
-# COLOSSUS Operator Card (macOS / Colima — tunnel)
+# LabHub Operator Card (macOS / Colima — tunnel)
 
 Run from the repo root. All commands are bash. The stack is served over HTTPS via the
 Cloudflare tunnel; every server compose call uses **`--profile prod --profile tunnel`**.
@@ -18,7 +18,7 @@ Cloudflare tunnel; every server compose call uses **`--profile prod --profile tu
 > report FAILED on a healthy stack (the health-gate compares the tag to `/api/health`'s version).
 
 > **`APP_URL` is exact + loopback-only binds.** `APP_URL` must equal the public Cloudflare
-> hostname exactly (`https://colossus.<domain>`, no port/slash). `APP_PORT=3000` is the on-box
+> hostname exactly (`https://labhub.<domain>`, no port/slash). `APP_PORT=3000` is the on-box
 > health-poll port only; the host publishes nothing off-box (ingress is the outbound tunnel).
 
 ## Restore (catastrophe only — data corruption, NOT a version rollback)
@@ -32,8 +32,8 @@ gunzip -c backups/labhub-<stamp>.sql.gz | docker compose exec -T db psql -U labh
 tar -xzf backups/uploads-<stamp>.tar.gz -C /tmp && docker compose cp /tmp/uploads-<stamp>/. app:/data/uploads
 # docker compose cp writes into the volume as uid 0; fix ownership once so the non-root app
 # (uid 1000 node) can serve the files. Adapt the volume name — it is <compose-project>_uploads
-# (e.g. colossus_uploads when cloned to $HOME/colossus); docker volume ls | grep uploads:
-docker run --rm -u 0 -v colossus_uploads:/data/uploads busybox chown -R 1000:1000 /data/uploads
+# (e.g. labhub_uploads when cloned to $HOME/labhub); docker volume ls | grep uploads:
+docker run --rm -u 0 -v labhub_uploads:/data/uploads busybox chown -R 1000:1000 /data/uploads
 docker compose --profile prod --profile tunnel up -d app
 ```
 

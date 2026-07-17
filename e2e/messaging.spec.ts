@@ -191,7 +191,7 @@ test('4: guest isolation, then live add', async ({ browser }) => {
 
   // Search for channel content the guest cannot access → no hits (membership-scoped)
   await pageG.goto('/chat')
-  // The visible placeholder is now workspace-branded ("Search COLOSSUS"); the
+  // The visible placeholder is now workspace-branded ("Search LabHub"); the
   // aria-label stays the stable "Search messages", so target by that.
   const search = pageG.getByLabel('Search messages')
   await search.click()

@@ -38,7 +38,7 @@ async function openPalette(page: Page) {
   // Gate on the header pill so the client shell has rendered, then press ⌘K /
   // Ctrl-K (useGlobalHotkey accepts either modifier). Retry the one-shot keypress
   // until the dialog appears — it can fire a frame before the effect subscribes.
-  await expect(page.getByRole('button', { name: /Search COLOSSUS/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Search LabHub/ })).toBeVisible()
   await expect(async () => {
     await page.keyboard.press('ControlOrMeta+k')
     await expect(page.getByRole('dialog', { name: 'Command palette' })).toBeVisible({ timeout: 1000 })
@@ -56,7 +56,7 @@ test('⌘K palette: type a channel name and Enter navigates to that channel', as
   await expect(page).toHaveURL(/\/dashboard$/)
 
   await openPalette(page)
-  const input = page.getByRole('combobox', { name: 'Search COLOSSUS' })
+  const input = page.getByRole('combobox', { name: 'Search LabHub' })
   await input.fill('photon')
   await expect(page.getByRole('option', { name: /photonics/ })).toBeVisible()
 
@@ -75,7 +75,7 @@ test('⌘K palette: a guest is never offered Admin/People destinations', async (
   await acceptInvite(pageG, token, GUEST.name, PASS) // lands on /dashboard, signed in
 
   await openPalette(pageG)
-  const input = pageG.getByRole('combobox', { name: 'Search COLOSSUS' })
+  const input = pageG.getByRole('combobox', { name: 'Search LabHub' })
 
   // Positive control: an always-on page IS reachable for a guest.
   await input.fill('dash')

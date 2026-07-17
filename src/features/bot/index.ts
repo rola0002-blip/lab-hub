@@ -4,7 +4,7 @@ import { getOrCreateDm } from '@/features/chat/conversation-service'
 import { sendMessage } from '@/features/chat/message-service'
 import { neutralizeMentions } from '@/features/chat/mentions'
 
-// COLOSSUS Bot — the single isSystem=true account. The fixed ids live in the pure
+// LabHub Bot — the single isSystem=true account. The fixed ids live in the pure
 // ./ids module (no `server-only`) so the seed migration, runtime code, and the
 // Playwright e2e runner agree; re-export them here for existing `@/features/bot`
 // importers.

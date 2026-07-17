@@ -84,14 +84,14 @@ tokens and conventions on top of the design system:
   `KeyboardSensor` makes every move keyboard-only (grip → Space to lift, arrows to
   move, Space to drop), and a per-card status Menu is the non-DnD fallback.
 
-## Calendar sync & the COLOSSUS Bot
+## Calendar sync & the LabHub Bot
 
 Read-only calendar integration: subscribe to a private per-user iCalendar feed of
 your bookings (`/api/calendar/<token>.ics`, unauthenticated by opaque token,
 regenerable from `/profile`), download a single booking as `.ics`
 (`/api/bookings/<id>/ics`, session-gated to owner / equipment manager / admin), or
 add one to Google or Outlook with a quick-add link. No OAuth, no two-way sync, no
-`.ics` email attachments. The COLOSSUS Bot — the sole `isSystem` account, which
+`.ics` email attachments. The LabHub Bot — the sole `isSystem` account, which
 cannot sign in — posts lab activity (new projects and issues, and completions) to
 the seeded `#lab-updates` channel that every member auto-joins, and DMs you about
 your own bookings and due-soon issues. Bot DMs for events you are already notified
@@ -107,7 +107,7 @@ guests — can browse, search, and download; members and admins upload, rename, 
 and create folders; a file is deleted by its uploader or an admin, and a folder by
 its creator or an admin (only when empty). PDFs and images open inline in a new tab,
 office files download (with the original, possibly non-ASCII, filename preserved).
-Each new upload is announced by the COLOSSUS Bot in `#lab-updates`. Storage reuses
+Each new upload is announced by the LabHub Bot in `#lab-updates`. Storage reuses
 the existing uploads volume and backup — no new services.
 
 ## Install (any org)
@@ -183,7 +183,7 @@ For the full freeze → export → verify → announce → rollback procedure, s
 
 ## Beta release & Windows-server deployment (SP6)
 
-COLOSSUS versions with SemVer from `package.json` (single source of truth), a
+LabHub versions with SemVer from `package.json` (single source of truth), a
 Keep-a-Changelog `CHANGELOG.md`, and `npm run release -- patch|minor|major`, which bumps
 the version, rolls `[Unreleased]` into a dated section, commits, and creates an annotated
 tag — and **never pushes** (it prints the exact `git push origin main --follow-tags` for

@@ -36,7 +36,7 @@ services:
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
-      SMTP_FROM: ${SMTP_FROM:-COLOSSUS <no-reply@localhost>}
+      SMTP_FROM: ${SMTP_FROM:-LabHub <no-reply@localhost>}
       # SP7 §6.1 — the load-bearing passthrough. Without these, .env's VAPID/rate-limit/
       # trusted-IP values never reach the container and it silently falls back to zod
       # defaults ('' ⇒ push dead; 10; x-forwarded-for). The :- defaults keep Mac dev

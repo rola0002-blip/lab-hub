@@ -41,7 +41,7 @@ test('version surface: sidebar footer + Settings About show the package version'
   // Settings About block + (SMTP unset in e2e) the no-SMTP indicator lands here later (T4).
   await page.goto('/admin/settings')
   await expect(page.getByRole('heading', { name: 'About' })).toBeVisible()
-  await expect(page.getByText(`COLOSSUS v${pkg.version}`)).toBeVisible()
+  await expect(page.getByText(`LabHub v${pkg.version}`)).toBeVisible()
 })
 
 test('an admin creates an invite, copies the accept link, and it reaches the accept flow', async ({ browser }) => {

@@ -16,7 +16,7 @@ export type IcsEvent = {
 export type IcsCalendar = {
   calName: string    // X-WR-CALNAME
   timezone: string   // X-WR-TIMEZONE (display hint)
-  prodId?: string    // default '-//COLOSSUS//LabHub//EN'
+  prodId?: string    // default '-//LabHub//LabHub//EN'
   events: IcsEvent[]
 }
 
@@ -54,7 +54,7 @@ export function buildIcs(cal: IcsCalendar, now: Date = new Date()): string {
   const lines: string[] = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    `PRODID:${cal.prodId ?? '-//COLOSSUS//LabHub//EN'}`,
+    `PRODID:${cal.prodId ?? '-//LabHub//LabHub//EN'}`,
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     `X-WR-CALNAME:${escapeText(cal.calName)}`,

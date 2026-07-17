@@ -71,7 +71,7 @@ $built = ($LASTEXITCODE -eq 0)
 # 5. Health-gate.
 $ok = $false
 if ($built) { $ok = Wait-Health $expectVersion $TimeoutSeconds }
-if ($ok) { Write-Host "SUCCESS — COLOSSUS $Tag is live (health reports $expectVersion)." -ForegroundColor Green; exit 0 }
+if ($ok) { Write-Host "SUCCESS — LabHub $Tag is live (health reports $expectVersion)." -ForegroundColor Green; exit 0 }
 
 # 6. Failure → precise recovery guidance.
 Write-Host ''

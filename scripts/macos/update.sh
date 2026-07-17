@@ -57,7 +57,7 @@ if [ "$built" = 1 ]; then
   while [ "$(date +%s)" -lt "$deadline" ]; do
     ver="$(curl -fsS "$url" 2>/dev/null | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')" || ver=""
     if [ "$ver" = "$expect" ]; then
-      echo "SUCCESS — COLOSSUS $tag is live (health reports $expect)."
+      echo "SUCCESS — LabHub $tag is live (health reports $expect)."
       exit 0
     fi
     if [ -n "$ver" ]; then echo "  serving $ver, waiting for $expect ..."; else echo "  health endpoint not up yet ..."; fi

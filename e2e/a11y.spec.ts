@@ -107,7 +107,7 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
 
   // A modal open — the ⌘K command palette (role=dialog). Retry the one-shot
   // keypress until the dialog appears (it can fire a frame before the listener).
-  await expect(page.getByRole('button', { name: /Search COLOSSUS/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Search LabHub/ })).toBeVisible()
   await expect(async () => {
     await page.keyboard.press('ControlOrMeta+k')
     await expect(page.getByRole('dialog', { name: 'Command palette' })).toBeVisible({ timeout: 1000 })

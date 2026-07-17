@@ -3,18 +3,13 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.colossus.backup</string>
+  <string>com.labhub.stack</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/ABSOLUTE/PATH/TO/lab-hub/scripts/backup.sh</string>
+    <string>/ABSOLUTE/PATH/TO/lab-hub/scripts/macos/stack-up.sh</string>
   </array>
-  <key>StartCalendarInterval</key>
-  <dict>
-    <key>Hour</key>
-    <integer>3</integer>
-    <key>Minute</key>
-    <integer>0</integer>
-  </dict>
+  <key>RunAtLoad</key>
+  <true/>
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
@@ -23,8 +18,8 @@
   <key>WorkingDirectory</key>
   <string>/ABSOLUTE/PATH/TO/lab-hub</string>
   <key>StandardOutPath</key>
-  <string>/tmp/colossus-backup.log</string>
+  <string>/tmp/labhub-stack.log</string>
   <key>StandardErrorPath</key>
-  <string>/tmp/colossus-backup.err</string>
+  <string>/tmp/labhub-stack.err</string>
 </dict>
 </plist>

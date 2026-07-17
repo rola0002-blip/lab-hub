@@ -63,7 +63,7 @@ function KindIcon({ cmd }: { cmd: Cmd }) {
   return null // dm rows render an Avatar instead
 }
 
-export function CommandPalette({ orgName = 'COLOSSUS', role }: { orgName?: string; role: Role }) {
+export function CommandPalette({ orgName = 'LabHub', role }: { orgName?: string; role: Role }) {
   const router = useRouter()
   const { conversations, users, selfId } = useChat()
   const [open, setOpen] = useState(false)

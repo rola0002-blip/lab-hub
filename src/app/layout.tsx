@@ -15,13 +15,13 @@ const lato = Lato({
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "COLOSSUS",
+  title: "LabHub",
   description: "Self-hosted lab platform",
-  applicationName: "COLOSSUS",
+  applicationName: "LabHub",
   // iOS Web Push only registers from a home-screen PWA launched standalone;
   // appleWebApp emits apple-mobile-web-app-capable + title, and the manifest
   // (src/app/manifest.ts) supplies display:standalone.
-  appleWebApp: { capable: true, statusBarStyle: "default", title: "COLOSSUS" },
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "LabHub" },
   icons: { apple: "/apple-touch-icon.png" },
 };
 

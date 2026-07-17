@@ -1,10 +1,12 @@
-# COLOSSUS — Windows Laptop Server (LAN beta) Provisioning Runbook
+# LabHub — Windows Laptop Server (LAN beta) Provisioning Runbook
 
 > **LEGACY (superseded).** The Windows-laptop LAN / plain-HTTP beta is retired. Current
 > deployment is the macOS/Colima Cloudflare-tunnel server — see `docs/ops/macos-server.md`.
-> This document is kept for the SP6 restore knowledge only.
+> This document is kept for the SP6 restore knowledge only — the paths and hostnames below
+> (`C:\colossus`, `colossus-lab`) are left exactly as the Windows laptop was actually built,
+> so a recovery matches what is on the disk.
 
-The beta runs COLOSSUS on an unused Windows laptop as an always-on server on the NTU
+The beta runs LabHub on an unused Windows laptop as an always-on server on the NTU
 LAN, reachable over **plain HTTP** at `http://<host>/`. Updates are pulled from a
 **private** GitHub repo and applied with `scripts\windows\update.ps1`. On plain HTTP,
 PWA install + Web Push stay **dormant** (no errors, no dead affordances); the in-app
@@ -110,7 +112,7 @@ The `tunnel` compose profile (`cloudflared`) fronts the app over HTTPS. Switchin
 the future path that un-dorms PWA install + Web Push (no code change). It is **not** part of
 the beta.
 
-## 12. Keeping COLOSSUS updated (day-2)
+## 12. Keeping LabHub updated (day-2)
 Deploy a new release with `scripts\windows\update.ps1` (the operator card at
 `docs/ops/ops-card.md` has the exact one-liners). It backs up first, checks out the target
 tag (newest `v*` by default, or `-Tag vX.Y.Z`), rebuilds the prod stack — the container

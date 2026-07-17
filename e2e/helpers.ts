@@ -32,7 +32,7 @@ export const ADMIN = { email: 'pi@lab.test', password: 'Str0ngPass!123', name: '
 
 export async function runWizard(page: Page) {
   await page.goto('/setup')
-  await page.fill('input[name=orgName]', 'COLOSSUS')
+  await page.fill('input[name=orgName]', 'LabHub')
   await page.fill('input[name=adminName]', ADMIN.name)
   await page.fill('input[name=adminEmail]', ADMIN.email)
   await page.fill('input[name=adminPassword]', ADMIN.password)
@@ -41,7 +41,7 @@ export async function runWizard(page: Page) {
 }
 
 // Sign out via the sidebar workspace-header menu (the standalone header button
-// was replaced by the grouped sidebar in the COLOSSUS redesign): open the menu,
+// was replaced by the grouped sidebar in the LabHub redesign): open the menu,
 // then click the "Sign out" item.
 export async function signOut(page: Page) {
   await page.getByRole('button', { name: 'Workspace menu' }).click()
@@ -135,7 +135,7 @@ export async function seedSystem() {
   await db.user.upsert({
     where: { id: COLOSSUS_BOT_ID },
     update: {},
-    create: { id: COLOSSUS_BOT_ID, name: 'COLOSSUS Bot', email: 'bot@colossus.local', emailVerified: true, role: 'member', isSystem: true },
+    create: { id: COLOSSUS_BOT_ID, name: 'LabHub Bot', email: 'bot@colossus.local', emailVerified: true, role: 'member', isSystem: true },
   })
   await db.conversation.upsert({
     where: { id: LAB_UPDATES_CHANNEL_ID },

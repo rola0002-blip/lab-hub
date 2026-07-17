@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# stack-up.sh — boot wrapper for the com.colossus.stack LaunchAgent (SP7 §8.5). Sets the PATH
+# stack-up.sh — boot wrapper for the com.labhub.stack LaunchAgent (SP7 §8.5). Sets the PATH
 # (Apple-Silicon Homebrew is not on launchd's default PATH), starts Colima idempotently
 # (reusing the profile provisioned at setup), waits for the Docker engine, then brings the
 # full prod+tunnel stack up. A wrapper (not an inline plist one-liner) keeps the
