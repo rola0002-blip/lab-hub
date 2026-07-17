@@ -2,7 +2,9 @@
 
 > **LEGACY (superseded).** The Windows-laptop LAN / plain-HTTP beta is retired. Current
 > deployment is the macOS/Colima Cloudflare-tunnel server — see `docs/ops/macos-server.md`.
-> This document is kept for the SP6 restore knowledge only.
+> This document is kept for the SP6 restore knowledge only — the paths and hostnames below
+> (`C:\colossus`, `colossus-lab`) are left exactly as the Windows laptop was actually built,
+> so a recovery matches what is on the disk.
 
 The beta runs LabHub on an unused Windows laptop as an always-on server on the NTU
 LAN, reachable over **plain HTTP** at `http://<host>/`. Updates are pulled from a
@@ -19,8 +21,8 @@ change.
 Create a **fine-grained** GitHub Personal Access Token scoped to **this repository only**,
 permission **Contents: Read** (read-only is enough — the laptop only ever pulls tags):
 ```powershell
-git clone https://<PAT>@github.com/<owner>/<repo>.git C:\labhub
-cd C:\labhub
+git clone https://<PAT>@github.com/<owner>/<repo>.git C:\colossus
+cd C:\colossus
 ```
 (Or use Git Credential Manager and clone over HTTPS.)
 
@@ -28,15 +30,15 @@ cd C:\labhub
 ```powershell
 .\scripts\windows\init-env.ps1                 # prompts for APP_URL; mints secrets; APP_PORT defaults to 80
 ```
-Set `APP_URL` to the LAN address members will use (e.g. `http://labhub-lab/`). SMTP is
+Set `APP_URL` to the LAN address members will use (e.g. `http://colossus-lab/`). SMTP is
 left blank on purpose (see step 8 — invitations use copyable links).
 
 > **`APP_URL` must agree with `APP_PORT`.** `init-env.ps1` defaults `APP_PORT=80`, so
-> `APP_URL` must have **no port suffix** — `http://labhub-lab/`, never
-> `http://labhub-lab:3000/`. Every ICS feed, invitation accept-URL, and email link is
+> `APP_URL` must have **no port suffix** — `http://colossus-lab/`, never
+> `http://colossus-lab:3000/`. Every ICS feed, invitation accept-URL, and email link is
 > built from `APP_URL`; a port that disagrees with the mapped `APP_PORT` sends members to
 > a dead address. If you deliberately choose a non-80 `APP_PORT`, put that **same** port
-> in `APP_URL` (e.g. `APP_PORT=8080` → `APP_URL=http://labhub-lab:8080/`).
+> in `APP_URL` (e.g. `APP_PORT=8080` → `APP_URL=http://colossus-lab:8080/`).
 
 > **`AUTH_RATE_LIMIT_MAX` — the sign-in/up throttle is lab-wide here.** better-auth rate
 > limits per client IP, but the directly-published Docker port (§4) SNATs **every** LAN
@@ -91,8 +93,8 @@ Resending an invite mints a new link and invalidates the old one.
 ## 9. Nightly backups (Task Scheduler, 03:00)
 Create a Task Scheduler job:
 - **Trigger:** daily at **03:00**.
-- **Action:** `powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\labhub\scripts\windows\backup.ps1`
-- **Start in:** `C:\labhub`
+- **Action:** `powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\colossus\scripts\windows\backup.ps1`
+- **Start in:** `C:\colossus`
 - **Settings:** "Run whether user is logged on or not", "Run with highest privileges".
 Backups land in `.\backups\` (gitignored), keep the last **14** of each class, and — if
 `ONEDRIVE_BACKUP_PATH` is set (env or `-OneDriveBackupPath`) — mirror to a OneDrive folder.
