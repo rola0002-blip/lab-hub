@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The workspace brand and display name are now LabHub throughout: the app UI and setup wizard, the PWA manifest and page metadata, the outgoing email templates and `SMTP_FROM` defaults, the ICS calendar feeds, and the bot ("COLOSSUS Bot" -> "LabHub Bot", applied by an additive, guarded, re-runnable migration).
+- Internal identifiers are deliberately unchanged: the `colossus-bot` and `colossus-lab-updates` database ids, the bot's `bot@colossus.local` address, and the `colossus:*` localStorage keys. They are primary keys seeded by a sealed migration; renaming them would orphan the bot, its channel and every message it has posted.
+- macOS ops naming follows the brand: launchd labels `com.colossus.*` -> `com.labhub.*` (plist filenames included), the clone path is `$HOME/labhub`, and the docs example hostname is `labhub.<domain>`. Runbooks, README and CLAUDE.md updated to match.
+- The retired Windows-laptop runbook keeps its original `C:\colossus` paths and `colossus-lab` hostname as a historical record, so a restore matches the machine as it was actually built.
+
 ## [0.9.1] - 2026-07-17
 
 ### Added
