@@ -30,4 +30,10 @@ describe('parseEnv', () => {
     expect(e.VAPID_PUBLIC_KEY).toBe('')
     expect(e.VAPID_PRIVATE_KEY).toBe('')
   })
+  it('AUTH_TRUSTED_IP_HEADER is optional: absent ⇒ undefined, and passes through verbatim when set', () => {
+    const base = { DATABASE_URL: 'postgresql://x', BETTER_AUTH_SECRET: 'x'.repeat(32) }
+    expect(parseEnv(base).AUTH_TRUSTED_IP_HEADER).toBeUndefined()
+    expect(parseEnv({ ...base, AUTH_TRUSTED_IP_HEADER: 'cf-connecting-ip' }).AUTH_TRUSTED_IP_HEADER).toBe('cf-connecting-ip')
+    expect(parseEnv(base).AUTH_RATE_LIMIT_MAX).toBe(10) // code default preserved under the tunnel model
+  })
 })

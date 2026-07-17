@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { auth } from '@/lib/auth'
 import { saveUpload } from '@/lib/uploads'
+import { setupTokenMatches, runAuthorizedBootstrap } from '@/lib/setup-token'
 
 // Constant advisory-lock key: every first-run contends on the same lock so the
 // Organization row stays a singleton (see the guard in completeSetup below).
@@ -20,10 +21,14 @@ const schema = z.object({
 export async function completeSetup(input: {
   orgName: string; accentColor: string; timezone: string
   adminName: string; adminEmail: string; adminPassword: string
-  logo?: File | null
+  logo?: File | null; setupToken?: string
 }): Promise<{ ok: true } | { ok: false; message: string }> {
   const existing = await prisma.organization.findFirst()
   if (existing?.setupComplete) return { ok: false, message: 'Setup has already been completed.' }
+  // One-time bootstrap gate (SP7 F1): when SETUP_TOKEN is configured, provisioning requires the
+  // exact token. Unset ⇒ always passes (dev/local + existing deployments unaffected).
+  if (!setupTokenMatches(input.setupToken))
+    return { ok: false, message: 'Invalid or missing setup token. Enter the SETUP_TOKEN printed during provisioning.' }
   const parsed = schema.safeParse(input)
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message }
   const d = parsed.data
@@ -54,8 +59,13 @@ export async function completeSetup(input: {
   // better-auth manages its own DB connection and cannot join a Prisma tx, so admin
   // creation stays OUTSIDE the lock. Accepted residual: two concurrent first-runs may
   // each create an admin user — the lock only guarantees the Organization-row singleton.
+  // Wrap the sign-up in the authorized-bootstrap async context so the auth before-hook lets
+  // THIS token-validated bootstrap through while still rejecting direct attacker sign-ups
+  // during the incomplete-setup window (SP7 F1).
   try {
-    await auth.api.signUpEmail({ body: { email: d.adminEmail, password: d.adminPassword, name: d.adminName } })
+    await runAuthorizedBootstrap(() =>
+      auth.api.signUpEmail({ body: { email: d.adminEmail, password: d.adminPassword, name: d.adminName } }),
+    )
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : 'Could not create admin account.' }
   }

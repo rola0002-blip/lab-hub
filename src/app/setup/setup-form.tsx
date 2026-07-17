@@ -5,7 +5,7 @@ import { completeSetup } from './actions'
 
 const TIMEZONES = ['Asia/Singapore', 'UTC', 'Europe/London', 'America/New_York', 'America/Los_Angeles', 'Asia/Tokyo', 'Australia/Sydney']
 
-export default function SetupForm() {
+export default function SetupForm({ tokenRequired = false }: { tokenRequired?: boolean }) {
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -20,15 +20,23 @@ export default function SetupForm() {
       timezone: String(fd.get('timezone')), adminName: String(fd.get('adminName')),
       adminEmail: String(fd.get('adminEmail')), adminPassword: String(fd.get('adminPassword')),
       logo: logo && logo.size > 0 ? logo : null,
+      setupToken: tokenRequired ? String(fd.get('setupToken') ?? '') : undefined,
     })
     setBusy(false)
     if (!r.ok) setError(r.message)
     else router.push('/sign-in')
   }
 
-  const input = 'w-full rounded-md border border-border bg-surface px-3 py-2'
+  const input = 'w-full rounded-md border border-border bg-surface px-3 py-2 focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]'
   return (
     <form onSubmit={onSubmit} className="mt-6 space-y-4">
+      {tokenRequired && (
+        <label className="block text-sm">
+          Setup token
+          <input name="setupToken" type="password" required autoComplete="off" className={input} />
+          <span className="mt-1 block text-xs text-subtle">Paste the SETUP_TOKEN printed during provisioning. This one-time token stops an uninvited party claiming admin over the public tunnel.</span>
+        </label>
+      )}
       <label className="block text-sm">Organisation name<input name="orgName" required defaultValue="COLOSSUS" className={input} /></label>
       <label className="block text-sm">Accent colour<input name="accentColor" type="color" defaultValue="#0d9488" className="h-10 w-20 rounded-md border border-border" /></label>
       <label className="block text-sm">Timezone<select name="timezone" defaultValue="Asia/Singapore" className={input}>{TIMEZONES.map((t) => <option key={t}>{t}</option>)}</select></label>

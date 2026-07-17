@@ -57,6 +57,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
     // Chat files, avatars and documents are private and must never be retained by
     // shared/proxy caches; SP1 public assets keep the long, shared cache.
     'Cache-Control': isPrivate ? 'private, no-store' : 'public, max-age=86400',
+    // Attacker-supplied bytes are served inline (pdf/image), so never let a browser
+    // MIME-sniff them into an executable type. Belt-and-suspenders alongside the global
+    // next.config nosniff header, since this Route Handler builds its own Response (SP7 §7.1).
+    'X-Content-Type-Options': 'nosniff',
   }
   if (isDocument) {
     // Recover the human filename (on-disk basename is a UUID) and 404 unknown paths.
