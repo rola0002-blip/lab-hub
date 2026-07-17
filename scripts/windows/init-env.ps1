@@ -26,7 +26,7 @@ function New-Secret([int]$bytes = 32) {
   return -join ($b | ForEach-Object { $_.ToString('x2') })  # hex: shell-safe (no +,/,=)
 }
 
-if (-not $AppUrl) { $AppUrl = Read-Host 'APP_URL members will use (e.g. http://labhub-lab/ )' }
+if (-not $AppUrl) { $AppUrl = Read-Host 'APP_URL members will use (e.g. http://colossus-lab/ )' }
 $secret = New-Secret 32   # 64 hex chars >= 32 (BETTER_AUTH_SECRET floor)
 $pgPass = New-Secret 24   # 48 hex chars
 
