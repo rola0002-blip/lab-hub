@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.colossus.backup</string>
+  <string>com.labhub.backup</string>
   <key>ProgramArguments</key>
   <array>
     <string>/ABSOLUTE/PATH/TO/lab-hub/scripts/backup.sh</string>
@@ -23,8 +23,8 @@
   <key>WorkingDirectory</key>
   <string>/ABSOLUTE/PATH/TO/lab-hub</string>
   <key>StandardOutPath</key>
-  <string>/tmp/colossus-backup.log</string>
+  <string>/tmp/labhub-backup.log</string>
   <key>StandardErrorPath</key>
-  <string>/tmp/colossus-backup.err</string>
+  <string>/tmp/labhub-backup.err</string>
 </dict>
 </plist>
