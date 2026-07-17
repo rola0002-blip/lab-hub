@@ -1,4 +1,4 @@
-// Pure roster helper shared by the chat client. The COLOSSUS bot IS in the
+// Pure roster helper shared by the chat client. The LabHub bot IS in the
 // /api/chat/users roster so DM name resolution (dmName / DM header / conversation
 // list) can label it instead of showing "unknown" (F2). But it must stay invisible
 // in every human-facing CHOOSER — the mention autocomplete, the new-DM picker, and

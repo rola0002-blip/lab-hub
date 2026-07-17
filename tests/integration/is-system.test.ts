@@ -23,7 +23,7 @@ describe('isSystem exclusions', () => {
     mockUser.current = { id: u.id, name: u.name, email: u.email, role: u.role }
     const res = await chatUsers() // GET() takes no arguments
     const { users } = await res.json()
-    // F2: the bot IS in the roster now (so a bot DM resolves to "COLOSSUS Bot",
+    // F2: the bot IS in the roster now (so a bot DM resolves to "LabHub Bot",
     // not "unknown") — carried with isSystem:true; humans carry isSystem:false.
     const bot = users.find((x: { id: string }) => x.id === COLOSSUS_BOT_ID)
     expect(bot?.isSystem).toBe(true)

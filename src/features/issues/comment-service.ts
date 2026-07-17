@@ -17,7 +17,7 @@ export type CommentDto = {
 const AUTHOR_SELECT = { select: { id: true, name: true, image: true } } as const
 
 async function orgName(): Promise<string> {
-  return (await prisma.organization.findFirst())?.name ?? 'COLOSSUS'
+  return (await prisma.organization.findFirst())?.name ?? 'LabHub'
 }
 
 export async function createComment(args: { actorId: string; role: Role; issueId: string; body: string }): Promise<CommentDto> {

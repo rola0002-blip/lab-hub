@@ -58,7 +58,7 @@ export async function retireEquipment(id: string): Promise<{ cancelled: number }
     for (const b of victims) {
       const when = formatRange(b.startsAt, b.endsAt, org?.timezone ?? 'Asia/Singapore')
       await notify(b.userId, 'booking_cancelled', { message: `${eq.name} was retired; your booking ${when} was cancelled.` }, {
-        subject: `[${org?.name ?? 'COLOSSUS'}] Booking cancelled: ${eq.name} retired`,
+        subject: `[${org?.name ?? 'LabHub'}] Booking cancelled: ${eq.name} retired`,
         html: `<p>Your booking of <strong>${eq.name}</strong> (${when}) was cancelled because the instrument was retired.</p>`,
       })
     }

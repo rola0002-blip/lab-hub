@@ -27,7 +27,7 @@ PGPASS=$(openssl rand -hex 24)   # 48 hex chars
 SETUP_TOKEN=$(openssl rand -hex 32)  # F1 one-time bootstrap gate — entered once in the wizard
 
 # --- APP_URL (https, exact scheme+host; trailing slash trimmed so Origin/baseURL match) ---
-read -r -p 'APP_URL (public https origin, e.g. https://colossus.example.com): ' APP_URL
+read -r -p 'APP_URL (public https origin, e.g. https://labhub.example.com): ' APP_URL
 APP_URL="${APP_URL%/}"
 case "$APP_URL" in
   https://*) : ;;
@@ -80,7 +80,7 @@ SMTP_HOST=
 SMTP_PORT=587
 SMTP_USER=
 SMTP_PASS=
-SMTP_FROM=COLOSSUS <no-reply@localhost>
+SMTP_FROM=LabHub <no-reply@localhost>
 VAPID_PUBLIC_KEY=${VAPID_PUBLIC}
 VAPID_PRIVATE_KEY=${VAPID_PRIVATE}
 TUNNEL_TOKEN=${TUNNEL_TOKEN}

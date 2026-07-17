@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// WCAG contrast gate for the COLOSSUS design tokens. Run via `npm run contrast`.
+// WCAG contrast gate for the LabHub design tokens. Run via `npm run contrast`.
 //
 // It computes the WCAG 2.x contrast ratio for the critical token pairs in BOTH
 // themes and for every accent preset, and exits non-zero on any failure. The

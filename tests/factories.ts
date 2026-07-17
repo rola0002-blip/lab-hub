@@ -118,7 +118,7 @@ export async function seedSystem() {
   await prisma.user.upsert({
     where: { id: COLOSSUS_BOT_ID },
     update: {},
-    create: { id: COLOSSUS_BOT_ID, name: 'COLOSSUS Bot', email: 'bot@colossus.local', emailVerified: true, role: 'member', isSystem: true },
+    create: { id: COLOSSUS_BOT_ID, name: 'LabHub Bot', email: 'bot@colossus.local', emailVerified: true, role: 'member', isSystem: true },
   })
   await prisma.conversation.upsert({
     where: { id: LAB_UPDATES_CHANNEL_ID },

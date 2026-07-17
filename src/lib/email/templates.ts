@@ -21,7 +21,7 @@ export function bookingDecidedEmail(
   cal?: { appUrl: string; event?: { startsAt: Date; endsAt: Date; location: string } },
 ): Tpl {
   // Calendar links only on APPROVAL. A single-event decide (decideBooking) supplies
-  // cal.event → Google + Outlook quick-add anchors + an Open-in-COLOSSUS deep link.
+  // cal.event → Google + Outlook quick-add anchors + an Open-in-LabHub deep link.
   // A recurring decide (decideRecurring) supplies cal WITHOUT event → only the Open
   // link (the subscription feed is the right tool for a series). Rejections: no links.
   let extra = ''

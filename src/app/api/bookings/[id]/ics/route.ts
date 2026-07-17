@@ -18,7 +18,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const org = await prisma.organization.findFirst()
   const host = new URL(env.APP_URL).host
   const body = buildIcs({
-    calName: 'COLOSSUS — Booking', timezone: org?.timezone ?? 'Asia/Singapore',
+    calName: 'LabHub — Booking', timezone: org?.timezone ?? 'Asia/Singapore',
     events: [{
       uid: `${b.id}@${host}`, start: b.startsAt, end: b.endsAt,
       summary: b.equipment.name, description: b.purpose,

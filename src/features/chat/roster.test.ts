@@ -4,7 +4,7 @@ import { humanUsers } from './roster'
 describe('humanUsers', () => {
   const roster = [
     { id: 'u1', name: 'Roland', isSystem: false },
-    { id: 'colossus-bot', name: 'COLOSSUS Bot', isSystem: true },
+    { id: 'colossus-bot', name: 'LabHub Bot', isSystem: true },
     { id: 'u2', name: 'Ada', isSystem: false },
   ]
   it('drops system users (the bot) from a chooser list', () => {

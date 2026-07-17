@@ -88,7 +88,7 @@ async function pushIssueNotif(
 }
 
 async function orgName(): Promise<string> {
-  return (await prisma.organization.findFirst())?.name ?? 'COLOSSUS'
+  return (await prisma.organization.findFirst())?.name ?? 'LabHub'
 }
 
 // New description/comment mentions minus a baseline set and the actor → notify.

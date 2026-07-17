@@ -26,7 +26,7 @@ function New-Secret([int]$bytes = 32) {
   return -join ($b | ForEach-Object { $_.ToString('x2') })  # hex: shell-safe (no +,/,=)
 }
 
-if (-not $AppUrl) { $AppUrl = Read-Host 'APP_URL members will use (e.g. http://colossus-lab/ )' }
+if (-not $AppUrl) { $AppUrl = Read-Host 'APP_URL members will use (e.g. http://labhub-lab/ )' }
 $secret = New-Secret 32   # 64 hex chars >= 32 (BETTER_AUTH_SECRET floor)
 $pgPass = New-Secret 24   # 48 hex chars
 
@@ -64,7 +64,7 @@ $lines = @(
   'SMTP_PORT=587'
   'SMTP_USER='
   'SMTP_PASS='
-  'SMTP_FROM=COLOSSUS <no-reply@localhost>'
+  'SMTP_FROM=LabHub <no-reply@localhost>'
   "VAPID_PUBLIC_KEY=$vapidPublic"
   "VAPID_PRIVATE_KEY=$vapidPrivate"
   'DISABLE_JOBS='

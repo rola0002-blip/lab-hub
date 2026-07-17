@@ -37,7 +37,7 @@ export default function SetupForm({ tokenRequired = false }: { tokenRequired?: b
           <span className="mt-1 block text-xs text-subtle">Paste the SETUP_TOKEN printed during provisioning. This one-time token stops an uninvited party claiming admin over the public tunnel.</span>
         </label>
       )}
-      <label className="block text-sm">Organisation name<input name="orgName" required defaultValue="COLOSSUS" className={input} /></label>
+      <label className="block text-sm">Organisation name<input name="orgName" required defaultValue="LabHub" className={input} /></label>
       <label className="block text-sm">Accent colour<input name="accentColor" type="color" defaultValue="#0d9488" className="h-10 w-20 rounded-md border border-border" /></label>
       <label className="block text-sm">Timezone<select name="timezone" defaultValue="Asia/Singapore" className={input}>{TIMEZONES.map((t) => <option key={t}>{t}</option>)}</select></label>
       <label className="block text-sm">Logo (optional, PNG/JPEG/WebP ≤ 2 MB)<input name="logo" type="file" accept="image/png,image/jpeg,image/webp" className={input} /></label>

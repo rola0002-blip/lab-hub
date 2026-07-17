@@ -25,7 +25,7 @@ export default async function SettingsPage() {
 
       <section className="mt-8 max-w-md rounded-lg border border-border p-4">
         <h2 className="text-sm font-semibold text-default">About</h2>
-        <p className="mt-3 text-sm text-muted">COLOSSUS v{APP_VERSION}</p>
+        <p className="mt-3 text-sm text-muted">LabHub v{APP_VERSION}</p>
       </section>
 
       {!env.SMTP_HOST && (

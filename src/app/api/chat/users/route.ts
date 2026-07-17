@@ -5,7 +5,7 @@ import { getSessionUser } from '@/lib/session'
 export async function GET() {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  // Include system users (the COLOSSUS bot) WITH an isSystem flag so DM name
+  // Include system users (the LabHub bot) WITH an isSystem flag so DM name
   // resolution (dmName / DM header / conversation list) works — a bot DM must not
   // render as "unknown". Human-facing choosers (mention autocomplete, new-DM /
   // add-people pickers) filter isSystem out client-side via `humanUsers`, keeping

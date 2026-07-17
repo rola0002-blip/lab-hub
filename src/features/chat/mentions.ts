@@ -14,7 +14,7 @@ export function renderBody(body: string, names: Map<string, string>): string {
     .replace(USER_TOKEN, (_, id: string) => `@${names.get(id) ?? 'unknown'}`)
 }
 
-// The COLOSSUS bot must never @-mention anyone (spec §5.4), but its posts
+// The LabHub bot must never @-mention anyone (spec §5.4), but its posts
 // interpolate user-controlled text (issue titles, project/document/user names)
 // that may contain literal mention tokens. The bot send path runs its body
 // through this so parseMentions/resolveMentions can no longer match — while the

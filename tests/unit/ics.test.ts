@@ -41,15 +41,15 @@ describe('foldLine', () => {
 describe('buildIcs', () => {
   const now = new Date('2026-07-13T00:00:00.000Z')
   it('emits a valid VCALENDAR with CRLF, headers and one VEVENT per booking', () => {
-    const out = buildIcs({ calName: 'COLOSSUS — My bookings', timezone: 'Asia/Singapore', events: [ev()] }, now)
+    const out = buildIcs({ calName: 'LabHub — My bookings', timezone: 'Asia/Singapore', events: [ev()] }, now)
     expect(out.endsWith('\r\n')).toBe(true)
     const lines = out.split('\r\n')
     expect(lines).toContain('BEGIN:VCALENDAR')
     expect(lines).toContain('VERSION:2.0')
-    expect(lines).toContain('PRODID:-//COLOSSUS//LabHub//EN')
+    expect(lines).toContain('PRODID:-//LabHub//LabHub//EN')
     expect(lines).toContain('CALSCALE:GREGORIAN')
     expect(lines).toContain('METHOD:PUBLISH')
-    expect(lines).toContain('X-WR-CALNAME:COLOSSUS — My bookings')
+    expect(lines).toContain('X-WR-CALNAME:LabHub — My bookings')
     expect(lines).toContain('X-WR-TIMEZONE:Asia/Singapore')
     expect(lines).toContain('BEGIN:VEVENT')
     expect(lines).toContain('UID:b1@colossus.example')

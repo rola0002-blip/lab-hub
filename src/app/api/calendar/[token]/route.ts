@@ -27,12 +27,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
     summary: b.equipment.name, description: b.purpose,
     status: b.status === 'CONFIRMED' ? 'CONFIRMED' : 'TENTATIVE',
   }))
-  const body = buildIcs({ calName: 'COLOSSUS — My bookings', timezone: tz, events })
+  const body = buildIcs({ calName: 'LabHub — My bookings', timezone: tz, events })
   return new Response(body, {
     status: 200,
     headers: {
       'Content-Type': 'text/calendar; charset=utf-8',
-      'Content-Disposition': 'inline; filename="colossus.ics"',
+      'Content-Disposition': 'inline; filename="labhub.ics"',
       // `private`: personal booking data behind a capability URL must never be
       // retained by a shared/intermediary cache (only the end client may cache it).
       'Cache-Control': 'private, max-age=300',
