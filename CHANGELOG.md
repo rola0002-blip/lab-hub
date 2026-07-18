@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- Issue labels can no longer be added or assigned from the interface: the create-issue composer's label picker, the issue-detail Labels editor, and the list/board "Any label" filter are gone. The `Label`/`IssueLabel` models, their migrations, and the service layer are untouched — this removes the label entry points only, so existing label data is preserved and old `?label=` links still filter gracefully.
+
+### Fixed
+- The inline issue status and priority menus on list rows and board cards no longer clip off-screen at narrow (phone) widths. The shared `Menu` now auto-flips horizontally to the side with available room, mirroring its existing vertical flip, so left-anchored triggers stay fully within the viewport while menus that already fit are unchanged.
+- The mobile navigation drawer now closes automatically on navigation — whether the route changes or the current tab is re-tapped — instead of remaining open over the new page, and no longer leaves the app content stuck `inert` (an accessibility trap).
+- Closing the mobile navigation drawer now returns focus to the hamburger toggle instead of dropping it to `<body>`. Reordering the `inert` and focus-trap cleanups so the app content is interactive before focus is restored fixes the focus loss on every close path (Esc, backdrop, route change, and nav-link tap).
+
 ## [0.9.3] - 2026-07-18
 
 ### Changed
