@@ -27,10 +27,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Small org-wide option lists for the globally-mounted create-issue composer
   // (raised by the `c` shortcut, the ⌘K "Create issue" command, and any
   // "New issue" button); the modal itself gates opening for guests.
-  const [issueUsers, issueProjects, issueLabels] = await Promise.all([
+  const [issueUsers, issueProjects] = await Promise.all([
     prisma.user.findMany({ where: { banned: false, isSystem: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
     prisma.project.findMany({ orderBy: { createdAt: 'desc' }, select: { id: true, name: true } }),
-    prisma.label.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true, color: true } }),
   ])
 
   return (
@@ -68,7 +67,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </div>
       {/* Global create-issue composer + `c` shortcut — mounted once so any page
           (or the ⌘K palette) can raise the modal. Hotkey is role-gated. */}
-      <CreateIssueModal users={issueUsers} projects={issueProjects} labels={issueLabels} />
+      <CreateIssueModal users={issueUsers} projects={issueProjects} />
       <IssueHotkeys role={user.role} />
       {/* Global toast host — mounted once so `toast()` works from any page. */}
       <ToastHost />

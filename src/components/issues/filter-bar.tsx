@@ -3,7 +3,7 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { ISSUE_STATUSES, STATUS_LABEL, PRIORITIES, PRIORITY_LABEL } from '@/features/issues/status'
 
 type Opt = { id: string; name: string }
-export function FilterBar({ users, projects, labels, lockAssignee }: { users: Opt[]; projects: Opt[]; labels: Opt[]; lockAssignee?: boolean }) {
+export function FilterBar({ users, projects, lockAssignee }: { users: Opt[]; projects: Opt[]; lockAssignee?: boolean }) {
   const router = useRouter(); const pathname = usePathname(); const sp = useSearchParams()
   function set(key: string, value: string) {
     const next = new URLSearchParams(sp.toString())
@@ -30,10 +30,6 @@ export function FilterBar({ users, projects, labels, lockAssignee }: { users: Op
       <select aria-label="Priority" value={sp.get('priority') ?? ''} onChange={(e) => set('priority', e.target.value)} className={selectCls}>
         <option value="">Any priority</option>
         {PRIORITIES.map((p) => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
-      </select>
-      <select aria-label="Label" value={sp.get('label') ?? ''} onChange={(e) => set('label', e.target.value)} className={selectCls}>
-        <option value="">Any label</option>
-        {labels.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
       </select>
     </div>
   )

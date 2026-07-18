@@ -3,7 +3,6 @@ import { useSyncExternalStore, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Modal } from '@/components/ui/modal'
 import { IssueMentionInput } from './issue-mention-input'
-import { LabelPicker } from './label-picker'
 import { StatusIcon, PriorityIcon } from './status'
 import { Menu } from '@/components/ui/menu'
 import { ISSUE_STATUSES, STATUS_LABEL, PRIORITIES, PRIORITY_LABEL } from '@/features/issues/status'
@@ -19,14 +18,13 @@ import type { IssueStatus, IssuePriority } from '@prisma/client'
 const CHIP_TRIGGER = 'inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-sm text-default hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]'
 
 type Opt = { id: string; name: string; image?: string | null }
-type LabelOpt = { id: string; name: string; color: string }
-export function CreateIssueModal({ users, projects, labels }: { users: Opt[]; projects: Opt[]; labels: LabelOpt[] }) {
+export function CreateIssueModal({ users, projects }: { users: Opt[]; projects: Opt[] }) {
   const store = useSyncExternalStore(subscribeIssueComposer, getIssueComposer, getIssueComposer)
   if (!store.open) return null
-  return <Composer users={users} projects={projects} labels={labels} />
+  return <Composer users={users} projects={projects} />
 }
 
-function Composer({ users, projects, labels }: { users: Opt[]; projects: Opt[]; labels: LabelOpt[] }) {
+function Composer({ users, projects }: { users: Opt[]; projects: Opt[] }) {
   const router = useRouter()
   const { prefill } = getIssueComposer()
   const [title, setTitle] = useState(prefill.title ?? '')
@@ -36,13 +34,12 @@ function Composer({ users, projects, labels }: { users: Opt[]; projects: Opt[]; 
   const [assigneeId, setAssigneeId] = useState<string | null>(null)
   const [projectId, setProjectId] = useState<string | null>(prefill.projectId ?? null)
   const [dueDate, setDueDate] = useState('')
-  const [labelIds, setLabelIds] = useState<string[]>([])
   const [pending, start] = useTransition()
 
   function submit() {
     const t = title.trim(); if (!t) { toast('Enter a title.'); return }
     start(async () => {
-      const r = await createIssueAction({ title: t, description, status, priority, assigneeId, projectId, dueDate: dueDate || null, labelIds, originMessageId: prefill.originMessageId ?? null })
+      const r = await createIssueAction({ title: t, description, status, priority, assigneeId, projectId, dueDate: dueDate || null, originMessageId: prefill.originMessageId ?? null })
       if (r.ok) { closeIssueComposer(); router.push(`/issues/${r.data.identifier}`) }
       else toast(r.message)
     })
@@ -61,8 +58,6 @@ function Composer({ users, projects, labels }: { users: Opt[]; projects: Opt[]; 
           <input type="date" aria-label="Due date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
             className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
         </div>
-        {/* Labels — same type-to-create picker as the properties panel (§6.5 lists labels among the property pickers). */}
-        <LabelPicker labels={labels} selectedIds={labelIds} canEdit onChange={setLabelIds} />
         <div className="flex justify-end gap-2">
           <button type="button" onClick={closeIssueComposer} className="rounded-md border border-border px-3 py-1.5 text-sm text-default hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">Cancel</button>
           <button type="button" onClick={submit} disabled={pending} className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-on hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] disabled:opacity-50">Create issue</button>

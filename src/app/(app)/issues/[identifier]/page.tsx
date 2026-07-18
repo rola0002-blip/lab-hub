@@ -6,7 +6,7 @@ import { requireUser } from '@/lib/session'
 import { prisma } from '@/lib/db'
 import { getOrg } from '@/lib/org'
 import { parseIdentifier, extractIssueRefNumbers } from '@/features/issues/identifier'
-import { getIssueDetail, listLabels } from '@/features/issues/issue-service'
+import { getIssueDetail } from '@/features/issues/issue-service'
 import { resolveIssueRefs } from '@/features/issues/issue-ref-service'
 import { listTimeline } from '@/features/issues/comment-service'
 import { listProjects } from '@/features/issues/project-service'
@@ -20,10 +20,10 @@ export default async function IssueDetailPage({ params }: { params: Promise<{ id
   if (n === null) notFound()
   const row = await prisma.issue.findUnique({ where: { number: n }, select: { id: true } })
   if (!row) notFound()
-  const [detail, timeline, users, labels, projects, org] = await Promise.all([
+  const [detail, timeline, users, projects, org] = await Promise.all([
     getIssueDetail(row.id), listTimeline(row.id),
     prisma.user.findMany({ where: { banned: false, isSystem: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
-    listLabels(), listProjects(), getOrg(),
+    listProjects(), getOrg(),
   ])
   if (!detail) notFound()
   const timezone = org?.timezone ?? 'Asia/Singapore' // render timeline times in the org zone (deterministic, no hydration drift)
@@ -63,6 +63,6 @@ export default async function IssueDetailPage({ params }: { params: Promise<{ id
 
   return (
     <IssueDetail issue={detail.issue} attachments={detail.attachments} timeline={timeline} role={user.role} selfId={user.id}
-      users={users} projects={projects.map((p) => ({ id: p.id, name: p.name }))} labels={labels} timezone={timezone} issueRefs={issueRefs} originChip={originChip} />
+      users={users} projects={projects.map((p) => ({ id: p.id, name: p.name }))} timezone={timezone} issueRefs={issueRefs} originChip={originChip} />
   )
 }

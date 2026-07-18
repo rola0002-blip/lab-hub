@@ -2,7 +2,7 @@ import { Inbox, SearchX } from 'lucide-react'
 import { requireUser } from '@/lib/session'
 import { prisma } from '@/lib/db'
 import { getOrg } from '@/lib/org'
-import { listIssues, listLabels } from '@/features/issues/issue-service'
+import { listIssues } from '@/features/issues/issue-service'
 import { listProjects } from '@/features/issues/project-service'
 import { parseIssueFilters } from '@/features/issues/status'
 import { IssuesSurface } from '@/components/issues/issues-surface'
@@ -15,10 +15,10 @@ export default async function MyIssuesPage({ searchParams }: { searchParams: Pro
   const sp = await searchParams
   // Validated URL filters (assignee is locked to self, so f.assignee is ignored).
   const f = parseIssueFilters(sp)
-  const [issues, users, labels, projects, org] = await Promise.all([
+  const [issues, users, projects, org] = await Promise.all([
     listIssues({ assigneeId: user.id, status: f.status, projectId: f.project, labelId: f.label, priority: f.priority }),
     prisma.user.findMany({ where: { banned: false, isSystem: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
-    listLabels(), listProjects(), getOrg(),
+    listProjects(), getOrg(),
   ])
   const timezone = org?.timezone ?? 'Asia/Singapore'
   const filtered = Boolean(f.status || f.project || f.label || f.priority)
@@ -31,7 +31,7 @@ export default async function MyIssuesPage({ searchParams }: { searchParams: Pro
         <h1 className="text-2xl font-semibold text-default">My issues</h1>
         {user.role !== 'guest' && <NewIssueButton />}
       </div>
-      <FilterBar users={users} projects={projects.map((p) => ({ id: p.id, name: p.name }))} labels={labels} lockAssignee />
+      <FilterBar users={users} projects={projects.map((p) => ({ id: p.id, name: p.name }))} lockAssignee />
       <IssuesSurface key={JSON.stringify(sp)} initial={issues} role={user.role} users={users} timezone={timezone} closedGrouped empty={empty} />
     </div>
   )
