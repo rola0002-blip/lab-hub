@@ -22,6 +22,13 @@ test('issue lifecycle: project, create, board move, comment, complete, autolink'
   await page.waitForURL('**/issues/LAB-1')
   await expect(page.getByText('SP4 E2E Project')).toBeVisible() // properties panel shows the pre-filled project
 
+  // v0.9.5: the composer now defaults new issues to Todo. This lifecycle test relies on
+  // LAB-1 starting in Backlog — the BACKLOG filter round-trip just below and the later
+  // Backlog→Todo keyboard board move — so move it back to Backlog explicitly.
+  await page.getByRole('button', { name: 'Set status' }).click()
+  await page.getByRole('menuitem', { name: 'Backlog' }).click()
+  await expect(page.getByRole('button', { name: 'Set status' })).toContainText('Backlog')
+
   // Filter URL round-trips. `Status` is matched exactly so it hits the FilterBar
   // select and not the per-row "Status: Backlog" inline menu (whose aria-label
   // contains "Status").
@@ -95,12 +102,17 @@ test('c shortcut: global quick-capture that respects the typing and modal guards
   await signIn(page, ADMIN.email, ADMIN.password)
 
   // Global (v0.9.5): the pathname gate is gone, so `c` raises the composer from a
-  // non-issues page (the dashboard), not only /issues and /projects.
+  // non-issues page (the dashboard), not only /issues and /projects. Retry the press
+  // until the composer is up (the global listener attaches on hydration; a `c` while
+  // the modal is open is guarded, so repeats can't stack).
   await page.goto('/dashboard')
-  await page.keyboard.press('c')
-  await expect(page.getByRole('dialog', { name: 'New issue' })).toBeVisible()
+  const composer = page.getByRole('dialog', { name: 'New issue' })
+  await expect(async () => {
+    await page.keyboard.press('c')
+    await expect(composer).toBeVisible({ timeout: 1000 })
+  }).toPass({ timeout: 10_000 })
   await page.keyboard.press('Escape')
-  await expect(page.getByRole('dialog', { name: 'New issue' })).toHaveCount(0)
+  await expect(composer).toHaveCount(0)
 
   // Typing guard HOLDS in chat: `c` typed into the message textarea inserts the
   // character and does NOT open the composer (use-global-hotkey's TEXTAREA guard).
@@ -146,9 +158,14 @@ test('quick-capture defaults the assignee to the current user; New issue button 
   await page.goto('/issues')
 
   // Quick capture via the `c` shortcut → assignee pre-filled to the current user…
-  await page.keyboard.press('c')
+  // The global `c` listener attaches on hydration; /issues is a heavier page, so retry
+  // the keypress until the composer is up (mirrors the ⌘K palette settle idiom; a `c`
+  // while the modal is already open is guarded, so repeats can't stack).
   const dialog = page.getByRole('dialog', { name: 'New issue' })
-  await expect(dialog).toBeVisible()
+  await expect(async () => {
+    await page.keyboard.press('c')
+    await expect(dialog).toBeVisible({ timeout: 1000 })
+  }).toPass({ timeout: 10_000 })
   await expect(dialog.getByRole('button', { name: 'Assignee' })).toContainText('Roland')
   // …but it is only a default — the picker stays editable (Unassigned still selectable).
   await dialog.getByRole('button', { name: 'Assignee' }).click()

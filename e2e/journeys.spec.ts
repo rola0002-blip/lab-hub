@@ -9,7 +9,7 @@ test('setup wizard creates org and admin, locks itself', async ({ page }) => {
   await runWizard(page)
   await signIn(page, ADMIN.email, ADMIN.password)
   await page.goto('/dashboard') // v0.9.5 lands sign-in on /issues/me; the dashboard is still reachable
-  await expect(page.getByText('Welcome, Roland')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Welcome, Roland' }).first()).toBeVisible()
   await page.goto('/setup')
   await page.waitForURL('**/sign-in') // wizard refuses after completion
 })
@@ -22,7 +22,7 @@ test('post-login landing is the personal task list, dashboard stays reachable', 
   // /dashboard is not the landing but remains in the nav and directly reachable.
   await page.getByRole('link', { name: 'Dashboard' }).first().click()
   await expect(page).toHaveURL(/\/dashboard$/)
-  await expect(page.getByText('Welcome, Roland')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Welcome, Roland' }).first()).toBeVisible()
 })
 
 test('invite → accept → first login as guest', async ({ page }) => {
@@ -42,7 +42,7 @@ test('invite → accept → first login as guest', async ({ page }) => {
   await page.click('button:has-text("Create account")')
   await page.waitForURL('**/issues/me') // first-login landing = personal task list (v0.9.5)
   await page.goto('/dashboard') // dashboard still reachable — assert its welcome + guest nav there
-  await expect(page.getByText('Welcome, FYP Student')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Welcome, FYP Student' }).first()).toBeVisible()
   await expect(page.locator('nav')).not.toContainText('People') // guests see no admin nav
 })
 

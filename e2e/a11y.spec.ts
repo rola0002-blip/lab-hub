@@ -90,7 +90,7 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
   await runWizard(page)
   await signIn(page, ADMIN.email, ADMIN.password)
   await page.goto('/dashboard') // v0.9.5 lands sign-in on /issues/me; audit the dashboard explicitly
-  await expect(page.getByText('Welcome, Roland')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Welcome, Roland' }).first()).toBeVisible()
   await auditBothThemes(page, 'dashboard')
 
   // A populated channel view (message + composer + hover toolbar reachable).
