@@ -6,6 +6,7 @@ import { formatRange } from './time'
 import { drainOutbox } from './email/outbox'
 import { bookingReminderEmail } from './email/templates'
 import { formatIdentifier } from '@/features/issues/identifier'
+import { startOfOrgDay } from '@/features/issues/due'
 import * as bot from '@/features/bot'
 
 export async function expirePendingBookings(now: Date = new Date()): Promise<number> {
@@ -62,6 +63,33 @@ export async function pingDueSoonIssues(now: Date = new Date()): Promise<number>
   return due.length
 }
 
+export async function pingOverdueIssues(now: Date = new Date()): Promise<number> {
+  // "Overdue" = the due DAY has fully passed in the org zone — the SAME definition
+  // as the row/card chip and the "overdue" quick filter (dueBucket / dueRange): the
+  // cutoff is the start of today, so an issue due *today* is not nudged as overdue
+  // (it gets the due-soon ping instead). One DM per issue on first crossing; the
+  // overduePingedAt flag makes it one-shot and setDueDate() clears it to re-arm.
+  const org = await prisma.organization.findFirst()
+  const tz = org?.timezone ?? 'Asia/Singapore'
+  const cutoff = startOfOrgDay(now, tz)
+  const overdue = await prisma.issue.findMany({
+    where: {
+      dueDate: { lt: cutoff }, overduePingedAt: null,
+      assigneeId: { not: null }, status: { notIn: ['DONE', 'CANCELED'] },
+    },
+    select: { id: true, number: true, title: true, assigneeId: true },
+  })
+  if (overdue.length === 0) return 0
+  for (const i of overdue) {
+    const id = formatIdentifier(i.number)
+    // Same posture as due-soon: deliberately UNSUPPRESSED, so the normal DM fan-out
+    // provides the single message_dm bell (there is no other native notification).
+    await bot.dmUser(i.assigneeId!, `Overdue — ${id} "${i.title}" is past its due date.`)
+    await prisma.issue.update({ where: { id: i.id }, data: { overduePingedAt: now } })
+  }
+  return overdue.length
+}
+
 export function startJobs(): void {
   if (env.DISABLE_JOBS) return
   const guard = (fn: () => Promise<unknown>) => {
@@ -76,4 +104,5 @@ export function startJobs(): void {
   setInterval(guard(() => expirePendingBookings()), 60_000)
   setInterval(guard(() => sendBookingReminders()), 300_000)
   setInterval(guard(() => pingDueSoonIssues()), 300_000)
+  setInterval(guard(() => pingOverdueIssues()), 300_000)
 }

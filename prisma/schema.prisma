@@ -427,6 +427,7 @@ model Issue {
   rank            String
   completedAt     DateTime?
   dueSoonPingedAt DateTime?                // set when the due-soon bot DM fires; cleared when dueDate changes (re-arms) (SP5 §5.7)
+  overduePingedAt DateTime?                // set when the overdue bot DM fires; cleared when dueDate changes (re-arms) (v0.9.5)
   // Backlink for create-from-message. SetNull: deleting the source message never
   // deletes the issue.
   originMessageId String?

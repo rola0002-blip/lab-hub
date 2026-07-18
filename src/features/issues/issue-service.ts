@@ -249,8 +249,8 @@ export async function setProject(args: { actorId: string; role: Role; issueId: s
 export async function setDueDate(args: { actorId: string; role: Role; issueId: string; dueDate: Date | null }): Promise<IssueDto> {
   assertCanMutate(args.role)
   const issue = await loadOrThrow(args.issueId)
-  // Clearing/moving the due date re-arms the single due-soon ping.
-  return simpleSet({ actorId: args.actorId, issue, type: 'due_date', data: { dueDate: args.dueDate, dueSoonPingedAt: null }, from: issue.dueDate?.toISOString() ?? null, to: args.dueDate?.toISOString() ?? null })
+  // Clearing/moving the due date re-arms BOTH one-shot pings (due-soon + overdue).
+  return simpleSet({ actorId: args.actorId, issue, type: 'due_date', data: { dueDate: args.dueDate, dueSoonPingedAt: null, overduePingedAt: null }, from: issue.dueDate?.toISOString() ?? null, to: args.dueDate?.toISOString() ?? null })
 }
 export async function setTitle(args: { actorId: string; role: Role; issueId: string; title: string }): Promise<IssueDto> {
   assertCanMutate(args.role) // permission before validation, matching createIssue's ordering
