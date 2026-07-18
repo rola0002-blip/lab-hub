@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-07-18
+
 ### Added
 - My issues is now the landing screen: signing in, accepting an invite, and the root redirect all arrive on your personal task list (`/issues/me`) instead of the dashboard, which stays in the sidebar and fully reachable.
 - Overdue and due-today dates are colour-coded on issue list rows and board cards — a red "Overdue" or amber "Today" chip, bucketed by the org-timezone day so a due-today issue never reads as overdue and completed work is never flagged. Board cards, which previously hid due dates, now show them.
