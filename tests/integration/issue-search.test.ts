@@ -12,7 +12,7 @@ describe('searchIssues', () => {
     const hits = await searchIssues({ query: 'graphene furnace' })
     expect(hits).toHaveLength(1)
     expect(hits[0].id).toBe(a.id)
-    expect(hits[0].identifier).toBe(`COL-${a.number}`)
+    expect(hits[0].identifier).toBe(`LAB-${a.number}`)
     expect(await searchIssues({ query: '   ' })).toEqual([])
   })
 })

@@ -156,7 +156,7 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
 
   // SP4 surfaces — issues list/board, projects, issue detail, create modal.
   // Seed one issue so the list/board/detail render populated (createIssueViaUI
-  // opens the composer, creates, and redirects to /issues/COL-1).
+  // opens the composer, creates, and redirects to /issues/LAB-1).
   await page.goto('/issues')
   await expect(page.getByRole('heading', { name: 'Issues' })).toBeVisible()
   await createIssueViaUI(page, 'A11y issue')
@@ -166,14 +166,14 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
   await auditBothThemes(page, 'issues-list')
 
   await page.getByRole('button', { name: 'Board' }).click()
-  await expect(page.getByRole('button', { name: 'Reorder COL-1' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Reorder LAB-1' })).toBeVisible()
   await auditBothThemes(page, 'issues-board')
 
   await page.goto('/projects')
   await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible()
   await auditBothThemes(page, 'projects')
 
-  await page.goto('/issues/COL-1')
+  await page.goto('/issues/LAB-1')
   await expect(page.getByRole('textbox', { name: 'Issue title' })).toHaveValue('A11y issue')
   await auditBothThemes(page, 'issue-detail')
 

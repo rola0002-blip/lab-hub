@@ -41,11 +41,15 @@ afterAll(() => rm(UPLOAD_DIR, { recursive: true, force: true }))
 describe('issue routes', () => {
   beforeEach(async () => { await resetDb(); session.current = null })
 
-  it('search jumps on an exact COL-n and returns FTS hits otherwise', async () => {
+  it('search jumps on an exact LAB-n (and the legacy COL-n alias) and returns FTS hits otherwise', async () => {
     const u = await makeUser({ role: 'member' }); session.current = sessOf(u, 'member')
     const iss = await makeIssue(u.id, { title: 'unique graphene marker', rank: 'V' })
-    const jump = await (await searchGET(new Request(`http://x/api/issues/search?q=COL-${iss.number}`))).json()
-    expect(jump.jump).toBe(`/issues/COL-${iss.number}`)
+    const jump = await (await searchGET(new Request(`http://x/api/issues/search?q=LAB-${iss.number}`))).json()
+    expect(jump.jump).toBe(`/issues/LAB-${iss.number}`)
+    // Backward-compat: a legacy COL-n query still resolves, and the jump target is
+    // the canonical LAB-n URL.
+    const alias = await (await searchGET(new Request(`http://x/api/issues/search?q=COL-${iss.number}`))).json()
+    expect(alias.jump).toBe(`/issues/LAB-${iss.number}`)
     const hits = await (await searchGET(new Request('http://x/api/issues/search?q=graphene'))).json()
     expect(hits.hits[0].id).toBe(iss.id)
   })
@@ -85,7 +89,7 @@ describe('issue routes', () => {
     const ok = await createPOST(jreq({ title: 'Calibrate SEM', priority: 'HIGH' }))
     expect(ok.status).toBe(200)
     const { issue } = await ok.json()
-    expect(issue.identifier).toBe(`COL-${issue.number}`)
+    expect(issue.identifier).toBe(`LAB-${issue.number}`)
     // Identity is the session user, never the body: creator is the member.
     expect(issue.creator.id).toBe(m.id)
   })

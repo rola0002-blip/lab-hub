@@ -47,7 +47,7 @@ describe('bot triggers', () => {
     })
     const lines = await channelText()
     expect(lines.some((l) => l.includes('hBN scale-up'))).toBe(true)
-    expect(lines.some((l) => l.includes(i.identifier))).toBe(true) // COL-<n> auto-links in the client
+    expect(lines.some((l) => l.includes(i.identifier))).toBe(true) // LAB-<n> auto-links in the client
   })
 
   it('announces only when an issue REACHES done (not on other status changes)', async () => {

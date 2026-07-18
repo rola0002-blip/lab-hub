@@ -19,7 +19,7 @@ describe('create-from-message + ref resolution', () => {
     // Batched resolution returns identifier/title/status for a set of numbers.
     const refs = await resolveIssueRefs([iss.number, 999999])
     expect(refs).toHaveLength(1)
-    expect(refs[0].identifier).toBe(`COL-${iss.number}`)
+    expect(refs[0].identifier).toBe(`LAB-${iss.number}`)
   })
 
   it('rejects a forged originMessageId from a non-member; a member can link (S2)', async () => {

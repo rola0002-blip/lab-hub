@@ -15,11 +15,11 @@ async function activities(issueId: string) {
 describe('issue-service', () => {
   beforeEach(resetDb)
 
-  it('creates with COL identifier, initial rank, a "created" activity, and notifies an assignee', async () => {
+  it('creates with LAB identifier, initial rank, a "created" activity, and notifies an assignee', async () => {
     const me = await makeUser({ role: 'member' })
     const other = await makeUser({ role: 'member' })
     const iss = await createIssue({ actorId: me.id, role: 'member', title: 'Calibrate SEM', assigneeId: other.id })
-    expect(iss.identifier).toBe(`COL-${iss.number}`)
+    expect(iss.identifier).toBe(`LAB-${iss.number}`)
     expect(iss.rank.length).toBeGreaterThan(0)
     const acts = await activities(iss.id)
     expect(acts.map((a) => a.type)).toEqual(['created'])
@@ -116,7 +116,7 @@ describe('issue-service', () => {
     const iss = await createIssue({ actorId: me.id, role: 'member', title: 'Read me' })
     const got = await getIssue(iss.id)
     expect(got?.id).toBe(iss.id)
-    expect(got?.identifier).toBe(`COL-${iss.number}`)
+    expect(got?.identifier).toBe(`LAB-${iss.number}`)
     await createLabel({ actorId: me.id, role: 'member', name: 'zeta', color: '--status-todo' })
     await createLabel({ actorId: me.id, role: 'member', name: 'alpha', color: '--status-todo' })
     expect((await listLabels()).map((l) => l.name)).toEqual(['alpha', 'zeta'])

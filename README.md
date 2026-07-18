@@ -64,11 +64,14 @@ tokens and conventions on top of the design system:
   `IssueStatus` to its token (`STATUS_TOKEN`), and the fixed label palette
   (`LABEL_PALETTE`) reuses them. `scripts/check-contrast.mjs` gates all twelve
   (6 × 2 themes) against the canvas.
-- **Identifier.** Issues render as `COL-<n>`: the `COL-` prefix is a single
+- **Identifier.** Issues render as `LAB-<n>`: the `LAB-` prefix is a single
   workspace-brand constant in `features/issues/identifier.ts` (`ISSUE_PREFIX`), never
-  per-project. The same word-bounded scanner resolves `COL-<n>` references in chat
+  per-project. The same word-bounded scanner resolves `LAB-<n>` references in chat
   messages and issue bodies into linked, status-dotted pills (struck through when the
-  target is Done/Canceled).
+  target is Done/Canceled). The pre-rebrand `COL-` prefix (`LEGACY_ISSUE_PREFIX`) is
+  still recognised **read-only** by the parser/scanner so archived `COL-n` posts and
+  stale links resolve to the same issue — but everything newly rendered or announced
+  uses `LAB-`.
 - **Realtime routing.** Issue events (`issue`, `issue_move`, `issue_comment`) broadcast
   to **all** signed-in users — the tracker is workspace-wide, unlike chat, whose every
   read/write/search/SSE event is gated by `ConversationMember` membership. Issue views

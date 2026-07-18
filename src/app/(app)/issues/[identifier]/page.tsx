@@ -28,7 +28,7 @@ export default async function IssueDetailPage({ params }: { params: Promise<{ id
   if (!detail) notFound()
   const timezone = org?.timezone ?? 'Asia/Singapore' // render timeline times in the org zone (deterministic, no hydration drift)
 
-  // Server-side ref resolution (spec §7.1): the same COL-<n> tokens work in the
+  // Server-side ref resolution (spec §7.1): the same LAB-<n> tokens work in the
   // description AND every comment. One query resolves them all; the client builds
   // the Map and threads it into renderTokens (accent pills, server-resolved).
   const refNumbers = [

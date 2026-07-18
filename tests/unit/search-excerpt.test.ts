@@ -15,16 +15,22 @@ function textOf(node: ReactNode): string {
 describe('renderExcerpt (F3 — chat search snippet)', () => {
   const names = new Map<string, string>([['u_alice', 'Alice']])
 
-  it('restores the COL- prefix instead of printing the bare number', () => {
+  it('restores the LAB- prefix instead of printing the bare number', () => {
     // Pre-fix this rendered "Fixed 5 yesterday" (the prefix was consumed by the match).
-    expect(textOf(renderExcerpt('Fixed COL-5 yesterday', names, []))).toBe('Fixed COL-5 yesterday')
+    expect(textOf(renderExcerpt('Fixed LAB-5 yesterday', names, []))).toBe('Fixed LAB-5 yesterday')
   })
 
   it('renders multiple issue refs with their prefixes', () => {
-    expect(textOf(renderExcerpt('COL-1 blocks COL-2', names, []))).toBe('COL-1 blocks COL-2')
+    expect(textOf(renderExcerpt('LAB-1 blocks LAB-2', names, []))).toBe('LAB-1 blocks LAB-2')
   })
 
   it('still renders mentions and plain text around a ref', () => {
-    expect(textOf(renderExcerpt('<@u_alice> see COL-9', names, []))).toBe('@Alice see COL-9')
+    expect(textOf(renderExcerpt('<@u_alice> see LAB-9', names, []))).toBe('@Alice see LAB-9')
+  })
+
+  // Backward-compat: an archived post containing the legacy COL- prefix re-renders
+  // with the canonical LAB- prefix (the token carries only the bare number).
+  it('re-renders a legacy COL- ref with the canonical LAB- prefix', () => {
+    expect(textOf(renderExcerpt('Fixed COL-5 yesterday', names, []))).toBe('Fixed LAB-5 yesterday')
   })
 })

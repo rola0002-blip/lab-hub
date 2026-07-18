@@ -27,7 +27,7 @@ describe('bot module', () => {
   it('announceToChannel posts a kind:user message to #lab-updates that notifies no one', async () => {
     const human = await makeUser()
     await prisma.conversationMember.create({ data: { conversationId: LAB_UPDATES_CHANNEL_ID, userId: human.id } })
-    await announceToChannel('New issue COL-3: graphene transfer SOP')
+    await announceToChannel('New issue LAB-3: graphene transfer SOP')
     const msg = await prisma.message.findFirstOrThrow({ where: { conversationId: LAB_UPDATES_CHANNEL_ID }, orderBy: { createdAt: 'desc' } })
     expect(msg.userId).toBe(COLOSSUS_BOT_ID)
     expect(msg.kind).toBe('user')

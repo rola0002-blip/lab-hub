@@ -91,12 +91,12 @@ export async function createIssueViaUI(page: Page, title: string): Promise<void>
   await page.getByRole('button', { name: 'New issue' }).first().click()
   await page.getByLabel('Issue title').fill(title)
   await page.getByRole('button', { name: 'Create issue' }).click()
-  // The composer's `router.push` lands on /issues/COL-<n>. The detail page renders
+  // The composer's `router.push` lands on /issues/LAB-<n>. The detail page renders
   // the title as an editable <input value> for admins/members (getByText never
   // matches an input value) and as an <h1> for guests — so wait for the redirect,
   // then assert whichever rendering carries our title. This is the durable signal
   // the create succeeded, not a getByText race against the input value.
-  await page.waitForURL(/\/issues\/COL-\d+$/)
+  await page.waitForURL(/\/issues\/LAB-\d+$/)
   const asInput = page.getByRole('textbox', { name: 'Issue title' })
   if (await asInput.count()) await expect(asInput).toHaveValue(title)
   else await expect(page.getByRole('heading', { name: title })).toBeVisible()

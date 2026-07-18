@@ -148,7 +148,7 @@ export default function Bell() {
             const head = g.items[0]
             const face = faceFor(head)
             const unreadGroup = g.items.some((it) => !it.readAt)
-            // Issue notifications carry a COL-<n> identifier → link the row to the issue.
+            // Issue notifications carry a LAB-<n> identifier → link the row to the issue.
             const issueHref = typeof head.payload?.identifier === 'string' ? `/issues/${head.payload.identifier}` : null
             const inner = (
               <>

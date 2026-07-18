@@ -20,7 +20,7 @@ type Attachment = { id: string; path: string; name: string; mime: string; size: 
 export function IssueDetail({ issue, attachments, timeline, role, selfId, users, projects, labels, timezone, originChip, issueRefs = [] }: {
   issue: IssueDto; attachments: Attachment[]; timeline: TimelineEntry[]; role: Role; selfId: string
   users: Opt[]; projects: Opt[]; labels: { id: string; name: string; color: string }[]; timezone: string; originChip?: ReactNode
-  // Server-resolved COL-<n> refs from the description + all comment bodies; the
+  // Server-resolved LAB-<n> refs from the description + all comment bodies; the
   // client builds the Map once (pure render) and threads it into renderTokens.
   issueRefs?: { number: number; identifier: string; title: string; status: IssueDto['status'] }[]
 }) {

@@ -14,8 +14,8 @@ describe('isNavItemActive (longest-prefix-wins)', () => {
     expect(isNavItemActive('/issues/me', '/issues/me', HREFS)).toBe(true)
     expect(isNavItemActive('/issues/me', '/issues', HREFS)).toBe(false)
   })
-  it('/issues/COL-1 (issue detail) → Issues only', () => {
-    expect(isNavItemActive('/issues/COL-1', '/issues', HREFS)).toBe(true)
-    expect(isNavItemActive('/issues/COL-1', '/issues/me', HREFS)).toBe(false)
+  it('/issues/LAB-1 (issue detail) → Issues only', () => {
+    expect(isNavItemActive('/issues/LAB-1', '/issues', HREFS)).toBe(true)
+    expect(isNavItemActive('/issues/LAB-1', '/issues/me', HREFS)).toBe(false)
   })
 })

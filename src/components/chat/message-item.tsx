@@ -117,7 +117,7 @@ function renderToken(t: Token, key: number, names: Names, selfId: string | undef
     }
     case 'emoji': return <span key={key} className={jumbo ? 'align-middle text-3xl leading-none' : undefined}>{t.value}</span>
     // Resolved → accent pill (identifier + live title + status dot, struck-through
-    // for Done/Canceled); unresolvable → plain `COL-<n>` text (pill decides).
+    // for Done/Canceled); unresolvable → plain `LAB-<n>` text (pill decides).
     case 'issueRef': return <IssueRefPill key={key} number={t.value} resolved={refs?.get(Number(t.value)) ?? undefined} />
     default: return <Fragment key={key}>{t.value}</Fragment>
   }

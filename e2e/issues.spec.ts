@@ -19,7 +19,7 @@ test('issue lifecycle: project, create, board move, comment, complete, autolink'
 
   // Create the first issue FROM the project page — the composer pre-fills the project.
   await createIssueViaUI(page, 'Calibrate the SEM')
-  await page.waitForURL('**/issues/COL-1')
+  await page.waitForURL('**/issues/LAB-1')
   await expect(page.getByText('SP4 E2E Project')).toBeVisible() // properties panel shows the pre-filled project
 
   // Filter URL round-trips. `Status` is matched exactly so it hits the FilterBar
@@ -34,7 +34,7 @@ test('issue lifecycle: project, create, board move, comment, complete, autolink'
   // Seed a second issue in the ADJACENT Todo column so the keyboard move has a
   // concrete cross-column target to land in (a single-card board has no sortable to
   // move onto, which is why the prior version asserted nothing).
-  await createIssueViaUI(page, 'Anneal the sample') // COL-2, lands on its detail
+  await createIssueViaUI(page, 'Anneal the sample') // LAB-2, lands on its detail
   await page.getByRole('button', { name: 'Set status' }).click()
   await page.getByRole('menuitem', { name: 'Todo' }).click()
   await expect(page.getByRole('button', { name: 'Set status' })).toContainText('Todo')
@@ -49,15 +49,15 @@ test('issue lifecycle: project, create, board move, comment, complete, autolink'
   await page.goto('/issues')
   await page.getByRole('button', { name: 'Board' }).click()
   const todoNeighbour = await db.issue.findFirstOrThrow({ where: { status: 'TODO' }, select: { id: true } })
-  const moveRes = await keyboardMoveCardRight(page, 'Reorder COL-1', todoNeighbour.id)
+  const moveRes = await keyboardMoveCardRight(page, 'Reorder LAB-1', todoNeighbour.id)
   expect(moveRes.ok()).toBeTruthy()
-  // COL-1 now lives in the Todo column (the keyboard DnD changed its status).
+  // LAB-1 now lives in the Todo column (the keyboard DnD changed its status).
   await expect(
-    page.locator('section[data-col-status="TODO"]').getByRole('link', { name: 'COL-1', exact: true }),
+    page.locator('section[data-col-status="TODO"]').getByRole('link', { name: 'LAB-1', exact: true }),
   ).toBeVisible()
 
   // Detail: comment + complete.
-  await page.goto('/issues/COL-1')
+  await page.goto('/issues/LAB-1')
   await page.getByLabel('Write a comment').fill('Started calibration')
   await page.getByRole('button', { name: 'Comment' }).click()
   await expect(page.getByText('Started calibration')).toBeVisible()
@@ -74,14 +74,14 @@ test('issue lifecycle: project, create, board move, comment, complete, autolink'
   await page.getByRole('button', { name: 'Create channel', exact: true }).click()
   await page.waitForURL(/\/chat\/[^/]+$/)
   const box = page.getByPlaceholder('Write a message…')
-  await box.fill('fixed in COL-1')
+  await box.fill('fixed in LAB-1')
   await box.press('Enter')
-  const pill = page.getByRole('link', { name: /COL-1/ })
+  const pill = page.getByRole('link', { name: /LAB-1/ })
   await expect(pill).toBeVisible()
-  await expect(pill).toHaveAttribute('href', '/issues/COL-1')
+  await expect(pill).toHaveAttribute('href', '/issues/LAB-1')
   await expect(pill.locator('.line-through')).toBeVisible() // Done → struck-through title
   await pill.click()
-  await page.waitForURL('**/issues/COL-1') // round-trip lands on the issue
+  await page.waitForURL('**/issues/LAB-1') // round-trip lands on the issue
   // The detail renders the title as an editable <input value> for admins (getByText
   // never matches an input value) — assert the value, and that the round-trip landed
   // on the Done issue (ties the struck-through chat pill to the detail's status).

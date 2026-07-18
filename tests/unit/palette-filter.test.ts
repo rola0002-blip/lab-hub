@@ -52,7 +52,7 @@ describe('filterCommands', () => {
   it('ranks and filters the merged issue + command kinds by label', () => {
     const items: Cmd[] = [
       { id: 'create-issue', label: 'Create issue', sub: 'Command', href: '', kind: 'command' },
-      { id: 'i1', label: 'COL-7 Fix memristor drift', sub: 'Issue', href: '/issues/COL-7', kind: 'issue' },
+      { id: 'i1', label: 'LAB-7 Fix memristor drift', sub: 'Issue', href: '/issues/LAB-7', kind: 'issue' },
       { id: 'p1', label: 'Dashboard', href: '/dashboard', kind: 'page' },
     ]
     // 'memristor' is a word-boundary hit only on the issue row.

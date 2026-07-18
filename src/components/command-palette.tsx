@@ -124,7 +124,7 @@ export function CommandPalette({ orgName = 'LabHub', role }: { orgName?: string;
   }, [])
   const close = useCallback(() => setOpen(false), [])
 
-  // Debounced issue search: an exact COL-n identifier jumps straight to the
+  // Debounced issue search: an exact LAB-n identifier jumps straight to the
   // issue (closing the palette); anything else merges into the results as
   // `kind: 'issue'` rows. State is set only after the awaited round-trip, so
   // react-hooks/set-state-in-effect is satisfied (same pattern as SearchBox).
@@ -136,7 +136,7 @@ export function CommandPalette({ orgName = 'LabHub', role }: { orgName?: string;
         const r = await fetch(`/api/issues/search?q=${encodeURIComponent(q)}`)
         if (!r.ok) return
         const d = await r.json()
-        if (d.jump) { setOpen(false); router.push(d.jump); return } // exact COL-n jumps straight in
+        if (d.jump) { setOpen(false); router.push(d.jump); return } // exact LAB-n jumps straight in
         setIssueHits((d.hits as { id: string; identifier: string; title: string }[]).map((h) => ({ id: h.id, label: `${h.identifier} ${h.title}`, sub: 'Issue', href: `/issues/${h.identifier}`, kind: 'issue' as const })))
       } catch { /* transient */ }
     }, 250)
@@ -145,7 +145,7 @@ export function CommandPalette({ orgName = 'LabHub', role }: { orgName?: string;
 
   // Debounced document search: merges kind:'document' rows (label = filename); a
   // selection opens the file in a new tab (see select()). Mirrors the issue-search
-  // effect above, minus the exact-identifier jump (documents have no COL-n).
+  // effect above, minus the exact-identifier jump (documents have no LAB-n).
   useEffect(() => {
     const q = query.trim()
     if (!q) { return }

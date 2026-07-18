@@ -58,12 +58,12 @@ test('creating an issue posts to #lab-updates', async ({ browser }) => {
   await page.getByRole('button', { name: 'New issue' }).first().click()
   await page.getByLabel('Issue title').fill('e2e furnace check')
   await page.getByRole('button', { name: 'Create issue' }).click()
-  await page.waitForURL(/\/issues\/COL-\d+$/)
+  await page.waitForURL(/\/issues\/LAB-\d+$/)
   await page.goto('/chat')
   await page.getByRole('link', { name: /lab-updates/ }).click()
-  // The bot's post renders the COL-<n> reference as a resolved pill (identifier +
+  // The bot's post renders the LAB-<n> reference as a resolved pill (identifier +
   // title spans), so the regex matches more than one node — assert the first.
-  await expect(page.getByText(/e2e furnace check|COL-\d+/).first()).toBeVisible()
+  await expect(page.getByText(/e2e furnace check|LAB-\d+/).first()).toBeVisible()
 })
 
 test('a confirmed booking shows the Add to calendar affordance on /bookings', async ({ browser }) => {

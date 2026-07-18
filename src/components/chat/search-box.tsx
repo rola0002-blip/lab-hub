@@ -6,6 +6,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { EmptyState } from '@/components/ui/empty-state'
 import { humanTime } from '@/lib/humanize'
 import { tokenizeMessage } from '@/features/chat/markdown'
+import { ISSUE_PREFIX } from '@/features/issues/identifier'
 import { useChat } from './chat-store'
 
 // Membership-scoped full-text search. A click deep-links to the exact message
@@ -58,11 +59,12 @@ export function renderExcerpt(body: string, names: Names, terms: string[]): Reac
       case 'channel': return <span key={k} className="font-medium text-[var(--text-accent)]">@channel</span>
       case 'link': return <span key={k} className="text-link">{t.label ?? t.value}</span>
       case 'emoji': return <span key={k}>{t.value}</span>
-      // issueRef `value` is the BARE number (the COL- prefix was consumed by the
-      // match), so re-add it — a compact plain-text identifier, highlight-aware, so
-      // a search for "COL-5" still marks the term (the pill treatment is reserved
-      // for full message bodies; excerpts stay compact).
-      case 'issueRef': return <Fragment key={k}>{highlight(`COL-${t.value}`, terms)}</Fragment>
+      // issueRef `value` is the BARE number (the prefix was consumed by the match,
+      // whether it was LAB- or the legacy COL- alias), so re-add the canonical LAB-
+      // prefix — a compact plain-text identifier, highlight-aware, so a search for
+      // "LAB-5" still marks the term (the pill treatment is reserved for full message
+      // bodies; excerpts stay compact).
+      case 'issueRef': return <Fragment key={k}>{highlight(`${ISSUE_PREFIX}-${t.value}`, terms)}</Fragment>
       // text / quote / listitem
       default: return <Fragment key={k}>{highlight(t.value, terms)}</Fragment>
     }
