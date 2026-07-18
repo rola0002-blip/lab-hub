@@ -17,13 +17,13 @@ export default async function MyIssuesPage({ searchParams }: { searchParams: Pro
   // Validated URL filters (assignee is locked to self, so f.assignee is ignored).
   const f = parseIssueFilters(sp)
   const [issues, users, projects, org] = await Promise.all([
-    listIssues({ assigneeId: user.id, status: f.status, projectId: f.project, labelId: f.label, priority: f.priority }),
+    listIssues({ assigneeId: user.id, status: f.status, projectId: f.project, labelId: f.label, priority: f.priority, due: f.due }),
     prisma.user.findMany({ where: { banned: false, isSystem: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
     listProjects(), getOrg(),
   ])
   const timezone = org?.timezone ?? 'Asia/Singapore'
   const today = orgToday(new Date(), timezone) // org-day reference threaded to the due chips (stable across hydration)
-  const filtered = Boolean(f.status || f.project || f.label || f.priority)
+  const filtered = Boolean(f.status || f.project || f.label || f.priority || f.due)
   const empty = filtered
     ? <EmptyState icon={SearchX} title="No issues match these filters" hint="Loosen or clear a filter to see more issues." />
     : <EmptyState icon={Inbox} title="No issues assigned to you" hint="Issues assigned to you will appear here." />

@@ -18,14 +18,14 @@ export default async function IssuesPage({ searchParams }: { searchParams: Promi
   // a Prisma enum error (typo'd/stale shared URLs must not 500).
   const f = parseIssueFilters(sp)
   const [issues, users, projects, org] = await Promise.all([
-    listIssues({ status: f.status, assigneeId: f.assignee, projectId: f.project, labelId: f.label, priority: f.priority }),
+    listIssues({ status: f.status, assigneeId: f.assignee, projectId: f.project, labelId: f.label, priority: f.priority, due: f.due }),
     prisma.user.findMany({ where: { banned: false, isSystem: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
     listProjects(), getOrg(),
   ])
   const timezone = org?.timezone ?? 'Asia/Singapore'
   const today = orgToday(new Date(), timezone) // org-day reference threaded to the due chips (stable across hydration)
   // Named empty states: filter-empty when any (valid) filter is active, else no-issues.
-  const filtered = Boolean(f.status || f.assignee || f.project || f.label || f.priority)
+  const filtered = Boolean(f.status || f.assignee || f.project || f.label || f.priority || f.due)
   const empty = filtered
     ? <EmptyState icon={SearchX} title="No issues match these filters" hint="Loosen or clear a filter to see more issues." />
     : <EmptyState icon={ListTodo} title="No issues yet" hint="Create the first issue to start tracking research and lab work." />

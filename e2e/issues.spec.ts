@@ -214,6 +214,35 @@ test('due dates: overdue reads "Overdue", due-today reads "Today", on list rows 
   await expect(todo).toContainText('Today')
 })
 
+test('filter bar: due-date quick filter narrows the list and Clear filters resets it', async ({ page }) => {
+  test.setTimeout(90_000)
+  await runWizard(page)
+  await signIn(page, ADMIN.email, ADMIN.password)
+  const admin = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  await db.issue.create({ data: { title: 'Past due task', creatorId: admin.id, status: 'TODO', rank: 'b0', dueDate: new Date(Date.now() - 3 * 86_400_000) } })
+  await db.issue.create({ data: { title: 'No due date task', creatorId: admin.id, status: 'TODO', rank: 'b1' } })
+
+  await page.goto('/issues')
+  await expect(page.getByText('Past due task')).toBeVisible()
+  await expect(page.getByText('No due date task')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Clear filters' })).toHaveCount(0) // nothing to clear yet
+
+  // Overdue quick filter → only the overdue issue; the choice round-trips through the URL.
+  await page.getByLabel('Due date').selectOption('overdue')
+  await expect(page).toHaveURL(/due=overdue/)
+  await expect(page.getByText('Past due task')).toBeVisible()
+  await expect(page.getByText('No due date task')).toHaveCount(0)
+
+  // Clear filters now shows and, in one click, drops the due filter and restores the full list.
+  const clear = page.getByRole('button', { name: 'Clear filters' })
+  await expect(clear).toBeVisible()
+  await clear.click()
+  await expect(page).not.toHaveURL(/due=/)
+  await expect(page.getByText('Past due task')).toBeVisible()
+  await expect(page.getByText('No due date task')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Clear filters' })).toHaveCount(0)
+})
+
 test('create-issue modal: status menu is fully visible and clickable, not clipped by the dialog', async ({ page }) => {
   test.setTimeout(90_000)
   await runWizard(page)

@@ -48,4 +48,12 @@ describe('parseIssueFilters (shareable-URL hardening)', () => {
     expect(f.project).toBeUndefined()   // empty string = no filter
     expect(f.label).toBeUndefined()     // array-ish = no filter
   })
+  it('validates the due quick-filter to the fixed set (overdue | week)', () => {
+    expect(parseIssueFilters({ due: 'overdue' }).due).toBe('overdue')
+    expect(parseIssueFilters({ due: 'week' }).due).toBe('week')
+    expect(parseIssueFilters({ due: 'nonsense' }).due).toBeUndefined() // stale/typo → no filter
+    expect(parseIssueFilters({ due: '' }).due).toBeUndefined()
+    expect(parseIssueFilters({ due: ['overdue'] }).due).toBeUndefined() // array-ish → no filter
+    expect(parseIssueFilters({}).due).toBeUndefined()
+  })
 })

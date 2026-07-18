@@ -1,8 +1,14 @@
 'use client'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
+import { X } from 'lucide-react'
 import { ISSUE_STATUSES, STATUS_LABEL, PRIORITIES, PRIORITY_LABEL } from '@/features/issues/status'
 
 type Opt = { id: string; name: string }
+// The filter keys this bar owns. "Clear filters" removes exactly these and preserves
+// any other query params (so it never clobbers a future view/sort key), and the reset
+// button only appears when at least one of them is active.
+const FILTER_KEYS = ['status', 'assignee', 'project', 'priority', 'label', 'due']
+
 export function FilterBar({ users, projects, lockAssignee }: { users: Opt[]; projects: Opt[]; lockAssignee?: boolean }) {
   const router = useRouter(); const pathname = usePathname(); const sp = useSearchParams()
   function set(key: string, value: string) {
@@ -10,6 +16,13 @@ export function FilterBar({ users, projects, lockAssignee }: { users: Opt[]; pro
     if (value) next.set(key, value); else next.delete(key)
     router.replace(`${pathname}?${next.toString()}`)
   }
+  function clearAll() {
+    const next = new URLSearchParams(sp.toString())
+    for (const k of FILTER_KEYS) next.delete(k)
+    const qs = next.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname)
+  }
+  const hasFilters = FILTER_KEYS.some((k) => sp.get(k))
   const selectCls = 'rounded-md border border-border bg-surface px-2 py-1 text-sm text-default hover:border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]'
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter issues">
@@ -31,6 +44,19 @@ export function FilterBar({ users, projects, lockAssignee }: { users: Opt[]; pro
         <option value="">Any priority</option>
         {PRIORITIES.map((p) => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
       </select>
+      {/* Due-date quick filter — flows through the same URL-param → listIssues path as
+          the rest; the service resolves it to a dueDate range in the org zone. */}
+      <select aria-label="Due date" value={sp.get('due') ?? ''} onChange={(e) => set('due', e.target.value)} className={selectCls}>
+        <option value="">Any due date</option>
+        <option value="week">Due this week</option>
+        <option value="overdue">Overdue</option>
+      </select>
+      {hasFilters && (
+        <button type="button" onClick={clearAll}
+          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-sm text-muted hover:bg-hover hover:text-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
+          <X size={14} aria-hidden />Clear filters
+        </button>
+      )}
     </div>
   )
 }

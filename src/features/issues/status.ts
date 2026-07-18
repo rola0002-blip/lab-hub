@@ -1,4 +1,7 @@
 import type { IssueStatus, IssuePriority } from '@prisma/client'
+// Type-only import: due.ts imports isDoneLike from here at runtime, so importing the
+// VALUE would form a cycle — the type is erased at compile time, so this is safe.
+import type { DueFilter } from './due'
 
 export const ISSUE_STATUSES: IssueStatus[] = ['BACKLOG', 'TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE', 'CANCELED']
 export const OPEN_STATUSES: IssueStatus[] = ['BACKLOG', 'TODO', 'IN_PROGRESS', 'IN_REVIEW']
@@ -44,16 +47,20 @@ export function labelTextVar(color: string): string {
 // empty strings and repeated (array) params normalized to undefined.
 export type IssueFilterParams = {
   status?: IssueStatus; priority?: IssuePriority
-  assignee?: string; project?: string; label?: string
+  assignee?: string; project?: string; label?: string; due?: DueFilter
 }
 export function parseIssueFilters(sp: Record<string, string | string[] | undefined>): IssueFilterParams {
   const one = (v: string | string[] | undefined): string | undefined =>
     typeof v === 'string' && v !== '' ? v : undefined
   const status = one(sp.status)
   const priority = one(sp.priority)
+  const due = one(sp.due)
   return {
     status: status !== undefined && (ISSUE_STATUSES as string[]).includes(status) ? (status as IssueStatus) : undefined,
     priority: priority !== undefined && (PRIORITIES as string[]).includes(priority) ? (priority as IssuePriority) : undefined,
     assignee: one(sp.assignee), project: one(sp.project), label: one(sp.label),
+    // Due quick-filter — validated to the fixed set (a stale/typo'd ?due= degrades to
+    // "no filter", never reaching the service), same posture as the enum params.
+    due: due === 'overdue' || due === 'week' ? (due as DueFilter) : undefined,
   }
 }

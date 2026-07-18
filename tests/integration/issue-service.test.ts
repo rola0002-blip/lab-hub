@@ -147,6 +147,25 @@ describe('issue-service', () => {
     expect(row?.dueDate).toBe(due.toISOString())
   })
 
+  it('filters by due-date range (overdue / this week) in the org zone, composing with status', async () => {
+    const me = await makeUser({ role: 'member' })
+    const now = new Date('2026-07-22T02:00:00Z') // Wed 2026-07-22, 10:00 SGT; week = Mon 07-20 .. Sun 07-26
+    await createIssue({ actorId: me.id, role: 'member', title: 'past', dueDate: new Date('2026-07-19T00:00:00Z') })   // overdue
+    const today = await createIssue({ actorId: me.id, role: 'member', title: 'today', dueDate: new Date('2026-07-22T00:00:00Z') }) // this week
+    await createIssue({ actorId: me.id, role: 'member', title: 'sun', dueDate: new Date('2026-07-26T00:00:00Z') })   // this week (Sunday)
+    await createIssue({ actorId: me.id, role: 'member', title: 'next', dueDate: new Date('2026-07-30T00:00:00Z') })  // outside the week
+    await createIssue({ actorId: me.id, role: 'member', title: 'none' })                                             // no due date
+
+    expect((await listIssues({ due: 'overdue' }, now)).map((i) => i.title)).toEqual(['past'])
+    expect((await listIssues({ due: 'week' }, now)).map((i) => i.title).sort()).toEqual(['sun', 'today'])
+    // No due filter → every issue (including the one with no due date) is returned.
+    expect((await listIssues({}, now)).length).toBe(5)
+    // Orthogonal to status: the due filter composes with a status filter, never overrides it.
+    await setStatus({ actorId: me.id, role: 'member', issueId: today.id, status: 'IN_PROGRESS' })
+    expect((await listIssues({ due: 'week', status: 'IN_PROGRESS' }, now)).map((i) => i.title)).toEqual(['today'])
+    expect((await listIssues({ due: 'week', status: 'BACKLOG' }, now)).map((i) => i.title)).toEqual(['sun'])
+  })
+
   it('updateDescription notifies newly-mentioned users, writes no activity, and does not re-notify', async () => {
     const me = await makeUser({ role: 'member' })
     const mentioned = await makeUser({ role: 'member' })

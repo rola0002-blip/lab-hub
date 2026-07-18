@@ -13,6 +13,7 @@ import * as bot from '@/features/bot'
 import { assertCanMutate, PolicyError } from './issue-policy'
 import { rankBetween, rebalance, REBALANCE_THRESHOLD } from './rank'
 import { formatIdentifier } from './identifier'
+import { dueRange, type DueFilter } from './due'
 
 export type IssueDto = {
   id: string; number: number; identifier: string; title: string; description: string
@@ -51,8 +52,14 @@ export function toDto(i: Loaded): IssueDto {
 // ── reads ────────────────────────────────────────────────────────────────────
 export type IssueFilter = {
   status?: IssueStatus; assigneeId?: string; projectId?: string | null; labelId?: string; priority?: IssuePriority
+  due?: DueFilter
 }
-export async function listIssues(filter: IssueFilter = {}): Promise<IssueDto[]> {
+// `now` is injectable so the due quick-filter is deterministic under test. The due
+// filter is a PURE dueDate range (features/issues/due.ts → dueRange), resolved in the
+// org timezone; it is orthogonal to the status filter and composes with it, matching
+// every other filter param. Org tz is only fetched when a due filter is active.
+export async function listIssues(filter: IssueFilter = {}, now: Date = new Date()): Promise<IssueDto[]> {
+  const tz = filter.due ? ((await prisma.organization.findFirst({ select: { timezone: true } }))?.timezone ?? 'Asia/Singapore') : null
   const rows = await prisma.issue.findMany({
     where: {
       ...(filter.status ? { status: filter.status } : {}),
@@ -60,6 +67,7 @@ export async function listIssues(filter: IssueFilter = {}): Promise<IssueDto[]> 
       ...(filter.projectId !== undefined ? { projectId: filter.projectId } : {}),
       ...(filter.priority ? { priority: filter.priority } : {}),
       ...(filter.labelId ? { labels: { some: { labelId: filter.labelId } } } : {}),
+      ...(filter.due && tz ? { dueDate: dueRange(filter.due, now, tz) } : {}),
     },
     orderBy: [{ status: 'asc' }, { rank: 'asc' }], // rank ordered byte-wise (COLLATE "C")
     include: ISSUE_INCLUDE,
