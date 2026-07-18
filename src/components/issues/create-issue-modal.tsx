@@ -29,7 +29,11 @@ function Composer({ users, projects, currentUserId }: { users: Opt[]; projects: 
   const { prefill } = getIssueComposer()
   const [title, setTitle] = useState(prefill.title ?? '')
   const [description, setDescription] = useState(prefill.description ?? '')
-  const [status, setStatus] = useState<IssueStatus>('BACKLOG')
+  // New issues default to Todo (v0.9.5): quick-captured work is actionable, not
+  // triage. This is a COMPOSER default only — Backlog stays selectable, and the
+  // service/schema default stays BACKLOG (the neutral fallback for any caller that
+  // omits status; the composer always sends one explicitly, so no migration).
+  const [status, setStatus] = useState<IssueStatus>('TODO')
   const [priority, setPriority] = useState<IssuePriority>('NONE')
   // Quick-capture (c, ⌘K, create-from-chat) defaults the assignee to the current
   // user; the "New issue" buttons leave it unset. Editable in every case.

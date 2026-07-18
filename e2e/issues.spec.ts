@@ -141,6 +141,30 @@ test('quick-capture defaults the assignee to the current user; New issue button 
   await expect(dialog.getByRole('button', { name: 'Assignee' })).toContainText('Unassigned')
 })
 
+test('composer defaults new issues to Todo; Backlog stays selectable', async ({ page }) => {
+  test.setTimeout(90_000)
+  await runWizard(page)
+  await signIn(page, ADMIN.email, ADMIN.password)
+  await page.goto('/issues')
+
+  // Default status is Todo (was Backlog).
+  await page.getByRole('button', { name: 'New issue' }).first().click()
+  const dialog = page.getByRole('dialog', { name: 'New issue' })
+  await expect(dialog.getByRole('button', { name: 'Status', exact: true })).toContainText('Todo')
+
+  // Backlog is still selectable — a default, not a restriction.
+  await dialog.getByRole('button', { name: 'Status', exact: true }).click()
+  await dialog.getByRole('menuitem', { name: 'Backlog' }).click()
+  await expect(dialog.getByRole('button', { name: 'Status', exact: true })).toContainText('Backlog')
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+
+  // Accepting the Todo default persists as TODO (the create path honours it end-to-end).
+  await createIssueViaUI(page, 'Default-status probe')
+  const created = await db.issue.findFirstOrThrow({ where: { title: 'Default-status probe' }, select: { status: true } })
+  expect(created.status).toBe('TODO')
+})
+
 test('create-issue modal: status menu is fully visible and clickable, not clipped by the dialog', async ({ page }) => {
   test.setTimeout(90_000)
   await runWizard(page)
