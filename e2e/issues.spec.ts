@@ -89,14 +89,36 @@ test('issue lifecycle: project, create, board move, comment, complete, autolink'
   await expect(page.getByRole('button', { name: 'Set status' })).toContainText('Done')
 })
 
-test('c shortcut never stacks the composer over an open modal', async ({ page }) => {
-  test.setTimeout(90_000)
+test('c shortcut: global quick-capture that respects the typing and modal guards', async ({ page }) => {
+  test.setTimeout(120_000)
   await runWizard(page)
   await signIn(page, ADMIN.email, ADMIN.password)
 
-  // (a) Project-composer modal open with focus on its Cancel BUTTON — not an input,
-  // so use-global-hotkey's INPUT/TEXTAREA guard does not apply; only issue-hotkeys'
-  // `[role=dialog][aria-modal]` check stops `c` from stacking the create-issue modal.
+  // Global (v0.9.5): the pathname gate is gone, so `c` raises the composer from a
+  // non-issues page (the dashboard), not only /issues and /projects.
+  await page.goto('/dashboard')
+  await page.keyboard.press('c')
+  await expect(page.getByRole('dialog', { name: 'New issue' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog', { name: 'New issue' })).toHaveCount(0)
+
+  // Typing guard HOLDS in chat: `c` typed into the message textarea inserts the
+  // character and does NOT open the composer (use-global-hotkey's TEXTAREA guard).
+  await page.goto('/chat')
+  await page.getByRole('button', { name: 'Browse or create channels' }).click()
+  await page.getByRole('button', { name: 'New channel' }).click()
+  await page.getByPlaceholder('e.g. cvd-lab').fill('c-guard')
+  await page.getByRole('button', { name: 'Create channel', exact: true }).click()
+  await page.waitForURL(/\/chat\/[^/]+$/)
+  const box = page.getByPlaceholder('Write a message…')
+  await box.click()
+  await box.pressSequentially('abc') // real keydowns, including 'c'
+  await expect(box).toHaveValue('abc')
+  await expect(page.getByRole('dialog', { name: 'New issue' })).toHaveCount(0)
+
+  // Modal guard (a): project-composer modal open with focus on its Cancel BUTTON —
+  // not an input, so use-global-hotkey's INPUT/TEXTAREA guard does not apply; only
+  // issue-hotkeys' `[role=dialog][aria-modal]` check stops `c` from stacking.
   await page.goto('/projects')
   await page.getByRole('button', { name: 'New project' }).click()
   await expect(page.getByRole('dialog', { name: 'New project' })).toBeVisible()
@@ -107,7 +129,7 @@ test('c shortcut never stacks the composer over an open modal', async ({ page })
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
-  // (b) ⌘K command palette open — `c` still must not raise the composer.
+  // Modal guard (b): ⌘K command palette open — `c` still must not raise the composer.
   await page.goto('/issues')
   await expect(async () => {
     await page.keyboard.press('ControlOrMeta+k')
