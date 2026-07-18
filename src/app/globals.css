@@ -123,6 +123,11 @@
   /* danger AS TEXT: the raw --color-danger (#e01e5a) is a fill colour that only
      clears ~3.6:1 on the dark canvas; --text-danger is theme-flipped to stay AA. */
   --text-danger:var(--color-danger);
+  /* Due-date legibility (v0.9.5): overdue reads red, due-today reads amber, both
+     AS TEXT on the canvas, so both clear the 4.5:1 AA bar (gated in
+     scripts/check-contrast.mjs) and are theme-split like --text-danger. */
+  --text-overdue:#b91c1c;    /* red-700  */
+  --text-due-today:#b45309;  /* amber-700 */
   /* Per-author message-name hue lightness. Kept dark on the light canvas so any
      hue at 45% S clears AA (≥4.5:1); the dark theme lifts it (see below). */
   --author-name-l:32%;
@@ -154,6 +159,8 @@
   --text-default:#d1d2d3; --text-muted:#ababad; --text-subtle:#8d8f92;
   --text-inverse:#1a1d21; --text-link:var(--color-teal-300); --text-accent:var(--color-teal-300);
   --text-danger:#ff6b81; /* lighter raspberry so danger text clears AA (~6:1) on the dark canvas */
+  --text-overdue:#f87171;   /* red-400, lifted so overdue text clears AA on the dark canvas */
+  --text-due-today:#fbbf24; /* amber-400, lifted so due-today text clears AA on the dark canvas */
   --author-name-l:72%; /* lifted so per-author hues clear AA on the dark canvas */
 
   --border-default:rgb(255 255 255 / .10); --border-strong:rgb(255 255 255 / .18);

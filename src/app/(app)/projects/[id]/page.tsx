@@ -5,6 +5,7 @@ import { prisma } from '@/lib/db'
 import { getOrg } from '@/lib/org'
 import { getProject } from '@/features/issues/project-service'
 import { listIssues } from '@/features/issues/issue-service'
+import { orgToday } from '@/features/issues/due'
 import { IssuesSurface } from '@/components/issues/issues-surface'
 import { ProjectHeader } from '@/components/issues/project-header'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -19,11 +20,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   ])
   if (!project) notFound()
   const timezone = org?.timezone ?? 'Asia/Singapore'
+  const today = orgToday(new Date(), timezone) // org-day reference threaded to the due chips
   const empty = <EmptyState icon={ListTodo} title="No issues in this project yet" hint='Use "New issue" above — it pre-fills this project.' />
   return (
     <div className="space-y-5">
       <ProjectHeader project={project} role={user.role} users={users} timezone={timezone} />
-      <IssuesSurface initial={issues} role={user.role} users={users} timezone={timezone} empty={empty} />
+      <IssuesSurface initial={issues} role={user.role} users={users} timezone={timezone} today={today} empty={empty} />
     </div>
   )
 }

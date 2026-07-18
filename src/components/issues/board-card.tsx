@@ -10,9 +10,10 @@ import { StatusIcon, PriorityIcon } from './status'
 import { ISSUE_STATUSES, STATUS_LABEL, isDoneLike } from '@/features/issues/status'
 import { setStatusAction } from '@/app/(app)/issues/actions'
 import { toast } from '@/lib/toast-store'
+import { DueDate } from './due-date'
 import type { IssueDto } from '@/features/issues/issue-service'
 
-export function BoardCard({ issue, disabled }: { issue: IssueDto; disabled: boolean }) {
+export function BoardCard({ issue, disabled, today, timezone }: { issue: IssueDto; disabled: boolean; today: string; timezone: string }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: issue.id, disabled })
   const [, start] = useTransition()
   return (
@@ -35,6 +36,9 @@ export function BoardCard({ issue, disabled }: { issue: IssueDto; disabled: bool
               : <Menu label={`Status: ${STATUS_LABEL[issue.status]}`} button={<StatusIcon status={issue.status} size={13} />}
                   items={ISSUE_STATUSES.map((s) => ({ label: STATUS_LABEL[s], onSelect: () => start(() => setStatusAction(issue.id, s).then((r) => { if (!r.ok) toast(r.message) })) }))} />}
             <span className="flex-1" />
+            {/* Board cards previously hid due dates entirely (v0.9.5): surface it,
+                colour-coded for overdue/today. Only rendered when a due date exists. */}
+            {issue.dueDate && <DueDate dueDate={issue.dueDate} status={issue.status} today={today} timezone={timezone} className="text-2xs tabular-nums" />}
             {issue.assignee && <Avatar size={20} name={issue.assignee.name} id={issue.assignee.id} image={issue.assignee.image} />}
           </div>
         </div>

@@ -35,7 +35,7 @@ function useBoardCollapse(): [Set<IssueStatus>, (s: Set<IssueStatus>) => void] {
   return [collapsed, set]
 }
 
-export function BoardView({ initial, role }: { initial: IssueDto[]; role: Role }) {
+export function BoardView({ initial, role, today, timezone }: { initial: IssueDto[]; role: Role; today: string; timezone: string }) {
   const router = useRouter()
   const readOnly = role === 'guest'
   const [issues, setIssues] = useState(initial)
@@ -83,10 +83,10 @@ export function BoardView({ initial, role }: { initial: IssueDto[]; role: Role }
   }
 
   const columns = readOnly
-    ? <BoardColumns byStatus={byStatus} collapsed={collapsed} setCollapsed={setCollapsed} readOnly />
+    ? <BoardColumns byStatus={byStatus} collapsed={collapsed} setCollapsed={setCollapsed} readOnly today={today} timezone={timezone} />
     : (
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={onDragEnd}>
-        <BoardColumns byStatus={byStatus} collapsed={collapsed} setCollapsed={setCollapsed} readOnly={false} />
+        <BoardColumns byStatus={byStatus} collapsed={collapsed} setCollapsed={setCollapsed} readOnly={false} today={today} timezone={timezone} />
       </DndContext>
     )
   // Mobile: horizontal snap scroll (§6.7). Desktop: side-by-side columns.
@@ -101,8 +101,9 @@ function ColumnDroppable({ status, children }: { status: IssueStatus; children: 
   return <div ref={setNodeRef} className="flex min-h-8 flex-col gap-2">{children}</div>
 }
 
-function BoardColumns({ byStatus, collapsed, setCollapsed, readOnly }: {
+function BoardColumns({ byStatus, collapsed, setCollapsed, readOnly, today, timezone }: {
   byStatus: Map<IssueStatus, IssueDto[]>; collapsed: Set<IssueStatus>; setCollapsed: (s: Set<IssueStatus>) => void; readOnly: boolean
+  today: string; timezone: string
 }) {
   return (
     <>
@@ -121,7 +122,7 @@ function BoardColumns({ byStatus, collapsed, setCollapsed, readOnly }: {
             {!isCollapsed && (
               <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
                 <ColumnDroppable status={status}>
-                  {items.map((i) => <BoardCard key={i.id} issue={i} disabled={readOnly} />)}
+                  {items.map((i) => <BoardCard key={i.id} issue={i} disabled={readOnly} today={today} timezone={timezone} />)}
                 </ColumnDroppable>
               </SortableContext>
             )}

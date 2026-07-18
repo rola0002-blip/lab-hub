@@ -5,6 +5,7 @@ import { getOrg } from '@/lib/org'
 import { listIssues } from '@/features/issues/issue-service'
 import { listProjects } from '@/features/issues/project-service'
 import { parseIssueFilters } from '@/features/issues/status'
+import { orgToday } from '@/features/issues/due'
 import { IssuesSurface } from '@/components/issues/issues-surface'
 import { FilterBar } from '@/components/issues/filter-bar'
 import { NewIssueButton } from '@/components/issues/new-issue-button'
@@ -21,6 +22,7 @@ export default async function MyIssuesPage({ searchParams }: { searchParams: Pro
     listProjects(), getOrg(),
   ])
   const timezone = org?.timezone ?? 'Asia/Singapore'
+  const today = orgToday(new Date(), timezone) // org-day reference threaded to the due chips (stable across hydration)
   const filtered = Boolean(f.status || f.project || f.label || f.priority)
   const empty = filtered
     ? <EmptyState icon={SearchX} title="No issues match these filters" hint="Loosen or clear a filter to see more issues." />
@@ -32,7 +34,7 @@ export default async function MyIssuesPage({ searchParams }: { searchParams: Pro
         {user.role !== 'guest' && <NewIssueButton />}
       </div>
       <FilterBar users={users} projects={projects.map((p) => ({ id: p.id, name: p.name }))} lockAssignee />
-      <IssuesSurface key={JSON.stringify(sp)} initial={issues} role={user.role} users={users} timezone={timezone} closedGrouped empty={empty} />
+      <IssuesSurface key={JSON.stringify(sp)} initial={issues} role={user.role} users={users} timezone={timezone} today={today} closedGrouped empty={empty} />
     </div>
   )
 }

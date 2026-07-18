@@ -5,6 +5,7 @@ import { getOrg } from '@/lib/org'
 import { listIssues } from '@/features/issues/issue-service'
 import { listProjects } from '@/features/issues/project-service'
 import { parseIssueFilters } from '@/features/issues/status'
+import { orgToday } from '@/features/issues/due'
 import { IssuesSurface } from '@/components/issues/issues-surface'
 import { FilterBar } from '@/components/issues/filter-bar'
 import { NewIssueButton } from '@/components/issues/new-issue-button'
@@ -22,6 +23,7 @@ export default async function IssuesPage({ searchParams }: { searchParams: Promi
     listProjects(), getOrg(),
   ])
   const timezone = org?.timezone ?? 'Asia/Singapore'
+  const today = orgToday(new Date(), timezone) // org-day reference threaded to the due chips (stable across hydration)
   // Named empty states: filter-empty when any (valid) filter is active, else no-issues.
   const filtered = Boolean(f.status || f.assignee || f.project || f.label || f.priority)
   const empty = filtered
@@ -34,7 +36,7 @@ export default async function IssuesPage({ searchParams }: { searchParams: Promi
         {user.role !== 'guest' && <NewIssueButton />}
       </div>
       <FilterBar users={users} projects={projects.map((p) => ({ id: p.id, name: p.name }))} />
-      <IssuesSurface key={JSON.stringify(sp)} initial={issues} role={user.role} users={users} timezone={timezone} empty={empty} />
+      <IssuesSurface key={JSON.stringify(sp)} initial={issues} role={user.role} users={users} timezone={timezone} today={today} empty={empty} />
     </div>
   )
 }

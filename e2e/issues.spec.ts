@@ -187,6 +187,33 @@ test('composer defaults new issues to Todo; Backlog stays selectable', async ({ 
   expect(created.status).toBe('TODO')
 })
 
+test('due dates: overdue reads "Overdue", due-today reads "Today", on list rows (desktop + mobile) and board cards', async ({ page }) => {
+  test.setTimeout(90_000)
+  await runWizard(page)
+  await signIn(page, ADMIN.email, ADMIN.password)
+  const admin = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  // Titles deliberately avoid the words "Overdue"/"Today" so the assertions can only
+  // be satisfied by the due-date chip, never the title text.
+  await db.issue.create({ data: { title: 'Furnace calibration', creatorId: admin.id, assigneeId: admin.id, status: 'TODO', rank: 'a0', dueDate: new Date(Date.now() - 3 * 86_400_000) } })
+  await db.issue.create({ data: { title: 'Sample annealing', creatorId: admin.id, assigneeId: admin.id, status: 'TODO', rank: 'a1', dueDate: new Date() } })
+
+  // List rows (desktop).
+  await page.goto('/issues')
+  await expect(page.getByRole('listitem').filter({ hasText: 'Furnace calibration' })).toContainText('Overdue')
+  await expect(page.getByRole('listitem').filter({ hasText: 'Sample annealing' })).toContainText('Today')
+
+  // Mobile layout: the same responsive row still carries the word at a narrow viewport.
+  await page.setViewportSize({ width: 375, height: 800 })
+  await expect(page.getByRole('listitem').filter({ hasText: 'Furnace calibration' })).toContainText('Overdue')
+  await page.setViewportSize({ width: 1280, height: 800 })
+
+  // Board cards — previously hid due dates entirely; now surfaced + colour-coded.
+  await page.getByRole('button', { name: 'Board' }).click()
+  const todo = page.locator('section[data-col-status="TODO"]')
+  await expect(todo).toContainText('Overdue')
+  await expect(todo).toContainText('Today')
+})
+
 test('create-issue modal: status menu is fully visible and clickable, not clipped by the dialog', async ({ page }) => {
   test.setTimeout(90_000)
   await runWizard(page)

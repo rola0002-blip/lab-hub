@@ -6,8 +6,8 @@ import { boardSignature } from '@/features/issues/board-signature'
 import type { IssueDto } from '@/features/issues/issue-service'
 import type { Role } from '@/lib/session'
 type Opt = { id: string; name: string; image?: string | null }
-export function IssuesSurface({ initial, role, users, timezone, closedGrouped = false, empty = null }: {
-  initial: IssueDto[]; role: Role; users: Opt[]; timezone: string; closedGrouped?: boolean; empty?: React.ReactNode
+export function IssuesSurface({ initial, role, users, timezone, today, closedGrouped = false, empty = null }: {
+  initial: IssueDto[]; role: Role; users: Opt[]; timezone: string; today: string; closedGrouped?: boolean; empty?: React.ReactNode
 }) {
   const [view] = useIssueView()
   return (
@@ -21,8 +21,8 @@ export function IssuesSurface({ initial, role, users, timezone, closedGrouped = 
           // (title/priority/assignee) also remounts the board — otherwise BoardView's
           // seeded useState keeps rendering the stale card (F1). Collapse state
           // survives the remount (board-collapse localStorage store).
-          ? <BoardView key={boardSignature(initial)} initial={initial} role={role} />
-          : <IssueListView issues={initial} role={role} users={users} timezone={timezone} closedGrouped={closedGrouped} empty={empty} />}
+          ? <BoardView key={boardSignature(initial)} initial={initial} role={role} today={today} timezone={timezone} />
+          : <IssueListView issues={initial} role={role} users={users} timezone={timezone} today={today} closedGrouped={closedGrouped} empty={empty} />}
     </div>
   )
 }

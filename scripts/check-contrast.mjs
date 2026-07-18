@@ -66,6 +66,8 @@ const BASE = {
     textMuted: hex('#616160'),                         // --text-muted   (neutral-600)
     textSubtle: hex('#71706e'),                        // --text-subtle  (nudged for AA)
     textDanger: hex('#e01e5a'),                        // --text-danger  (= --color-danger)
+    textOverdue: hex('#b91c1c'),                       // --text-overdue  (red-700)
+    textDueToday: hex('#b45309'),                      // --text-due-today (amber-700)
     sidebarMuted: over(WHITE, 0.55, SIDEBAR_BG.light), // --sidebar-muted rgb(255 255 255/.55)
     accent: hex('#0d9488'),                            // --accent (teal-600)
     accentOn: WHITE,                                   // --accent-on (neutral-0)
@@ -84,6 +86,8 @@ const BASE = {
     textMuted: hex('#ababad'),
     textSubtle: hex('#8d8f92'),                        // --text-subtle (dark)
     textDanger: hex('#ff6b81'),                        // --text-danger (dark, lightened)
+    textOverdue: hex('#f87171'),                       // --text-overdue (dark, lifted)
+    textDueToday: hex('#fbbf24'),                      // --text-due-today (dark, lifted)
     sidebarMuted: over(WHITE, 0.50, SIDEBAR_BG.dark),  // rgb(255 255 255/.50)
     accent: hex('#14b8a6'),                            // --accent (teal-500)
     accentOn: hex('#06231f'),                          // --accent-on
@@ -116,6 +120,9 @@ for (const theme of ['light', 'dark']) {
   check(theme, 'text-muted / canvas', b.textMuted, canvas, AA_TEXT)
   check(theme, 'text-subtle / canvas', b.textSubtle, canvas, AA_TEXT)
   check(theme, 'text-danger / canvas', b.textDanger, canvas, AA_TEXT)
+  // Due-date legibility tokens (v0.9.5) — real text on the canvas, so the 4.5:1 AA bar.
+  check(theme, 'text-overdue / canvas', b.textOverdue, canvas, AA_TEXT)
+  check(theme, 'text-due-today / canvas', b.textDueToday, canvas, AA_TEXT)
   check(theme, 'sidebar-muted / sidebar-bg', b.sidebarMuted, SIDEBAR_BG[theme], AA_TEXT)
   check(theme, 'text-default / bg-selected', b.textDefault, b.selected, AA_TEXT) // selected rows stay readable
   check(theme, 'sidebar-active-text / sidebar-active-bg', WHITE, b.sidebarActive, AA_TEXT) // active nav label
