@@ -9,6 +9,7 @@ import { humanTime, clockTime } from '@/lib/humanize'
 import { tokenizeMessage, type Token } from '@/features/chat/markdown'
 import { EMOJI_MAP } from '@/features/chat/emoji'
 import { openIssueComposer } from '@/lib/issue-composer-store'
+import { toast } from '@/lib/toast-store'
 import { useChat } from './chat-store'
 import { EmojiPicker } from './emoji-picker'
 import { IssueRefPill, type RefData } from './issue-ref-pill'
@@ -191,32 +192,58 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
   const grouped = !!prev && !newDay && prev.author.id === msg.author.id && cur.getTime() - prevDate!.getTime() < 5 * 60 * 1000 && !forceLeading
   const leading = !grouped
 
+  // Refetch this message after a mutation. A transient GET failure is swallowed
+  // (never a throw → unhandled rejection): the pane's SSE rx/msg_edit/msg_del event
+  // refetches too, so the row still converges on server truth without a toast here.
   async function refresh() {
-    const r = await fetch(`/api/chat/messages/${msg.id}`)
-    if (r.ok) onUpdated((await r.json()).message)
+    try {
+      const r = await fetch(`/api/chat/messages/${msg.id}`)
+      if (r.ok) onUpdated((await r.json()).message)
+    } catch { /* transient network error; SSE reconciles */ }
   }
   async function react(emoji: string) {
     setPickerAt(null)
-    await fetch(`/api/chat/messages/${msg.id}/reactions`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emoji }),
-    })
-    await refresh()
+    try {
+      const r = await fetch(`/api/chat/messages/${msg.id}/reactions`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emoji }),
+      })
+      if (!r.ok) throw new Error('reaction failed')
+      await refresh()
+    } catch {
+      // No optimistic local state to roll back — the lozenges render from the
+      // server DTO, so on failure we just surface it and leave the row unchanged.
+      toast('Could not update your reaction. Please try again.')
+    }
   }
   async function saveEdit() {
     const body = draft.trim()
     if (!body) return
     setBusy(true)
-    const r = await fetch(`/api/chat/messages/${msg.id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body }),
-    })
-    setBusy(false)
-    if (r.ok) { setEditing(false); await refresh() }
+    try {
+      const r = await fetch(`/api/chat/messages/${msg.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body }),
+      })
+      if (!r.ok) throw new Error('edit failed')
+      setEditing(false) // exit the editor only on success; a failure keeps it open with the draft intact
+      await refresh()
+    } catch {
+      toast('Could not save your edit. Please try again.')
+    } finally {
+      setBusy(false)
+    }
   }
   async function del() {
     setBusy(true)
-    const r = await fetch(`/api/chat/messages/${msg.id}`, { method: 'DELETE' })
-    setBusy(false)
-    if (r.ok) { setConfirmDel(false); await refresh() }
+    try {
+      const r = await fetch(`/api/chat/messages/${msg.id}`, { method: 'DELETE' })
+      if (!r.ok) throw new Error('delete failed')
+      setConfirmDel(false)
+      await refresh()
+    } catch {
+      toast('Could not delete the message. Please try again.')
+    } finally {
+      setBusy(false)
+    }
   }
   // Copy a deep-link to this message (`/chat/<cid>?msg=<id>`) and flash an inline
   // "Link copied" confirmation. The global toast system is Task 17's; this is a

@@ -298,3 +298,55 @@ test('6: DM with unread badge', async ({ browser }) => {
   await pageB.context().close()
   await page.context().close()
 })
+
+// Regression (v0.9.5 fix 8): a failed reaction / edit / delete used to fail silently —
+// the reaction POST had no ok-check or catch (an aborted request became an unhandled
+// rejection) and edit/delete gave no feedback. Each must now surface a toast and leave
+// the row recoverable. Aborting the specific request forces the failure deterministically.
+// URL-anchored regexes keep the message-endpoint route (PATCH/DELETE) from also catching
+// the …/reactions sub-path.
+const REACTIONS_URL = /\/api\/chat\/messages\/[^/]+\/reactions$/
+const MESSAGE_URL = /\/api\/chat\/messages\/[^/?]+$/
+
+test('7: a failed reaction / edit / delete surfaces a toast (no silent failure)', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  await createChannel(page, 'lab')
+  await send(page, 'network will fail')
+  await expect(logMsg(page, 'network will fail')).toBeVisible()
+
+  // Reaction: abort the POST → a toast, and the picker closes without a lozenge.
+  await page.route(REACTIONS_URL, (r) => r.abort())
+  await page.getByText('network will fail').hover()
+  await page.getByTitle('Add reaction').click()
+  await page.getByRole('button', { name: 'react 👍' }).click()
+  await expect(page.getByText('Could not update your reaction. Please try again.')).toBeVisible()
+  await page.unroute(REACTIONS_URL)
+
+  // Edit: abort the PATCH (let the GET refresh through) → a toast, and the editor stays
+  // open with the draft intact (Save still visible). Cancel to restore the plain row.
+  await page.route(MESSAGE_URL, (r) => (r.request().method() === 'PATCH' ? r.abort() : r.continue()))
+  await page.getByText('network will fail').hover()
+  await page.getByRole('button', { name: 'More actions' }).click()
+  await page.getByRole('menuitem', { name: 'Edit' }).click()
+  const editBox = page.locator('textarea:not([placeholder])')
+  await editBox.fill('edited but doomed')
+  await editBox.press('Enter')
+  await expect(page.getByText('Could not save your edit. Please try again.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Save' })).toBeVisible() // still editing, not dismissed
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await page.unroute(MESSAGE_URL)
+
+  // Delete: abort the DELETE → a toast, and the message is NOT tombstoned.
+  await page.route(MESSAGE_URL, (r) => (r.request().method() === 'DELETE' ? r.abort() : r.continue()))
+  await page.getByText('network will fail').hover()
+  await page.getByRole('button', { name: 'More actions' }).click()
+  await page.getByRole('menuitem', { name: 'Delete' }).click()
+  await page.getByRole('button', { name: 'Delete', exact: true }).click()
+  await expect(page.getByText('Could not delete the message. Please try again.')).toBeVisible()
+  await expect(logMsg(page, 'network will fail')).toBeVisible()
+  await expect(page.getByText('message deleted')).toHaveCount(0)
+  await page.unroute(MESSAGE_URL)
+
+  await page.context().close()
+})
