@@ -8,6 +8,7 @@ import {
 import { Avatar } from '@/components/ui/avatar'
 import { EmptyState } from '@/components/ui/empty-state'
 import { humanTime } from '@/lib/humanize'
+import { notificationHref } from '@/lib/notification-href'
 import { usePushOptIn } from './hooks/use-push-optin'
 import { useChat } from './chat/chat-store'
 import { useEvents } from './use-events'
@@ -148,8 +149,11 @@ export default function Bell() {
             const head = g.items[0]
             const face = faceFor(head)
             const unreadGroup = g.items.some((it) => !it.readAt)
-            // Issue notifications carry a LAB-<n> identifier → link the row to the issue.
-            const issueHref = typeof head.payload?.identifier === 'string' ? `/issues/${head.payload.identifier}` : null
+            // Every notification type resolves to its target: issue → /issues/<id>,
+            // DM/mention/channel → the conversation (deep-linked to the message when
+            // known), booking → its bookings/approvals page. Grouping only merges
+            // same-conversation rows, so the head is representative of the group.
+            const href = notificationHref(head)
             const inner = (
               <>
                 <FaceAvatar face={face} />
@@ -166,10 +170,10 @@ export default function Bell() {
                 </div>
               </>
             )
-            return issueHref ? (
+            return href ? (
               // Close the tray on navigate — the outside-click guard skips in-panel
-              // clicks, so without this the panel would sit on top of the issue page.
-              <Link key={g.key} href={issueHref} onClick={() => setOpen(false)} className="flex gap-2.5 rounded-lg p-2 transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">{inner}</Link>
+              // clicks, so without this the panel would sit on top of the target page.
+              <Link key={g.key} href={href} onClick={() => setOpen(false)} className="flex gap-2.5 rounded-lg p-2 transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">{inner}</Link>
             ) : (
               <div key={g.key} className="flex gap-2.5 rounded-lg p-2 transition-colors hover:bg-hover">{inner}</div>
             )
