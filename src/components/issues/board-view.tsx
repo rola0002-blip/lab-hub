@@ -8,6 +8,7 @@ import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrate
 import { ChevronRight } from 'lucide-react'
 import { toast } from '@/lib/toast-store'
 import { useEvents } from '@/components/use-events'
+import { isIssueRefetchEvent } from '@/features/issues/issue-events'
 import { ISSUE_STATUSES, STATUS_LABEL } from '@/features/issues/status'
 import { BOARD_COLLAPSE_KEY, parseCollapsed, serializeCollapsed } from '@/features/issues/board-collapse'
 import { StatusIcon } from './status'
@@ -41,7 +42,7 @@ export function BoardView({ initial, role, today, timezone }: { initial: IssueDt
   const [issues, setIssues] = useState(initial)
   const [collapsed, setCollapsed] = useBoardCollapse() // default: Canceled collapsed (board-collapse.ts)
 
-  useEvents((e) => { if (e.t === 'issue' || e.t === 'issue_move' || e.t === 'issue_comment') router.refresh() })
+  useEvents((e) => { if (isIssueRefetchEvent(e)) router.refresh() }) // issue events + post-outage reconnect
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),

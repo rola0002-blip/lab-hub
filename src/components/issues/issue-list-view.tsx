@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { ISSUE_STATUSES, OPEN_STATUSES, STATUS_LABEL, isDoneLike } from '@/features/issues/status'
 import { nextRovingIndex } from '@/lib/roving'
 import { useEvents } from '@/components/use-events'
+import { isIssueRefetchEvent } from '@/features/issues/issue-events'
 import { IssueRow } from './issue-row'
 import { StatusIcon } from './status'
 import type { IssueDto } from '@/features/issues/issue-service'
@@ -21,8 +22,9 @@ export function IssueListView({ issues, role, users, timezone, today, closedGrou
   const [active, setActive] = useState(0)
   const listRef = useRef<HTMLDivElement>(null)
 
-  // Any issue SSE event → refetch the current server-rendered view (URL carries filters).
-  useEvents((e) => { if (e.t === 'issue' || e.t === 'issue_move' || e.t === 'issue_comment') router.refresh() })
+  // Any issue SSE event (and a post-outage reconnect) → refetch the current
+  // server-rendered view (URL carries filters).
+  useEvents((e) => { if (isIssueRefetchEvent(e)) router.refresh() })
 
   const groups = useMemo(() => {
     const order = closedGrouped ? [...OPEN_STATUSES] : ISSUE_STATUSES

@@ -11,6 +11,7 @@ import { PropertiesPanel } from './properties-panel'
 import { setTitleAction, updateDescriptionAction } from '@/app/(app)/issues/actions'
 import { toast } from '@/lib/toast-store'
 import { useEvents } from '@/components/use-events'
+import { isIssueRefetchEvent } from '@/features/issues/issue-events'
 import type { IssueDto } from '@/features/issues/issue-service'
 import type { TimelineEntry } from '@/features/issues/comment-service'
 import type { Role } from '@/lib/session'
@@ -32,7 +33,7 @@ export function IssueDetail({ issue, attachments, timeline, role, selfId, users,
   const [, start] = useTransition()
   const names = new Map(users.map((u) => [u.id, u.name]))
   const refsMap: Map<number, RefData> = new Map(issueRefs.map((r) => [r.number, r]))
-  useEvents((e) => { if (e.t === 'issue' || e.t === 'issue_comment' || e.t === 'issue_move') router.refresh() })
+  useEvents((e) => { if (isIssueRefetchEvent(e)) router.refresh() }) // issue events + post-outage reconnect
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_18rem]">
