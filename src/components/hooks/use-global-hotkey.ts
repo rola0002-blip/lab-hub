@@ -13,7 +13,7 @@ export function useGlobalHotkey(key: string, handler: (e: KeyboardEvent) => void
       if (opts.meta && !(e.metaKey || e.ctrlKey)) return
       if (!opts.meta) {
         const t = e.target as HTMLElement
-        if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return
+        if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable) return
       }
       e.preventDefault(); cb.current(e)
     }

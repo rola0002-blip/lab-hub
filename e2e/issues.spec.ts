@@ -141,6 +141,25 @@ test('c shortcut: global quick-capture that respects the typing and modal guards
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
+  // Typing guard extends to native <select> (v0.9.5, reviewer Low #1): a focused
+  // filter <select> is a typing target (typeahead), so `c` must NOT raise the
+  // composer — use-global-hotkey's guard now excludes SELECT alongside
+  // INPUT/TEXTAREA/contenteditable. First prove the global `c` listener is live on
+  // this page (retry until the composer opens, then close it) so the non-opening
+  // below is attributable to the guard and not to an unhydrated listener; on the
+  // pre-fix code (guard missing SELECT) focusing the select and pressing `c`
+  // opened the composer.
+  await page.goto('/issues')
+  await expect(async () => {
+    await page.keyboard.press('c')
+    await expect(composer).toBeVisible({ timeout: 1000 })
+  }).toPass({ timeout: 10_000 })
+  await page.keyboard.press('Escape')
+  await expect(composer).toHaveCount(0)
+  await page.getByLabel('Status', { exact: true }).focus() // the filter-bar Status <select>
+  await page.keyboard.press('c')
+  await expect(composer).toHaveCount(0) // guard holds: no composer while a <select> has focus
+
   // Modal guard (b): ⌘K command palette open — `c` still must not raise the composer.
   await page.goto('/issues')
   await expect(async () => {
