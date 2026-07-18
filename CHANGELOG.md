@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-07-18
+
 ### Changed
 - Issue identifiers now render and announce with the `LAB-` prefix (for example `LAB-42`) instead of `COL-`, completing the LabHub rebrand across issue pages, chat autolinks, search excerpts, and bot announcements. `formatIdentifier` remains the single source of truth, so every server-side render and notification emits the canonical `LAB-` form.
 - The legacy `COL-<n>` identifier is kept as a read-only alias: existing references (including archived bot posts) still parse and resolve to the same issue and re-render as `LAB-<n>`. Stored issue numbers and the `issue_number_seq` sequence are unchanged — this is a display/parse change only, with no database migration.
