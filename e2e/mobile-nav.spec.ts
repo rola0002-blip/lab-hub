@@ -8,6 +8,12 @@ import { wipe, runWizard, signIn, ADMIN } from './helpers'
 // any nav-link tap; closing runs the inert/focus cleanup. These specs open the drawer
 // at phone width, navigate, and assert the drawer is gone AND `#app-content` is
 // interactive again.
+//
+// Also covers the follow-up focus-restore fix: when the drawer closes, keyboard focus
+// must return to the hamburger toggle, not fall through to <body>. The inert effect is
+// declared before the focus trap so its cleanup clears `inert` before the trap's
+// prev.focus() runs; otherwise the toggle (inside the still-inert #app-content) can't be
+// focused and focus is lost. Asserted on the Esc path and the route-change path.
 
 const DIR = '/private/tmp/claude-501/-Users-roland/3031bedc-03e3-46c7-9ffc-be261f3c6dc0/scratchpad/fix-repro'
 const TAG = process.env.REPRO_TAG ?? 'after'
@@ -44,6 +50,8 @@ test('mobile nav drawer auto-closes after navigating to another tab', async ({ b
   await page.waitForURL('**/files')
   await expect(drawer).toBeHidden()
   await expect(page.locator('#app-content')).not.toHaveAttribute('inert', '')
+  // Closing on route change restores keyboard focus to the hamburger toggle (not <body>).
+  await expect(page.getByRole('button', { name: 'Open navigation' })).toBeFocused()
   await page.screenshot({ path: `${DIR}/fix3-afternav-${TAG}.png` })
 
   // Re-open, then tap the CURRENT tab (same route → no pathname change): the nav-link
@@ -53,6 +61,32 @@ test('mobile nav drawer auto-closes after navigating to another tab', async ({ b
   await drawer.getByRole('link', { name: 'Files' }).click()
   await expect(drawer).toBeHidden()
   await expect(page.locator('#app-content')).not.toHaveAttribute('inert', '')
+
+  await page.context().close()
+})
+
+test('mobile nav drawer returns focus to the hamburger after Esc close', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await phonePage(browser)
+  await runWizard(page)
+  await signIn(page, ADMIN.email, ADMIN.password)
+  await page.goto('/dashboard')
+
+  const drawer = page.getByRole('dialog', { name: 'Navigation' })
+  const toggle = page.getByRole('button', { name: 'Open navigation' })
+
+  // Open via the hamburger; focus moves into the drawer and the shell goes inert.
+  await toggle.click()
+  await expect(drawer).toBeVisible()
+  await expect(page.locator('#app-content')).toHaveAttribute('inert', '')
+
+  // Esc closes the drawer. The inert effect (declared before the focus trap) clears
+  // `inert` first, so the trap's prev.focus() cleanup lands on the hamburger toggle;
+  // before the fix it hit the still-inert toggle and focus fell to <body>.
+  await page.keyboard.press('Escape')
+  await expect(drawer).toBeHidden()
+  await expect(page.locator('#app-content')).not.toHaveAttribute('inert', '')
+  await expect(toggle).toBeFocused()
 
   await page.context().close()
 })

@@ -53,13 +53,17 @@ export function MobileNavToggle() {
 export function MobileNavDrawer({ children }: { children: React.ReactNode }) {
   const { open, setOpen } = useNav()
   const ref = useRef<HTMLDivElement>(null)
-  // Trap focus in the drawer while open; the hook also restores focus to the
-  // hamburger on close (its prev?.focus() cleanup).
-  useFocusTrap(ref, open)
 
   // Esc closes; the rest of the shell goes inert so nothing behind the drawer is
   // reachable by pointer or assistive tech. Guarded on `open` so desktop (where
   // the drawer never opens) pays nothing.
+  //
+  // DECLARATION ORDER IS LOAD-BEARING: this effect is declared BEFORE
+  // useFocusTrap so React runs cleanups in declaration order on close — `inert`
+  // is cleared HERE first, and only then does the focus-trap cleanup below run
+  // its prev?.focus(). The hamburger toggle lives inside #app-content, so
+  // restoring focus to it while the content is still inert is a silent no-op
+  // (focus falls to <body>) — the bug this ordering fixes.
   useEffect(() => {
     if (!open) return
     const content = document.getElementById('app-content')
@@ -71,6 +75,12 @@ export function MobileNavDrawer({ children }: { children: React.ReactNode }) {
       document.removeEventListener('keydown', onKey)
     }
   }, [open, setOpen])
+
+  // Trap focus in the drawer while open. On close the hook's prev?.focus()
+  // cleanup restores focus to the hamburger toggle — which lands only because the
+  // inert effect above (declared first) has already cleared `inert` by the time
+  // this cleanup runs.
+  useFocusTrap(ref, open)
 
   return (
     <>
