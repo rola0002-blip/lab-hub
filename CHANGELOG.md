@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-07-18
+
 ### Removed
 - Issue labels can no longer be added or assigned from the interface: the create-issue composer's label picker, the issue-detail Labels editor, and the list/board "Any label" filter are gone. The `Label`/`IssueLabel` models, their migrations, and the service layer are untouched — this removes the label entry points only, so existing label data is preserved and old `?label=` links still filter gracefully.
 
