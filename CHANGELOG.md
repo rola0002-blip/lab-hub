@@ -6,6 +6,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- My issues is now the landing screen: signing in, accepting an invite, and the root redirect all arrive on your personal task list (`/issues/me`) instead of the dashboard, which stays in the sidebar and fully reachable.
+- Overdue and due-today dates are colour-coded on issue list rows and board cards — a red "Overdue" or amber "Today" chip, bucketed by the org-timezone day so a due-today issue never reads as overdue and completed work is never flagged. Board cards, which previously hid due dates, now show them.
+- The LabHub Bot now direct-messages an issue's assignee once when its due day has fully passed, re-arming if the due date is later changed.
+- Issue lists gain a "Due" quick filter ("Due this week" / "Overdue") and a one-click "Clear filters" that appears only when a filter is active and clears just the filter bar's own parameters, preserving any other query key.
+- Quick capture pre-fills the assignee: opening the composer with `c`, the ⌘K "Create issue" action, or create-from-chat sets you as the assignee (still editable to anyone or unassigned); the "New issue" buttons leave it unset.
+- New issues default to the Todo status in the composer, with Backlog still selectable; the storage-level default is unchanged.
+- The `c` quick-capture shortcut now opens the composer from any page, not only the issues and projects views, while still ignoring keypresses inside text fields, selects, and open dialogs.
+
+### Fixed
+- Chat reaction, edit, and delete failures now surface a toast instead of failing silently, and a failed action no longer leaves the message row's buttons stuck disabled.
+- Every notification row in the bell tray is now clickable and navigates to its target — direct messages, mentions, channel adds, and booking notifications, not just issue notifications (those rows were previously inert).
+- Issue list, board, and detail views now refetch after an SSE reconnect, so an issue change broadcast during a network blip is no longer missed and the view can no longer stay stale.
+- The global `c` shortcut no longer opens the composer while a native `<select>` (such as a filter dropdown) has focus.
+
 ## [0.9.4] - 2026-07-18
 
 ### Removed
