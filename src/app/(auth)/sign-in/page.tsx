@@ -20,7 +20,7 @@ export default function SignInPage() {
     })
     setBusy(false)
     if (error) setError(error.message ?? 'Sign-in failed')
-    else router.push('/dashboard')
+    else router.push('/issues/me') // post-login landing = personal task list (v0.9.5)
   }
 
   return (

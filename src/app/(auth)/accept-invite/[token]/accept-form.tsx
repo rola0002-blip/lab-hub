@@ -17,7 +17,7 @@ export default function AcceptForm({ email }: { email: string }) {
     })
     setBusy(false)
     if (error) setError(error.message ?? 'Could not create account')
-    else router.push('/dashboard')
+    else router.push('/issues/me') // first-login landing = personal task list (v0.9.5)
   }
 
   return (

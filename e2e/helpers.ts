@@ -53,7 +53,7 @@ export async function signIn(page: Page, email: string, password: string) {
   await page.fill('input[name=email]', email)
   await page.fill('input[name=password]', password)
   await page.click('button:has-text("Sign in")')
-  await page.waitForURL('**/dashboard')
+  await page.waitForURL('**/issues/me') // post-login landing = personal task list (v0.9.5)
 }
 
 export async function latestInviteToken(email: string): Promise<string> {
@@ -73,14 +73,15 @@ export async function createMemberViaInvite(page: Page, email: string, role: 'me
   return latestInviteToken(email)
 }
 
-// Accept an invite in a fresh browser context: creates the account and lands on /dashboard,
-// already signed in as the new member (mirrors journeys.spec.ts's accept flow).
+// Accept an invite in a fresh browser context: creates the account and lands on the
+// personal task list (/issues/me, v0.9.5), already signed in as the new member
+// (mirrors journeys.spec.ts's accept flow).
 export async function acceptInvite(page: Page, token: string, name: string, password: string): Promise<void> {
   await page.goto(`/accept-invite/${token}`)
   await page.fill('input[name=name]', name)
   await page.fill('input[name=password]', password)
   await page.click('button:has-text("Create account")')
-  await page.waitForURL('**/dashboard')
+  await page.waitForURL('**/issues/me')
 }
 
 // Create an issue through the create modal (T13). T16 uses this to seed the board

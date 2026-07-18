@@ -72,7 +72,7 @@ test('⌘K palette: a guest is never offered Admin/People destinations', async (
   const adminPage = await admin(browser)
   const token = await createMemberViaInvite(adminPage, GUEST.email, 'guest')
   const pageG = await newPage(browser)
-  await acceptInvite(pageG, token, GUEST.name, PASS) // lands on /dashboard, signed in
+  await acceptInvite(pageG, token, GUEST.name, PASS) // lands on /issues/me, signed in
 
   await openPalette(pageG)
   const input = pageG.getByRole('combobox', { name: 'Search LabHub' })

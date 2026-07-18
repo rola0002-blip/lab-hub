@@ -89,6 +89,7 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
   const page = await newPage(browser)
   await runWizard(page)
   await signIn(page, ADMIN.email, ADMIN.password)
+  await page.goto('/dashboard') // v0.9.5 lands sign-in on /issues/me; audit the dashboard explicitly
   await expect(page.getByText('Welcome, Roland')).toBeVisible()
   await auditBothThemes(page, 'dashboard')
 
