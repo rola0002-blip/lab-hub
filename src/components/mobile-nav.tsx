@@ -1,5 +1,6 @@
 'use client'
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { Menu as MenuIcon } from 'lucide-react'
 import { useFocusTrap } from '@/components/hooks/use-focus-trap'
 
@@ -21,6 +22,18 @@ function useNav() {
 
 export function MobileNavProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
+  const pathname = usePathname()
+  // Auto-dismiss on navigation, derived during render (the idiomatic replacement for a
+  // setState-in-effect — react-hooks/set-state-in-effect): when the route changes, a nav
+  // <Link>, the ⌘K palette, or any programmatic push flips the pathname, so the drawer
+  // closes itself — running its inert/focus cleanup — instead of staying open over the
+  // page just navigated to (and leaving the shell stuck `inert`). React re-renders
+  // immediately with the corrected state, so nothing paints the stale-open drawer.
+  const [lastPath, setLastPath] = useState(pathname)
+  if (pathname !== lastPath) {
+    setLastPath(pathname)
+    if (open) setOpen(false)
+  }
   return <Ctx.Provider value={{ open, setOpen }}>{children}</Ctx.Provider>
 }
 
@@ -74,6 +87,11 @@ export function MobileNavDrawer({ children }: { children: React.ReactNode }) {
           <div
             ref={ref} id={DRAWER_ID} role="dialog" aria-modal="true" aria-label="Navigation"
             className="absolute inset-y-0 left-0 flex max-w-[85vw] shadow-modal"
+            // Close on any nav-link tap. The pathname effect already covers route changes;
+            // this also dismisses when the tapped item is the CURRENT route (no pathname
+            // change to react to). Scoped to <a> so the workspace menu / sign-out buttons
+            // inside the rail don't trip it.
+            onClick={(e) => { if ((e.target as HTMLElement).closest('a')) setOpen(false) }}
           >
             {children}
           </div>
