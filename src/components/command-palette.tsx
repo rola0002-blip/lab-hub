@@ -172,7 +172,7 @@ export function CommandPalette({ orgName = 'LabHub', role }: { orgName?: string;
     setRecents(pushRecent(cmdKey(cmd)))
     close()
     if (cmd.kind === 'document') { window.open(cmd.href, '_blank', 'noopener'); return }
-    if (cmd.kind === 'command' && cmd.id === 'create-issue') { openIssueComposer(); return }
+    if (cmd.kind === 'command' && cmd.id === 'create-issue') { openIssueComposer({ assignToSelf: true }); return } // quick capture → assign self
     if (cmd.kind === 'person') {
       // No static DM yet: create-or-open the 1:1, then navigate to it.
       try {

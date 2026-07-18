@@ -16,7 +16,7 @@ export function IssueHotkeys({ role }: { role: Role }) {
     // confirms, the create-issue modal itself) and the ⌘K palette — all
     // render role="dialog" aria-modal="true".
     if (document.querySelector('[role="dialog"][aria-modal="true"]')) return
-    if (role !== 'guest' && inProjects) openIssueComposer()
+    if (role !== 'guest' && inProjects) openIssueComposer({ assignToSelf: true }) // quick capture → assign self
   })
   return null
 }

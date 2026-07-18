@@ -7,7 +7,7 @@ import { StatusIcon, PriorityIcon } from './status'
 import { Menu } from '@/components/ui/menu'
 import { ISSUE_STATUSES, STATUS_LABEL, PRIORITIES, PRIORITY_LABEL } from '@/features/issues/status'
 import { createIssueAction } from '@/app/(app)/issues/actions'
-import { subscribeIssueComposer, getIssueComposer, closeIssueComposer } from '@/lib/issue-composer-store'
+import { subscribeIssueComposer, getIssueComposer, closeIssueComposer, resolveInitialAssignee } from '@/lib/issue-composer-store'
 import { toast } from '@/lib/toast-store'
 import type { IssueStatus, IssuePriority } from '@prisma/client'
 
@@ -18,20 +18,22 @@ import type { IssueStatus, IssuePriority } from '@prisma/client'
 const CHIP_TRIGGER = 'inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-sm text-default hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]'
 
 type Opt = { id: string; name: string; image?: string | null }
-export function CreateIssueModal({ users, projects }: { users: Opt[]; projects: Opt[] }) {
+export function CreateIssueModal({ users, projects, currentUserId }: { users: Opt[]; projects: Opt[]; currentUserId: string }) {
   const store = useSyncExternalStore(subscribeIssueComposer, getIssueComposer, getIssueComposer)
   if (!store.open) return null
-  return <Composer users={users} projects={projects} />
+  return <Composer users={users} projects={projects} currentUserId={currentUserId} />
 }
 
-function Composer({ users, projects }: { users: Opt[]; projects: Opt[] }) {
+function Composer({ users, projects, currentUserId }: { users: Opt[]; projects: Opt[]; currentUserId: string }) {
   const router = useRouter()
   const { prefill } = getIssueComposer()
   const [title, setTitle] = useState(prefill.title ?? '')
   const [description, setDescription] = useState(prefill.description ?? '')
   const [status, setStatus] = useState<IssueStatus>('BACKLOG')
   const [priority, setPriority] = useState<IssuePriority>('NONE')
-  const [assigneeId, setAssigneeId] = useState<string | null>(null)
+  // Quick-capture (c, ⌘K, create-from-chat) defaults the assignee to the current
+  // user; the "New issue" buttons leave it unset. Editable in every case.
+  const [assigneeId, setAssigneeId] = useState<string | null>(resolveInitialAssignee(prefill, currentUserId))
   const [projectId, setProjectId] = useState<string | null>(prefill.projectId ?? null)
   const [dueDate, setDueDate] = useState('')
   const [pending, start] = useTransition()

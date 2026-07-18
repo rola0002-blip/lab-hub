@@ -234,7 +234,7 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
   function createFromMessage() {
     const firstLine = msg.body.split('\n')[0].slice(0, 120)
     const quoted = msg.body.split('\n').map((l) => `> ${l}`).join('\n')
-    openIssueComposer({ title: firstLine, description: `${quoted}\n\n— ${msg.author.name}`, originMessageId: msg.id })
+    openIssueComposer({ title: firstLine, description: `${quoted}\n\n— ${msg.author.name}`, originMessageId: msg.id, assignToSelf: true }) // quick capture → assign self
   }
 
   // Presence of the message author, mirrored off the store's `online` set (same

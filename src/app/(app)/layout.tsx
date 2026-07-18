@@ -67,7 +67,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </div>
       {/* Global create-issue composer + `c` shortcut — mounted once so any page
           (or the ⌘K palette) can raise the modal. Hotkey is role-gated. */}
-      <CreateIssueModal users={issueUsers} projects={issueProjects} />
+      <CreateIssueModal users={issueUsers} projects={issueProjects} currentUserId={user.id} />
       <IssueHotkeys role={user.role} />
       {/* Global toast host — mounted once so `toast()` works from any page. */}
       <ToastHost />

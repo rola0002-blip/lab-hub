@@ -117,6 +117,30 @@ test('c shortcut never stacks the composer over an open modal', async ({ page })
   await expect(page.getByRole('heading', { name: 'New issue' })).toHaveCount(0)
 })
 
+test('quick-capture defaults the assignee to the current user; New issue button leaves it unset', async ({ page }) => {
+  test.setTimeout(90_000)
+  await runWizard(page)
+  await signIn(page, ADMIN.email, ADMIN.password) // the admin is "Roland"
+  await page.goto('/issues')
+
+  // Quick capture via the `c` shortcut → assignee pre-filled to the current user…
+  await page.keyboard.press('c')
+  const dialog = page.getByRole('dialog', { name: 'New issue' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Assignee' })).toContainText('Roland')
+  // …but it is only a default — the picker stays editable (Unassigned still selectable).
+  await dialog.getByRole('button', { name: 'Assignee' }).click()
+  await dialog.getByRole('menuitem', { name: 'Unassigned' }).click()
+  await expect(dialog.getByRole('button', { name: 'Assignee' })).toContainText('Unassigned')
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+
+  // The "New issue" button is NOT quick capture → assignee stays unset.
+  await page.getByRole('button', { name: 'New issue' }).first().click()
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Assignee' })).toContainText('Unassigned')
+})
+
 test('create-issue modal: status menu is fully visible and clickable, not clipped by the dialog', async ({ page }) => {
   test.setTimeout(90_000)
   await runWizard(page)
