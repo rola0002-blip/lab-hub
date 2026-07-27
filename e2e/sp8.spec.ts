@@ -224,8 +224,16 @@ test('5: "Lab today" renders five sections whose attention counts agree with /pr
   await signIn(page, ADMIN.email, ADMIN.password)
   const me = await adminId()
 
-  // Populate the fourth attention bucket so all four rows carry a non-zero count
-  // (at zero total the section collapses into an EmptyState and the labels vanish).
+  // The at_risk bucket is the only one the earlier tests leave empty, and the section
+  // needs a non-zero TOTAL or it collapses into an EmptyState and the four labels
+  // vanish. With this project the four rows are filled by (verified against the
+  // rendered section, one project each):
+  //   off_track  ← Zulu films      (test 3: lead + fresh OFF_TRACK)
+  //   at_risk    ← Kilo films      (below:  lead + fresh AT_RISK)
+  //   no_lead    ← Graphene growth (test 1: NO lead; its fresh ON_TRACK update falls
+  //                                 past the off_track/at_risk arms into no_lead)
+  //   no_update  ← Mike films      (test 3: lead, no update ever)
+  // Papa films (PAUSED) is deliberately in none of them — the buckets are ACTIVE-only.
   const risky = await db.project.create({ data: { name: 'Kilo films', leadId: me } })
   await db.projectUpdate.create({ data: { projectId: risky.id, authorId: me, health: 'AT_RISK', body: 'Precursor delivery slipped a week.' } })
 
