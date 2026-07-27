@@ -6,7 +6,8 @@ import { PolicyError } from '@/features/issues/issue-policy'
 import * as issues from '@/features/issues/issue-service'
 import * as projects from '@/features/issues/project-service'
 import * as comments from '@/features/issues/comment-service'
-import type { IssueStatus, IssuePriority, ProjectStatus } from '@prisma/client'
+import * as updates from '@/features/issues/project-update-service'
+import type { IssueStatus, IssuePriority, ProjectStatus, ProjectHealth } from '@prisma/client'
 
 type Ok<T> = { ok: true } & T
 type Result<T = object> = Ok<T> | { ok: false; message: string }
@@ -36,7 +37,8 @@ async function run<T>(fn: (u: { id: string; role: 'admin' | 'member' | 'guest' }
   const u = await requireUser()
   try {
     const data = await fn(u)
-    revalidatePath('/issues'); revalidatePath('/issues/me'); revalidatePath('/projects')
+    // Every covered mutation now feeds a dashboard section (SP8 §4.7) — one line, one place.
+    revalidatePath('/issues'); revalidatePath('/issues/me'); revalidatePath('/projects'); revalidatePath('/dashboard')
     return { ok: true, data }
   } catch (e) {
     if (e instanceof PolicyError) return { ok: false, message: e.message }
@@ -108,4 +110,27 @@ export async function deleteCommentAction(commentId: string) {
 }
 export async function attachIssueFilesAction(issueId: string, files: { path: string; name: string; mime: string; size: number }[]) {
   return run((u) => issues.attachIssueFiles({ actorId: u.id, role: u.role, issueId, files }))
+}
+
+// SP8 §4.6 — weekly project updates. The composer's shape is validated here (the
+// health enum never reaches a Prisma enum column unchecked); the service still owns
+// permission, trim/cap and the forged-originMessageId guard.
+const healthEnum = z.enum(['ON_TRACK', 'AT_RISK', 'OFF_TRACK'])
+const postUpdateSchema = z.object({
+  projectId: z.string().min(1, 'Choose a project.'),
+  health: healthEnum,
+  body: z.string().min(1, 'An update needs a few words.').max(4000),
+  originMessageId: z.string().nullish(),
+})
+export async function postProjectUpdateAction(input: { projectId: string; health: ProjectHealth; body: string; originMessageId?: string | null }) {
+  const parsed = postUpdateSchema.safeParse(input)
+  if (!parsed.success) return { ok: false as const, message: parsed.error.issues[0]?.message ?? 'Invalid update.' }
+  const v = parsed.data
+  return run((u) => updates.postProjectUpdate({ projectId: v.projectId, actorId: u.id, role: u.role, health: v.health, body: v.body, originMessageId: v.originMessageId ?? null }))
+}
+export async function pauseUpdatePromptsAction(projectId: string, weeks: 1 | 4) {
+  return run((u) => updates.pauseUpdatePrompts({ projectId, actorId: u.id, role: u.role, weeks }))
+}
+export async function resumeUpdatePromptsAction(projectId: string) {
+  return run((u) => updates.resumeUpdatePrompts({ projectId, actorId: u.id, role: u.role }))
 }
