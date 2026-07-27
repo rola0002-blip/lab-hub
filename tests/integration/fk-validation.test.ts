@@ -34,6 +34,20 @@ describe('FK validation (SP8 §3.2)', () => {
     await setAssignee({ actorId: u.id, role: 'member', issueId: i.id, assigneeId: null })
     await setProject({ actorId: u.id, role: 'member', issueId: i.id, projectId: null })
   })
+  // The empty string is falsy but is NOT "no id": `assigneeId ?? null` keeps '' and
+  // updateProject's spread is keyed on `!== undefined`, so a truthiness guard would
+  // let '' through to the FK → P2003 → 500. Every §3.2 guard tests `!= null`.
+  it('an empty-string id is rejected by every guard, not skipped', async () => {
+    const u = await makeUser()
+    const i = await makeIssue(u.id)
+    const q = await makeProject()
+    await invalid(createIssue({ actorId: u.id, role: 'member', title: 't', assigneeId: '' }))
+    await invalid(createIssue({ actorId: u.id, role: 'member', title: 't', projectId: '' }))
+    await invalid(setAssignee({ actorId: u.id, role: 'member', issueId: i.id, assigneeId: '' }))
+    await invalid(setProject({ actorId: u.id, role: 'member', issueId: i.id, projectId: '' }))
+    await invalid(createProject({ actorId: u.id, role: 'member', name: 'P', leadId: '' }))
+    await invalid(updateProject({ actorId: u.id, role: 'member', id: q.id, leadId: '' }))
+  })
   it('createProject / updateProject validate leadId; a guest lead stays legal', async () => {
     const u = await makeUser()
     const guest = await makeUser({ role: 'guest' })

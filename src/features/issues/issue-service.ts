@@ -150,8 +150,10 @@ export async function createIssue(args: {
     const msg = await prisma.message.findUnique({ where: { id: args.originMessageId }, select: { conversationId: true } })
     if (!msg || !(await isMember(args.actorId, msg.conversationId))) throw new PolicyError('not_found', 'Message not found.')
   }
-  if (args.assigneeId) await assertAssigneeExists(args.assigneeId)
-  if (args.projectId) await assertProjectExists(args.projectId)
+  // `!= null` not truthiness: '' is falsy but IS written (`args.assigneeId ?? null`
+  // keeps it), so a truthy guard would let the empty string reach the FK → P2003.
+  if (args.assigneeId != null) await assertAssigneeExists(args.assigneeId)
+  if (args.projectId != null) await assertProjectExists(args.projectId)
   // Initial rank = end of the destination column.
   const last = await prisma.issue.findFirst({ where: { status }, orderBy: { rank: 'desc' }, select: { rank: true } })
   const rank = rankBetween(last?.rank ?? null, null)
@@ -223,7 +225,7 @@ export async function setStatus(args: { actorId: string; role: Role; issueId: st
 // ── assignee (+ issue_assigned) ───────────────────────────────────────────────
 export async function setAssignee(args: { actorId: string; role: Role; issueId: string; assigneeId: string | null }): Promise<IssueDto> {
   assertCanMutate(args.role)
-  if (args.assigneeId) await assertAssigneeExists(args.assigneeId) // §3.2; null = clear, always legal
+  if (args.assigneeId != null) await assertAssigneeExists(args.assigneeId) // §3.2; only null clears — '' is a bad id, not a clear
   const issue = await loadOrThrow(args.issueId)
   if (issue.assigneeId === args.assigneeId) return toDto(issue)
   const updated = await prisma.$transaction(async (tx) => {
@@ -268,7 +270,7 @@ export async function setPriority(args: { actorId: string; role: Role; issueId: 
 }
 export async function setProject(args: { actorId: string; role: Role; issueId: string; projectId: string | null }): Promise<IssueDto> {
   assertCanMutate(args.role)
-  if (args.projectId) await assertProjectExists(args.projectId) // §3.2; null = detach, always legal
+  if (args.projectId != null) await assertProjectExists(args.projectId) // §3.2; only null detaches — '' is a bad id, not a detach
   const issue = await loadOrThrow(args.issueId)
   return simpleSet({ actorId: args.actorId, issue, type: 'project', data: { projectId: args.projectId }, from: issue.projectId, to: args.projectId })
 }

@@ -90,7 +90,7 @@ export async function createProject(args: {
   assertCanMutate(args.role)
   const name = validateName(args.name)
   validateDateOrder(args.startDate ?? null, args.targetDate ?? null)
-  if (args.leadId) await assertLeadExists(args.leadId)
+  if (args.leadId != null) await assertLeadExists(args.leadId) // '' is falsy but IS stored — guard on null, not truthiness
   const p = await prisma.project.create({
     data: {
       name, description: (args.description ?? '').slice(0, 4000),
@@ -116,7 +116,9 @@ export async function updateProject(args: {
     args.startDate !== undefined ? args.startDate : existing.startDate,
     args.targetDate !== undefined ? args.targetDate : existing.targetDate,
   )
-  if (args.leadId) await assertLeadExists(args.leadId) // undefined (untouched) / null (clear) skip
+  // `!= null` skips undefined (untouched) and null (clear) only; the update spread is
+  // keyed on `!== undefined`, so a falsy-but-present '' would otherwise be written.
+  if (args.leadId != null) await assertLeadExists(args.leadId)
   const p = await prisma.project.update({
     where: { id: args.id },
     data: {
