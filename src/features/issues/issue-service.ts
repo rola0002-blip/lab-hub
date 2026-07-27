@@ -24,6 +24,10 @@ export type IssueDto = {
   dueDate: string | null; rank: string; completedAt: string | null; originMessageId: string | null
   labels: { id: string; name: string; color: string }[]
   createdAt: string; updatedAt: string
+  // SP8: populated by listIssues ONLY — max(latest activity, latest non-deleted comment);
+  // mutation returns leave it absent so optimistic results drop the chip until the next
+  // server render (§5.2)
+  lastTouchedAt?: string
 }
 
 export const ISSUE_INCLUDE = {
@@ -72,7 +76,24 @@ export async function listIssues(filter: IssueFilter = {}, now: Date = new Date(
     orderBy: [{ status: 'asc' }, { rank: 'asc' }], // rank ordered byte-wise (COLLATE "C")
     include: ISSUE_INCLUDE,
   })
-  return rows.map(toDto)
+  // SP8 §5.2: two grouped reads (the listProjects N+1-avoidance idiom), both served by
+  // the existing [issueId, createdAt] compound indexes. Issue.updatedAt is deliberately
+  // NOT consulted — a rank-only move or a column rebalance touches updatedAt but writes
+  // no activity, so it must not clear the stalled chip.
+  const ids = rows.map((r) => r.id)
+  const [acts, comms] = ids.length
+    ? await Promise.all([
+        prisma.issueActivity.groupBy({ by: ['issueId'], _max: { createdAt: true }, where: { issueId: { in: ids } } }),
+        prisma.issueComment.groupBy({ by: ['issueId'], _max: { createdAt: true }, where: { issueId: { in: ids }, deletedAt: null } }),
+      ])
+    : [[], []]
+  const actBy = new Map(acts.map((a) => [a.issueId, a._max.createdAt as Date]))
+  const commBy = new Map(comms.map((c) => [c.issueId, c._max.createdAt as Date]))
+  return rows.map((r) => {
+    const touches = [actBy.get(r.id), commBy.get(r.id)].filter(Boolean) as Date[]
+    const dto = toDto(r)
+    return touches.length ? { ...dto, lastTouchedAt: new Date(Math.max(...touches.map(Number))).toISOString() } : dto
+  })
 }
 
 export async function getIssue(id: string): Promise<IssueDto | null> {
