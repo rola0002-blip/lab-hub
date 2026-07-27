@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { TZDate } from '@date-fns/tz'
 import { format } from 'date-fns'
-import { orgToday, dueBucket, startOfOrgDay, endOfOrgWeek, dueRange } from './due'
+import { orgToday, dueBucket, startOfOrgDay, endOfOrgWeek, dueRange, orgWeekday } from './due'
 
 const SGT = 'Asia/Singapore' // +08:00, the org default
 
@@ -10,6 +10,30 @@ describe('orgToday', () => {
     // 2026-07-19T20:00Z is already 2026-07-20 04:00 in SGT.
     expect(orgToday(new Date('2026-07-19T20:00:00Z'), SGT)).toBe('2026-07-20')
     expect(orgToday(new Date('2026-07-19T20:00:00Z'), 'UTC')).toBe('2026-07-19')
+  })
+})
+
+describe('orgWeekday', () => {
+  it('reports the day-of-week in the org zone (0 = Sunday)', () => {
+    // Mon 20 Jul 2026, 13:00 SGT.
+    expect(orgWeekday(new Date('2026-07-20T05:00:00Z'), SGT)).toBe(1)
+    // Sun 19 Jul 2026, 13:00 SGT.
+    expect(orgWeekday(new Date('2026-07-19T05:00:00Z'), SGT)).toBe(0)
+  })
+
+  it('crosses the day boundary in the org zone, not UTC — the prompt-day gate', () => {
+    // 23:30 SGT Tuesday = 15:30Z Tuesday: both zones agree on Tuesday (2).
+    expect(orgWeekday(new Date('2026-07-21T15:30:00Z'), SGT)).toBe(2)
+    expect(orgWeekday(new Date('2026-07-21T15:30:00Z'), 'UTC')).toBe(2)
+    // 07:30 SGT Wednesday = 23:30Z Tuesday: SGT says Wednesday (3), UTC still 2.
+    expect(orgWeekday(new Date('2026-07-21T23:30:00Z'), SGT)).toBe(3)
+    expect(orgWeekday(new Date('2026-07-21T23:30:00Z'), 'UTC')).toBe(2)
+  })
+
+  it('agrees with orgToday’s calendar day', () => {
+    const now = new Date('2026-07-21T23:30:00Z')
+    expect(orgToday(now, SGT)).toBe('2026-07-22') // the Wednesday
+    expect(orgWeekday(now, SGT)).toBe(3)
   })
 })
 
