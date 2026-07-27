@@ -7,7 +7,7 @@ import * as bot from '@/features/bot'
 import { PolicyError, assertCanUpload, assertCanDeleteDocument, assertCanManageFolder } from './documents-policy'
 
 export type DocumentDto = {
-  id: string; folderId: string | null; name: string; path: string; mime: string; size: number
+  id: string; folderId: string | null; folderName: string | null; name: string; path: string; mime: string; size: number
   uploaderId: string; uploaderName: string; createdAt: Date
 }
 export type FolderDto = { id: string; name: string; createdById: string }
@@ -43,14 +43,14 @@ export async function createDocument(args: {
   // §6.9: one line, uploader + filename + folder (root if none); NO @-mention → posted,
   // not pinged. Awaited but non-fatal (announceToChannel is internally try/caught).
   await bot.announceToChannel(`New file: ${name} (in ${folder?.name ?? 'root'}) — uploaded by ${args.uploaderName}`)
-  return { ...doc, uploaderName: args.uploaderName }
+  return { ...doc, uploaderName: args.uploaderName, folderName: folder?.name ?? null }
 }
 
 export async function renameDocument(args: { userId: string; role: Role; id: string; name: string }): Promise<DocumentDto> {
   assertCanUpload(args.role)
   const doc = await prisma.document.findUnique({ where: { id: args.id }, include: { uploader: { select: { name: true } } } })
   if (!doc) throw new PolicyError('not_found', 'File not found.')
-  const updated = await prisma.document.update({ where: { id: args.id }, data: { name: args.name.slice(0, NAME_MAX) }, include: { uploader: { select: { name: true } } } })
+  const updated = await prisma.document.update({ where: { id: args.id }, data: { name: args.name.slice(0, NAME_MAX) }, include: { uploader: { select: { name: true } }, folder: { select: { name: true } } } })
   return toDto(updated)
 }
 
@@ -59,7 +59,7 @@ export async function moveDocument(args: { userId: string; role: Role; id: strin
   const doc = await prisma.document.findUnique({ where: { id: args.id }, select: { id: true } })
   if (!doc) throw new PolicyError('not_found', 'File not found.')
   if (args.folderId) await assertFolderExists(args.folderId)
-  const updated = await prisma.document.update({ where: { id: args.id }, data: { folderId: args.folderId }, include: { uploader: { select: { name: true } } } })
+  const updated = await prisma.document.update({ where: { id: args.id }, data: { folderId: args.folderId }, include: { uploader: { select: { name: true } }, folder: { select: { name: true } } } })
   return toDto(updated)
 }
 
@@ -111,13 +111,21 @@ export async function listFolders(): Promise<FolderDto[]> {
   return prisma.documentFolder.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true, createdById: true } })
 }
 
-export async function listDocuments(folderId: string | null): Promise<DocumentDto[]> {
+// SP8 §3.1: an options object replaces the bare folderId. `folderId` OMITTED ⇒ no
+// where clause ⇒ every folder (the honest "all files" read the dashboard needs);
+// `folderId: null` ⇒ root only (retained); a string ⇒ that folder. `take` bounds
+// the dashboard's read. folderName rides along because the unscoped listing mixes
+// folders. createdAt stays a Date (consumers format with formatDateTime).
+export async function listDocuments(args: { folderId?: string | null; take?: number } = {}): Promise<DocumentDto[]> {
   const rows = await prisma.document.findMany({
-    where: { folderId }, orderBy: { createdAt: 'desc' }, include: { uploader: { select: { name: true } } },
+    where: args.folderId !== undefined ? { folderId: args.folderId } : {},
+    orderBy: { createdAt: 'desc' },
+    ...(args.take ? { take: args.take } : {}),
+    include: { uploader: { select: { name: true } }, folder: { select: { name: true } } },
   })
   return rows.map(toDto)
 }
 
-function toDto(d: { id: string; folderId: string | null; name: string; path: string; mime: string; size: number; uploaderId: string; createdAt: Date; uploader: { name: string } }): DocumentDto {
-  return { id: d.id, folderId: d.folderId, name: d.name, path: d.path, mime: d.mime, size: d.size, uploaderId: d.uploaderId, uploaderName: d.uploader.name, createdAt: d.createdAt }
+function toDto(d: { id: string; folderId: string | null; name: string; path: string; mime: string; size: number; uploaderId: string; createdAt: Date; uploader: { name: string }; folder: { name: string } | null }): DocumentDto {
+  return { id: d.id, folderId: d.folderId, folderName: d.folder?.name ?? null, name: d.name, path: d.path, mime: d.mime, size: d.size, uploaderId: d.uploaderId, uploaderName: d.uploader.name, createdAt: d.createdAt }
 }
