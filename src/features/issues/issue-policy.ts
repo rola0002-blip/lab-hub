@@ -20,9 +20,6 @@ export function assertCanMutate(role: Role): void {
 }
 
 // Projects: create/edit by admins+members; deletion is admin-only.
-export function canManageProjects(role: Role): boolean {
-  return role === 'admin' || role === 'member'
-}
 export function canDeleteProject(role: Role): boolean {
   return role === 'admin'
 }
