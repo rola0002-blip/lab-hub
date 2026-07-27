@@ -6,7 +6,11 @@ import { formatRange } from './time'
 import { drainOutbox } from './email/outbox'
 import { bookingReminderEmail } from './email/templates'
 import { formatIdentifier } from '@/features/issues/identifier'
-import { startOfOrgDay } from '@/features/issues/due'
+import { startOfOrgDay, orgToday } from '@/features/issues/due'
+import { OPEN_STATUSES } from '@/features/issues/status'
+import { promptAtFor, shouldPrompt, promptDigestLine } from '@/features/issues/update-prompt'
+import { isEffectiveLead } from '@/features/issues/project-health'
+import { isIssueStalled } from '@/features/issues/stale'
 import * as bot from '@/features/bot'
 
 export async function expirePendingBookings(now: Date = new Date()): Promise<number> {
@@ -90,6 +94,88 @@ export async function pingOverdueIssues(now: Date = new Date()): Promise<number>
   return overdue.length
 }
 
+// SP8: the weekly project-update prompt (spec §4.3–§4.5). Window predicate, not a
+// bare interval: fires on the org's configured weekday once now >= promptAt (org
+// tz, TZDate component construction), latching per project against THIS week's
+// promptAt — a recurring latch, not the one-shot dueSoonPingedAt idiom. The SELECT
+// deliberately does NOT filter on lead: recipient resolution (effective lead →
+// open-issue assignees → admins) runs per project so unowned projects still reach
+// their fallback. Delivery = suppressed bot DM + explicit NO-EMAIL notify() whose
+// payload matches the chat fan-out shape — one bell, one DM row, zero outbox rows.
+export async function promptProjectUpdates(now: Date = new Date()): Promise<number> {
+  const org = await prisma.organization.findFirst()
+  if (!org) return 0
+  const tz = org.timezone ?? 'Asia/Singapore'
+  const promptAt = promptAtFor(now, tz, org.updatePromptDay, org.updatePromptHour)
+  if (!promptAt || now < promptAt) return 0
+
+  const candidates = await prisma.project.findMany({
+    where: { status: 'ACTIVE' },
+    include: { lead: { select: { id: true, banned: true, isSystem: true, role: true } } },
+  })
+  const dueProjects = candidates.filter((p) => shouldPrompt({
+    now, promptAt, lastUpdatePromptAt: p.lastUpdatePromptAt, pausedUntil: p.updatePromptsPausedUntil,
+  }))
+  if (dueProjects.length === 0) return 0
+
+  const today = orgToday(now, tz)
+  const HUMAN = { banned: false, isSystem: false, role: { not: 'guest' } } as const
+  for (const p of dueProjects) {
+    // Digest window = max(latest update, now − 7 days).
+    const latest = await prisma.projectUpdate.findFirst({ where: { projectId: p.id }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } })
+    const weekAgo = new Date(now.getTime() - 7 * 86_400_000)
+    const since = latest && latest.createdAt > weekAgo ? latest.createdAt : weekAgo
+    const [closed, overdue, started] = await Promise.all([
+      prisma.issue.count({ where: { projectId: p.id, status: 'DONE', completedAt: { gte: since } } }),
+      prisma.issue.count({ where: { projectId: p.id, status: { in: OPEN_STATUSES }, dueDate: { lt: startOfOrgDay(now, tz) } } }),
+      prisma.issue.findMany({ where: { projectId: p.id, status: { in: ['IN_PROGRESS', 'IN_REVIEW'] } }, select: { id: true, status: true } }),
+    ])
+    // "Touched" = max(activity, non-deleted comment) — never Issue.updatedAt (§5.2).
+    const ids = started.map((i) => i.id)
+    const [acts, comms] = ids.length
+      ? await Promise.all([
+          prisma.issueActivity.groupBy({ by: ['issueId'], _max: { createdAt: true }, where: { issueId: { in: ids } } }),
+          prisma.issueComment.groupBy({ by: ['issueId'], _max: { createdAt: true }, where: { issueId: { in: ids }, deletedAt: null } }),
+        ])
+      : [[], []]
+    const actBy = new Map(acts.map((a) => [a.issueId, a._max.createdAt as Date]))
+    const commBy = new Map(comms.map((c) => [c.issueId, c._max.createdAt as Date]))
+    const stalled = started.filter((i) => {
+      const touches = [actBy.get(i.id), commBy.get(i.id)].filter(Boolean) as Date[]
+      const last = touches.length ? new Date(Math.max(...touches.map(Number))) : null
+      return isIssueStalled(i.status, last, today, tz)
+    }).length
+    const line = promptDigestLine({ projectName: p.name, projectId: p.id, since, closed, overdue, stalled, tz, appUrl: env.APP_URL })
+
+    // Recipients: effective lead → distinct open-issue assignees → admins, all under
+    // the same human filter (a banned recipient would make getOrCreateDm no-op silently).
+    let recipients: string[] = isEffectiveLead(p.lead) ? [p.lead!.id] : []
+    if (recipients.length === 0) {
+      const assignees = await prisma.issue.findMany({
+        where: { projectId: p.id, status: { in: OPEN_STATUSES }, assigneeId: { not: null }, assignee: HUMAN },
+        select: { assigneeId: true }, distinct: ['assigneeId'],
+      })
+      recipients = assignees.map((a) => a.assigneeId!)
+    }
+    if (recipients.length === 0) {
+      const admins = await prisma.user.findMany({ where: { role: 'admin', banned: false, isSystem: false }, select: { id: true } })
+      recipients = admins.map((a) => a.id)
+    }
+    for (const uid of recipients) {
+      const dm = await bot.dmUser(uid, line, { suppress: true })
+      // Three arguments — omitting the fourth IS the no-email path. Payload shape is
+      // byte-identical to the chat fan-out payload, so notificationHref resolves it
+      // to /chat/<cid>?msg=<mid> with no resolver change.
+      if (dm) await notify(uid, 'project_update_prompt', { message: line, conversationId: dm.conversationId, messageId: dm.messageId })
+    }
+    // Latch UNCONDITIONALLY, per project, post-DM: a zero-recipient project is
+    // latched once and moves on; a mid-run crash leaves the remainder unlatched for
+    // the next 300s tick — exactly once, no double prompt, no skip.
+    await prisma.project.update({ where: { id: p.id }, data: { lastUpdatePromptAt: now } })
+  }
+  return dueProjects.length
+}
+
 export function startJobs(): void {
   if (env.DISABLE_JOBS) return
   const guard = (fn: () => Promise<unknown>) => {
@@ -105,4 +191,5 @@ export function startJobs(): void {
   setInterval(guard(() => sendBookingReminders()), 300_000)
   setInterval(guard(() => pingDueSoonIssues()), 300_000)
   setInterval(guard(() => pingOverdueIssues()), 300_000)
+  setInterval(guard(() => promptProjectUpdates()), 300_000)
 }
