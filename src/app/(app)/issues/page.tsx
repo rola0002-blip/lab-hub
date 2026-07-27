@@ -3,7 +3,7 @@ import { requireUser } from '@/lib/session'
 import { prisma } from '@/lib/db'
 import { getOrg } from '@/lib/org'
 import { listIssues } from '@/features/issues/issue-service'
-import { listProjects } from '@/features/issues/project-service'
+import { listProjectOptions } from '@/features/issues/project-service'
 import { parseIssueFilters } from '@/features/issues/status'
 import { orgToday } from '@/features/issues/due'
 import { IssuesSurface } from '@/components/issues/issues-surface'
@@ -20,7 +20,7 @@ export default async function IssuesPage({ searchParams }: { searchParams: Promi
   const [issues, users, projects, org] = await Promise.all([
     listIssues({ status: f.status, assigneeId: f.assignee, projectId: f.project, labelId: f.label, priority: f.priority, due: f.due }),
     prisma.user.findMany({ where: { banned: false, isSystem: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
-    listProjects(), getOrg(),
+    listProjectOptions(), getOrg(),
   ])
   const timezone = org?.timezone ?? 'Asia/Singapore'
   const today = orgToday(new Date(), timezone) // org-day reference threaded to the due chips (stable across hydration)
@@ -35,7 +35,7 @@ export default async function IssuesPage({ searchParams }: { searchParams: Promi
         <h1 className="text-2xl font-semibold text-default">Issues</h1>
         {user.role !== 'guest' && <NewIssueButton />}
       </div>
-      <FilterBar users={users} projects={projects.map((p) => ({ id: p.id, name: p.name }))} />
+      <FilterBar users={users} projects={projects} />
       <IssuesSurface key={JSON.stringify(sp)} initial={issues} role={user.role} users={users} timezone={timezone} today={today} empty={empty} />
     </div>
   )

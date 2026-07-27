@@ -2,6 +2,7 @@ import { requireSetup } from '@/lib/org'
 import { requireUser } from '@/lib/session'
 import { prisma } from '@/lib/db'
 import { totalUnread } from '@/features/chat/conversation-service'
+import { listProjectOptions } from '@/features/issues/project-service'
 import { Sidebar } from '@/components/sidebar'
 import { APP_VERSION } from '@/lib/version'
 import Bell from '@/components/bell'
@@ -29,7 +30,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // "New issue" button); the modal itself gates opening for guests.
   const [issueUsers, issueProjects] = await Promise.all([
     prisma.user.findMany({ where: { banned: false, isSystem: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
-    prisma.project.findMany({ orderBy: { createdAt: 'desc' }, select: { id: true, name: true } }),
+    listProjectOptions(),
   ])
 
   return (

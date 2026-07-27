@@ -1,35 +1,64 @@
 import 'server-only'
-import type { ProjectStatus } from '@prisma/client'
+import type { ProjectHealth, ProjectStatus } from '@prisma/client'
 import type { Role } from '@/lib/session'
 import { prisma } from '@/lib/db'
 import * as bot from '@/features/bot'
 import { assertCanMutate, canDeleteProject, PolicyError } from './issue-policy'
 import { assertAssigneeExists } from './issue-service'
+import { isEffectiveLead } from './project-health'
+import { startOfOrgDay } from './due'
+import { OPEN_STATUSES } from './status'
 
 export type ProjectDto = {
   id: string; name: string; description: string
   lead: { id: string; name: string; image: string | null } | null
+  // SP8 §4.7 review-screen inputs. REQUIRED on the whole DTO surface — listProjects
+  // and getProject fill all three, so healthBucket/compareProjectsWorstFirst can be
+  // fed straight from a card or a detail page with no second read.
+  hasEffectiveLead: boolean                     // lead exists AND banned:false, isSystem:false, role!=='guest' (§4.4)
+  latestUpdate: { id: string; health: ProjectHealth; createdAt: string; authorName: string } | null
+  openOverdue: number
   startDate: string | null; targetDate: string | null; status: ProjectStatus
   progress: { done: number; total: number; percent: number }
   createdAt: string; updatedAt: string
 }
 
-const LEAD_SELECT = { select: { id: true, name: true, image: true } } as const
+// Widened for isEffectiveLead (banned/isSystem/role). Those three stay INTERNAL —
+// the DTO's `lead` still exposes only { id, name, image }, so no membership-ish
+// user state leaks into a client component.
+const LEAD_SELECT = { select: { id: true, name: true, image: true, banned: true, isSystem: true, role: true } } as const
 
 type LoadedProject = {
   id: string; name: string; description: string
-  lead: { id: string; name: string; image: string | null } | null
+  lead: { id: string; name: string; image: string | null; banned: boolean; isSystem: boolean; role: string } | null
   startDate: Date | null; targetDate: Date | null; status: ProjectStatus; createdAt: Date; updatedAt: Date
 }
 
-function toDto(p: LoadedProject, done: number, total: number): ProjectDto {
+type Extras = { latestUpdate: ProjectDto['latestUpdate']; openOverdue: number }
+
+function toDto(p: LoadedProject, done: number, total: number, extras: Extras): ProjectDto {
   return {
     id: p.id, name: p.name, description: p.description,
     lead: p.lead ? { id: p.lead.id, name: p.lead.name, image: p.lead.image } : null,
+    hasEffectiveLead: isEffectiveLead(p.lead),
+    latestUpdate: extras.latestUpdate, openOverdue: extras.openOverdue,
     startDate: p.startDate?.toISOString() ?? null, targetDate: p.targetDate?.toISOString() ?? null, status: p.status,
     progress: { done, total, percent: total === 0 ? 0 : Math.round((done / total) * 100) },
     createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString(),
   }
+}
+
+// The newest ProjectUpdate row → the DTO's latestUpdate shape. Shared by both read
+// paths so the list card and the detail page can never disagree on the field.
+type LatestUpdateRow = { id: string; health: ProjectHealth; createdAt: Date; author: { name: string } }
+function toLatestUpdate(r: LatestUpdateRow | null | undefined): ProjectDto['latestUpdate'] {
+  return r ? { id: r.id, health: r.health, createdAt: r.createdAt.toISOString(), authorName: r.author.name } : null
+}
+
+// Org timezone for the overdue day boundary (same default as every other org read).
+async function orgTimezone(): Promise<string> {
+  const org = await prisma.organization.findFirst({ select: { timezone: true } })
+  return org?.timezone ?? 'Asia/Singapore'
 }
 
 // Linear semantics (adjudicated 2026-07-12): CANCELED issues are excluded from
@@ -42,22 +71,60 @@ async function progressFor(projectId: string): Promise<{ done: number; total: nu
   return { done, total }
 }
 
-export async function listProjects(): Promise<ProjectDto[]> {
-  const projects = await prisma.project.findMany({ orderBy: { createdAt: 'desc' }, include: { lead: LEAD_SELECT } })
-  // Two grouped counts instead of N per-project queries. CANCELED issues are
-  // excluded from the denominator (same Linear semantics as progressFor).
-  const totals = await prisma.issue.groupBy({ by: ['projectId'], _count: { _all: true }, where: { projectId: { not: null }, status: { not: 'CANCELED' } } })
-  const dones = await prisma.issue.groupBy({ by: ['projectId'], _count: { _all: true }, where: { projectId: { not: null }, status: 'DONE' } })
+// `now` is injectable purely for the overdue day boundary (tests pin it); every
+// call site in the app uses the default. Seven queries total, O(1) in the number of
+// projects — grouped aggregates, never a per-project read.
+export async function listProjects(now: Date = new Date()): Promise<ProjectDto[]> {
+  const tz = await orgTimezone()
+  const [projects, totals, dones, overdues, latests] = await Promise.all([
+    prisma.project.findMany({ orderBy: { createdAt: 'desc' }, include: { lead: LEAD_SELECT } }),
+    // Two grouped counts instead of N per-project queries. CANCELED issues are
+    // excluded from the denominator (same Linear semantics as progressFor).
+    prisma.issue.groupBy({ by: ['projectId'], _count: { _all: true }, where: { projectId: { not: null }, status: { not: 'CANCELED' } } }),
+    prisma.issue.groupBy({ by: ['projectId'], _count: { _all: true }, where: { projectId: { not: null }, status: 'DONE' } }),
+    // Open + past-due, day-granular in the org zone — the same boundary the overdue
+    // chip and the overdue nudge use (due.ts), so the counts always agree.
+    prisma.issue.groupBy({
+      by: ['projectId'], _count: { _all: true },
+      where: { projectId: { not: null }, status: { in: OPEN_STATUSES }, dueDate: { lt: startOfOrgDay(now, tz) } },
+    }),
+    prisma.projectUpdate.groupBy({ by: ['projectId'], _max: { createdAt: true } }),
+  ])
+  // The newest update per project in ONE follow-up read: group for the max instant,
+  // then fetch exactly those (projectId, createdAt) rows for the author name.
+  const latestRows = latests.length
+    ? await prisma.projectUpdate.findMany({
+        where: { OR: latests.map((l) => ({ projectId: l.projectId, createdAt: l._max.createdAt! })) },
+        include: { author: { select: { name: true } } },
+      })
+    : []
   const totalBy = new Map(totals.map((t) => [t.projectId, t._count._all]))
   const doneBy = new Map(dones.map((d) => [d.projectId, d._count._all]))
-  return projects.map((p) => toDto(p, doneBy.get(p.id) ?? 0, totalBy.get(p.id) ?? 0))
+  const overdueBy = new Map(overdues.map((o) => [o.projectId, o._count._all]))
+  const latestBy = new Map(latestRows.map((r) => [r.projectId, toLatestUpdate(r)]))
+  return projects.map((p) => toDto(p, doneBy.get(p.id) ?? 0, totalBy.get(p.id) ?? 0, {
+    latestUpdate: latestBy.get(p.id) ?? null, openOverdue: overdueBy.get(p.id) ?? 0,
+  }))
 }
 
-export async function getProject(id: string): Promise<ProjectDto | null> {
+// The same three reads as listProjects, scoped to one id — one DTO shape, one
+// definition of each field, whichever page you land on.
+export async function getProject(id: string, now: Date = new Date()): Promise<ProjectDto | null> {
   const p = await prisma.project.findUnique({ where: { id }, include: { lead: LEAD_SELECT } })
   if (!p) return null
-  const { done, total } = await progressFor(id)
-  return toDto(p, done, total)
+  const tz = await orgTimezone()
+  const [progress, openOverdue, latest] = await Promise.all([
+    progressFor(id),
+    prisma.issue.count({ where: { projectId: id, status: { in: OPEN_STATUSES }, dueDate: { lt: startOfOrgDay(now, tz) } } }),
+    prisma.projectUpdate.findFirst({ where: { projectId: id }, orderBy: { createdAt: 'desc' }, include: { author: { select: { name: true } } } }),
+  ])
+  return toDto(p, progress.done, progress.total, { latestUpdate: toLatestUpdate(latest), openOverdue })
+}
+
+// Narrow companion (§4.7): the issue pages and the global composer need only
+// { id, name } — one option-list source, no review-screen joins.
+export async function listProjectOptions(): Promise<{ id: string; name: string }[]> {
+  return prisma.project.findMany({ orderBy: { createdAt: 'desc' }, select: { id: true, name: true } })
 }
 
 function validateName(name: string): string {
@@ -99,7 +166,9 @@ export async function createProject(args: {
     include: { lead: LEAD_SELECT },
   })
   void bot.announceToChannel(`New project: ${p.name} — /projects/${p.id}`)
-  return toDto(p, 0, 0)
+  // A just-created project provably has no issues and no updates, so the extras are
+  // exact without a re-read (getProject would only re-derive these same zeros).
+  return toDto(p, 0, 0, { latestUpdate: null, openOverdue: 0 })
 }
 
 export async function updateProject(args: {
@@ -119,6 +188,8 @@ export async function updateProject(args: {
   // `!= null` skips undefined (untouched) and null (clear) only; the update spread is
   // keyed on `!== undefined`, so a falsy-but-present '' would otherwise be written.
   if (args.leadId != null) await assertLeadExists(args.leadId)
+  // No lead include here: the DTO is re-read through getProject below (it fills the
+  // §4.7 extras), so this write only needs the fields the announce reads.
   const p = await prisma.project.update({
     where: { id: args.id },
     data: {
@@ -129,7 +200,6 @@ export async function updateProject(args: {
       ...(args.targetDate !== undefined ? { targetDate: args.targetDate } : {}),
       ...(args.status !== undefined ? { status: args.status } : {}),
     },
-    include: { lead: LEAD_SELECT },
   })
   // Announce lead / startDate / targetDate changes (not name/description/status).
   const changes: string[] = []
@@ -144,8 +214,14 @@ export async function updateProject(args: {
     changes.push(args.targetDate ? `target date updated` : 'target date cleared')
   }
   if (changes.length) void bot.announceToChannel(`Project ${p.name}: ${changes.join(', ')} — /projects/${p.id}`)
-  const { done, total } = await progressFor(args.id)
-  return toDto(p, done, total)
+  // One read path for the full DTO — the update's own row can't carry the §4.7
+  // extras (progress, latest update, overdue count), and a second definition of
+  // them here is exactly how the card and the detail page would drift apart.
+  // Null only if a concurrent admin delete slipped between the write and this read
+  // — a genuine 404 for the caller, never a null masquerading as a DTO.
+  const dto = await getProject(args.id)
+  if (!dto) throw new PolicyError('not_found', 'Project not found.')
+  return dto
 }
 
 // Admin-only. Cascades issues to projectId = null (the Issue.projectId FK is
