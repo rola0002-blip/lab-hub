@@ -234,6 +234,22 @@
   --label-in-review:#c4b5fd; --label-done:#86efac; --label-canceled:#d4d4d8;
 }
 
+/* ── 3d. PROJECT HEALTH PALETTE (SP8) ─────────────── */
+/* Fills for the project-health glyphs (features/issues/project-health.ts →
+   HEALTH_TOKEN) on /projects, /projects/[id] and the dashboard. Glyph-only (the
+   visible word renders in text-default), so the 3:1 UI bar applies. Every hex is
+   already contrast-verified elsewhere in the gate (--status-done/-todo,
+   --text-overdue, --status-backlog per theme) — registration is a guard, not a
+   gamble. Theme-split. NOT accent-themed. */
+:root {
+  --health-on-track:#15803d; --health-at-risk:#b45309;
+  --health-off-track:#b91c1c; --health-none:#6b7280;
+}
+[data-theme="dark"] {
+  --health-on-track:#4ade80; --health-at-risk:#fbbf24;
+  --health-off-track:#f87171; --health-none:#9ca3af;
+}
+
 /* ── 4. MAP SEMANTICS → TAILWIND UTILITIES ────────── */
 @theme inline {
   --color-canvas:var(--bg-canvas); --color-surface:var(--bg-surface);

@@ -80,6 +80,9 @@ const BASE = {
     // §3c label-chip TEXT colours (globals.css light) — readable over the 14% tint, 4.5:1 TEXT bar.
     labelBacklog: hex('#374151'), labelTodo: hex('#92400e'), labelInProgress: hex('#1e40af'),
     labelInReview: hex('#5b21b6'), labelDone: hex('#166534'), labelCanceled: hex('#3f3f46'),
+    // §3d health glyph fills (SP8) — non-text marks, 3:1 UI bar.
+    healthOnTrack: hex('#15803d'), healthAtRisk: hex('#b45309'),
+    healthOffTrack: hex('#b91c1c'), healthNone: hex('#6b7280'),
   },
   dark: {
     textDefault: hex('#d1d2d3'),
@@ -100,6 +103,9 @@ const BASE = {
     // §3c label-chip TEXT colours (globals.css dark) — lightened; readable over the 14% tint.
     labelBacklog: hex('#d1d5db'), labelTodo: hex('#fcd34d'), labelInProgress: hex('#93c5fd'),
     labelInReview: hex('#c4b5fd'), labelDone: hex('#86efac'), labelCanceled: hex('#d4d4d8'),
+    // §3d health glyph fills (SP8) — non-text marks, 3:1 UI bar.
+    healthOnTrack: hex('#4ade80'), healthAtRisk: hex('#fbbf24'),
+    healthOffTrack: hex('#f87171'), healthNone: hex('#9ca3af'),
   },
 }
 
@@ -145,6 +151,10 @@ for (const theme of ['light', 'dark']) {
   ]) {
     check(theme, `label-${name} text / chip tint`, b[labelKey], mix(b[statusKey], canvas, 0.14), AA_TEXT)
   }
+  // Project health glyphs (§3d, SP8) — glyph fills only, 3:1 UI bar, both themes.
+  for (const [name, key] of [['on-track', 'healthOnTrack'], ['at-risk', 'healthAtRisk'], ['off-track', 'healthOffTrack'], ['none', 'healthNone']]) {
+    check(theme, `health-${name} / canvas`, b[key], canvas, UI)
+  }
 }
 
 // Accent presets — re-derive the two adjudicated non-text pairs exactly as
@@ -162,4 +172,4 @@ if (failures.length) {
   for (const f of failures) console.error(`  ✗ ${f}`)
   process.exit(1)
 }
-console.log(`check-contrast: PASSED — ${count} pairs (base + 6 status + 6 label × 2 themes + ${ACCENTS.length} accents × 2 themes) clear their bars.`)
+console.log(`check-contrast: PASSED — ${count} pairs (base + 6 status + 6 label + 4 health × 2 themes + ${ACCENTS.length} accents × 2 themes) clear their bars.`)
