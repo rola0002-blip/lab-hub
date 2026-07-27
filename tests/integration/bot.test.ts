@@ -55,4 +55,15 @@ describe('bot module', () => {
     expect(await prisma.notification.count({ where: { userId: u.id, type: 'message_dm' } })).toBe(1)
     expect(await prisma.conversation.count({ where: { type: 'DM' } })).toBe(1)
   })
+
+  it('dmUser returns the conversation + message ids (suppressed too); null for a banned recipient', async () => {
+    const u = await makeUser()
+    const r = await dmUser(u.id, 'hello', { suppress: true })
+    expect(r).not.toBeNull()
+    const msg = await prisma.message.findUniqueOrThrow({ where: { id: r!.messageId } })
+    expect(msg.conversationId).toBe(r!.conversationId)
+    expect(msg.body).toBe('hello')
+    const b = await makeUser({ banned: true })
+    expect(await dmUser(b.id, 'x')).toBeNull()
+  })
 })

@@ -9,6 +9,8 @@ export type NotificationType =
   | 'booking_reminder' | 'booking_expired' | 'booking_cancelled'
   | 'message_mention' | 'message_dm' | 'channel_added'
   | 'issue_assigned' | 'issue_mention' | 'issue_comment' | 'issue_done'
+  // SP8: weekly project-update prompt (suppressed bot DM + this no-email bell)
+  | 'project_update_prompt'
 
 export async function notify(
   userId: string, type: NotificationType, payload: Record<string, unknown>,

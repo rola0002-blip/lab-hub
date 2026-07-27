@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   Bell as BellIcon, BellPlus, Check, Hash, AtSign, MessageSquare,
-  CalendarClock, CalendarCheck, CalendarX, UserPlus, CircleCheck, type LucideIcon,
+  CalendarClock, CalendarCheck, CalendarX, UserPlus, CircleCheck, ClipboardCheck,
+  type LucideIcon,
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -29,6 +30,7 @@ const LABEL: Record<string, string> = {
   issue_mention: 'You were mentioned on an issue',
   issue_comment: 'New comment on an issue',
   issue_done: 'Your issue was completed',
+  project_update_prompt: 'Project update due',
 }
 
 // Per-type glyph for the actor square when there's no person avatar to show
@@ -47,6 +49,7 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   issue_mention: AtSign,
   issue_comment: MessageSquare,
   issue_done: CircleCheck,
+  project_update_prompt: ClipboardCheck,
 }
 
 type Face =
