@@ -77,6 +77,9 @@ health-poll port). Then:
 The container runs `prisma migrate deploy` against the fresh DB, then boots; `cloudflared` waits
 for the app HEALTHCHECK before advertising the origin.
 
+After the first SP8 deploy, set the org's update-prompt day and hour in Settings → Organisation
+(the migration defaults them to Tuesday 16:00 org time).
+
 ## 8. Setup wizard → invite members
 Open `https://labhub.<domain>`, complete the **setup wizard** (creates the org + first admin) —
 paste the **`SETUP_TOKEN`** that `init-env.sh` printed in §6 into the wizard's *Setup token* field

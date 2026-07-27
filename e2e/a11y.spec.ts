@@ -85,7 +85,7 @@ test('sign-in: no serious/critical axe violations, both themes', async ({ browse
 })
 
 test('app surfaces: no serious/critical axe violations, both themes', async ({ browser }) => {
-  test.setTimeout(300_000) // core + SP4 + SP5 (files/bookings) + SP6 (settings/people), each audited in both themes
+  test.setTimeout(360_000) // core + SP4 + SP5 (files/bookings) + SP6 (settings/people) + SP8 (health projects + update modal), each audited in both themes
   const page = await newPage(browser)
   await runWizard(page)
   await signIn(page, ADMIN.email, ADMIN.password)
@@ -170,9 +170,30 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
   await expect(page.getByRole('button', { name: 'Reorder LAB-1' })).toBeVisible()
   await auditBothThemes(page, 'issues-board')
 
+  // SP8 surfaces — /projects only renders the new --health-* glyph chips, the
+  // "No lead" chip and the worst-first ordering when there is health data to render,
+  // so seed it first (the /files seeding precedent above). One fresh OFF_TRACK
+  // project plus one lead-less ACTIVE project puts every new mark on the page.
+  const meSp8 = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  const offTrack = await db.project.create({ data: { name: 'a11y off-track growth', leadId: meSp8.id } })
+  await db.projectUpdate.create({ data: { projectId: offTrack.id, authorId: meSp8.id, health: 'OFF_TRACK', body: 'Chamber leak — seal rebuilt, growths halted.' } })
+  await db.project.create({ data: { name: 'a11y unowned survey' } }) // no lead → the "No lead" chip
+
   await page.goto('/projects')
   await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'a11y off-track growth' })).toBeVisible()
   await auditBothThemes(page, 'projects')
+
+  // The project-update composer (role=dialog): the health radio group's non-colour
+  // checked state, the glyph fills and the textarea, audited in both themes.
+  // Rooted at <main>: Next's dev SSR keeps a hidden duplicate of the streamed tree
+  // in `div#S:0` at body level, which a bare CSS locator would also match.
+  await page.getByRole('main').locator('a[href^="/projects/"]').first().click()
+  await page.waitForURL(/\/projects\/[^/]+$/)
+  await page.getByRole('button', { name: 'Post update' }).first().click()
+  await expect(page.getByRole('dialog', { name: 'Post project update' })).toBeVisible()
+  await auditBothThemes(page, 'project-update-modal')
+  await page.keyboard.press('Escape')
 
   await page.goto('/issues/LAB-1')
   await expect(page.getByRole('textbox', { name: 'Issue title' })).toHaveValue('A11y issue')
