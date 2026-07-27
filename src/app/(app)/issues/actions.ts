@@ -128,8 +128,15 @@ export async function postProjectUpdateAction(input: { projectId: string; health
   const v = parsed.data
   return run((u) => updates.postProjectUpdate({ projectId: v.projectId, actorId: u.id, role: u.role, health: v.health, body: v.body, originMessageId: v.originMessageId ?? null }))
 }
+// `weeks: 1 | 4` is a compile-time claim only — a Server Action is an RPC endpoint,
+// so the value must be re-checked at runtime. Unvalidated, a forged `1e9` hands
+// nthPromptAfter a 7e9-iteration synchronous TZDate loop: an event-loop stall that
+// takes the whole app down, not merely a 500 (SP8 review).
+const weeksEnum = z.union([z.literal(1), z.literal(4)])
 export async function pauseUpdatePromptsAction(projectId: string, weeks: 1 | 4) {
-  return run((u) => updates.pauseUpdatePrompts({ projectId, actorId: u.id, role: u.role, weeks }))
+  const parsed = weeksEnum.safeParse(weeks)
+  if (!parsed.success) return { ok: false as const, message: 'Invalid pause length.' }
+  return run((u) => updates.pauseUpdatePrompts({ projectId, actorId: u.id, role: u.role, weeks: parsed.data }))
 }
 export async function resumeUpdatePromptsAction(projectId: string) {
   return run((u) => updates.resumeUpdatePrompts({ projectId, actorId: u.id, role: u.role }))

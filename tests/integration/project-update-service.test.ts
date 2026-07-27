@@ -1,9 +1,22 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { prisma } from '@/lib/db'
 import { resetDb, makeUser, makeProject, makeChannel, makeMember, makeMessage, seedSystem } from '../factories'
 import { postProjectUpdate, listProjectUpdates, pauseUpdatePrompts, resumeUpdatePrompts } from '@/features/issues/project-update-service'
 import { nthPromptAfter } from '@/features/issues/update-prompt'
 import { LAB_UPDATES_CHANNEL_ID } from '@/features/bot'
+
+// Action-level seams (the org-settings.test.ts pair): a Server Action invoked
+// directly under Vitest has no request scope, so both the session read and the
+// cache revalidation are stubbed. The service tests above are unaffected —
+// project-update-service imports `Role` as a type only.
+const mockUser = vi.hoisted(() => ({ current: null as null | { id: string; name: string; email: string; role: 'admin' | 'member' | 'guest' } }))
+vi.mock('@/lib/session', () => ({
+  getSessionUser: async () => mockUser.current,
+  requireUser: async () => { if (!mockUser.current) throw new Error('NEXT_REDIRECT'); return mockUser.current },
+  requireAdmin: async () => { if (mockUser.current?.role !== 'admin') throw new Error('NEXT_REDIRECT'); return mockUser.current },
+}))
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
+import { pauseUpdatePromptsAction } from '@/app/(app)/issues/actions'
 
 describe('project-update-service (SP8 §4.6)', () => {
   beforeEach(async () => { await resetDb(); await seedSystem() })
@@ -59,6 +72,20 @@ describe('project-update-service (SP8 §4.6)', () => {
     expect(+stored === lo || +stored === hi).toBe(true) // now moved between the two reads at most
     await resumeUpdatePrompts({ projectId: p.id, actorId: u.id, role: 'member' })
     expect((await prisma.project.findUniqueOrThrow({ where: { id: p.id } })).updatePromptsPausedUntil).toBeNull()
+  })
+  it('pauseUpdatePromptsAction runtime-validates weeks: a forged value returns ok:false and writes nothing', async () => {
+    const u = await makeUser(); const p = await makeProject()
+    mockUser.current = { id: u.id, name: u.name, email: u.email, role: 'member' }
+    // `weeks: 1 | 4` is erased at runtime and a Server Action is an RPC endpoint.
+    // 0 would reach nthPromptAfter's `unreachable` throw (a 500); 1e9 would hand it a
+    // 7e9-iteration synchronous TZDate loop — an event-loop stall, not just a 500.
+    for (const weeks of [0, 1e9, -1, 2, 1.5, NaN, '4' as unknown as number]) {
+      await expect(pauseUpdatePromptsAction(p.id, weeks as never)).resolves.toEqual({ ok: false, message: 'Invalid pause length.' })
+    }
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: p.id } })).updatePromptsPausedUntil).toBeNull()
+    // …and the two legitimate values still go through.
+    expect((await pauseUpdatePromptsAction(p.id, 4)).ok).toBe(true)
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: p.id } })).updatePromptsPausedUntil).not.toBeNull()
   })
   it('listProjectUpdates returns reverse-chron DTOs with ISO dates', async () => {
     const u = await makeUser(); const p = await makeProject()
