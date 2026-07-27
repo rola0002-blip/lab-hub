@@ -56,4 +56,10 @@ describe('parseIssueFilters (shareable-URL hardening)', () => {
     expect(parseIssueFilters({ due: ['overdue'] }).due).toBeUndefined() // array-ish → no filter
     expect(parseIssueFilters({}).due).toBeUndefined()
   })
+  it('parses stalled=true and degrades every other value (SP8 §5.4)', () => {
+    expect(parseIssueFilters({ stalled: 'true' }).stalled).toBe(true)
+    expect(parseIssueFilters({ stalled: '1' }).stalled).toBeUndefined()
+    expect(parseIssueFilters({ stalled: ['true'] }).stalled).toBeUndefined()
+    expect(parseIssueFilters({}).stalled).toBeUndefined()
+  })
 })

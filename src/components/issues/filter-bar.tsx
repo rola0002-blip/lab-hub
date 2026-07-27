@@ -7,7 +7,7 @@ type Opt = { id: string; name: string }
 // The filter keys this bar owns. "Clear filters" removes exactly these and preserves
 // any other query params (so it never clobbers a future view/sort key), and the reset
 // button only appears when at least one of them is active.
-const FILTER_KEYS = ['status', 'assignee', 'project', 'priority', 'label', 'due']
+const FILTER_KEYS = ['status', 'assignee', 'project', 'priority', 'label', 'due', 'stalled']
 
 export function FilterBar({ users, projects, lockAssignee }: { users: Opt[]; projects: Opt[]; lockAssignee?: boolean }) {
   const router = useRouter(); const pathname = usePathname(); const sp = useSearchParams()
@@ -50,6 +50,11 @@ export function FilterBar({ users, projects, lockAssignee }: { users: Opt[]; pro
         <option value="">Any due date</option>
         <option value="week">Due this week</option>
         <option value="overdue">Overdue</option>
+      </select>
+      {/* Stalled quick filter (SP8) — applied as a DTO post-filter on the pages. */}
+      <select aria-label="Activity" value={sp.get('stalled') ?? ''} onChange={(e) => set('stalled', e.target.value)} className={selectCls}>
+        <option value="">Any activity</option>
+        <option value="true">Stalled only</option>
       </select>
       {hasFilters && (
         <button type="button" onClick={clearAll}

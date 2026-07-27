@@ -6,6 +6,7 @@ import { listIssues } from '@/features/issues/issue-service'
 import { listProjectOptions } from '@/features/issues/project-service'
 import { parseIssueFilters } from '@/features/issues/status'
 import { orgToday } from '@/features/issues/due'
+import { isIssueStalled } from '@/features/issues/stale'
 import { IssuesSurface } from '@/components/issues/issues-surface'
 import { FilterBar } from '@/components/issues/filter-bar'
 import { NewIssueButton } from '@/components/issues/new-issue-button'
@@ -24,8 +25,11 @@ export default async function IssuesPage({ searchParams }: { searchParams: Promi
   ])
   const timezone = org?.timezone ?? 'Asia/Singapore'
   const today = orgToday(new Date(), timezone) // org-day reference threaded to the due chips (stable across hydration)
+  // Stalled is derived, not queryable — post-filter the listIssues DTOs, the only
+  // place lastTouchedAt is populated (spec §5.2). Composes with every other filter.
+  const visible = f.stalled ? issues.filter((i) => isIssueStalled(i.status, i.lastTouchedAt ?? null, today, timezone)) : issues
   // Named empty states: filter-empty when any (valid) filter is active, else no-issues.
-  const filtered = Boolean(f.status || f.assignee || f.project || f.label || f.priority || f.due)
+  const filtered = Boolean(f.status || f.assignee || f.project || f.label || f.priority || f.due || f.stalled)
   const empty = filtered
     ? <EmptyState icon={SearchX} title="No issues match these filters" hint="Loosen or clear a filter to see more issues." />
     : <EmptyState icon={ListTodo} title="No issues yet" hint="Create the first issue to start tracking research and lab work." />
@@ -36,7 +40,7 @@ export default async function IssuesPage({ searchParams }: { searchParams: Promi
         {user.role !== 'guest' && <NewIssueButton />}
       </div>
       <FilterBar users={users} projects={projects} />
-      <IssuesSurface key={JSON.stringify(sp)} initial={issues} role={user.role} users={users} timezone={timezone} today={today} empty={empty} />
+      <IssuesSurface key={JSON.stringify(sp)} initial={visible} role={user.role} users={users} timezone={timezone} today={today} empty={empty} />
     </div>
   )
 }
