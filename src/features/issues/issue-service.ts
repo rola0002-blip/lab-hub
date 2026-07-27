@@ -86,6 +86,20 @@ async function loadOrThrow(id: string): Promise<Loaded> {
   return i
 }
 
+// SP8 §3.2: assert-then-load FK validation, run BEFORE the transaction. A bad id
+// previously surfaced as a Prisma P2003 → unhandled 500. The predicate matches
+// exactly what the assignee/lead pickers enumerate ({ banned:false, isSystem:false }),
+// so the assert can never reject an option the UI offers — and it makes assigning
+// work to the LabHub Bot impossible. Guests are deliberately NOT rejected (§3.2).
+export async function assertAssigneeExists(id: string): Promise<void> {
+  const u = await prisma.user.findUnique({ where: { id }, select: { banned: true, isSystem: true } })
+  if (!u || u.banned || u.isSystem) throw new PolicyError('invalid', 'That person is no longer available.')
+}
+export async function assertProjectExists(id: string): Promise<void> {
+  const p = await prisma.project.findUnique({ where: { id }, select: { id: true } })
+  if (!p) throw new PolicyError('invalid', 'That project no longer exists.')
+}
+
 // ── notification helpers (offline-only email; never self) ─────────────────────
 async function pushIssueNotif(
   userId: string, type: 'issue_assigned' | 'issue_mention' | 'issue_comment' | 'issue_done',
@@ -136,6 +150,8 @@ export async function createIssue(args: {
     const msg = await prisma.message.findUnique({ where: { id: args.originMessageId }, select: { conversationId: true } })
     if (!msg || !(await isMember(args.actorId, msg.conversationId))) throw new PolicyError('not_found', 'Message not found.')
   }
+  if (args.assigneeId) await assertAssigneeExists(args.assigneeId)
+  if (args.projectId) await assertProjectExists(args.projectId)
   // Initial rank = end of the destination column.
   const last = await prisma.issue.findFirst({ where: { status }, orderBy: { rank: 'desc' }, select: { rank: true } })
   const rank = rankBetween(last?.rank ?? null, null)
@@ -207,6 +223,7 @@ export async function setStatus(args: { actorId: string; role: Role; issueId: st
 // ── assignee (+ issue_assigned) ───────────────────────────────────────────────
 export async function setAssignee(args: { actorId: string; role: Role; issueId: string; assigneeId: string | null }): Promise<IssueDto> {
   assertCanMutate(args.role)
+  if (args.assigneeId) await assertAssigneeExists(args.assigneeId) // §3.2; null = clear, always legal
   const issue = await loadOrThrow(args.issueId)
   if (issue.assigneeId === args.assigneeId) return toDto(issue)
   const updated = await prisma.$transaction(async (tx) => {
@@ -251,6 +268,7 @@ export async function setPriority(args: { actorId: string; role: Role; issueId: 
 }
 export async function setProject(args: { actorId: string; role: Role; issueId: string; projectId: string | null }): Promise<IssueDto> {
   assertCanMutate(args.role)
+  if (args.projectId) await assertProjectExists(args.projectId) // §3.2; null = detach, always legal
   const issue = await loadOrThrow(args.issueId)
   return simpleSet({ actorId: args.actorId, issue, type: 'project', data: { projectId: args.projectId }, from: issue.projectId, to: args.projectId })
 }

@@ -4,6 +4,7 @@ import type { Role } from '@/lib/session'
 import { prisma } from '@/lib/db'
 import * as bot from '@/features/bot'
 import { assertCanMutate, canDeleteProject, PolicyError } from './issue-policy'
+import { assertAssigneeExists } from './issue-service'
 
 export type ProjectDto = {
   id: string; name: string; description: string
@@ -75,6 +76,13 @@ function validateDateOrder(startDate: Date | null, targetDate: Date | null): voi
   }
 }
 
+// SP8 §3.2: same predicate as the assignee assert (guests legal; banned/system/missing
+// rejected) — storing a guest lead stays allowed; §4.4's effective-lead predicate is
+// where the guest narrowing lives (who gets PROMPTED, not who may be stored).
+async function assertLeadExists(id: string): Promise<void> {
+  return assertAssigneeExists(id)
+}
+
 export async function createProject(args: {
   actorId: string; role: Role; name: string; description?: string
   leadId?: string | null; startDate?: Date | null; targetDate?: Date | null; status?: ProjectStatus
@@ -82,6 +90,7 @@ export async function createProject(args: {
   assertCanMutate(args.role)
   const name = validateName(args.name)
   validateDateOrder(args.startDate ?? null, args.targetDate ?? null)
+  if (args.leadId) await assertLeadExists(args.leadId)
   const p = await prisma.project.create({
     data: {
       name, description: (args.description ?? '').slice(0, 4000),
@@ -107,6 +116,7 @@ export async function updateProject(args: {
     args.startDate !== undefined ? args.startDate : existing.startDate,
     args.targetDate !== undefined ? args.targetDate : existing.targetDate,
   )
+  if (args.leadId) await assertLeadExists(args.leadId) // undefined (untouched) / null (clear) skip
   const p = await prisma.project.update({
     where: { id: args.id },
     data: {
