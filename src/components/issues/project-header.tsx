@@ -1,7 +1,7 @@
 'use client'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { MoreHorizontal, Plus } from 'lucide-react'
+import { MoreHorizontal, Plus, UserX } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Menu } from '@/components/ui/menu'
@@ -51,9 +51,12 @@ export function ProjectHeader({ project, role, users, timezone, today }: { proje
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-semibold text-default">{project.name}</h1>
           <Badge variant={STATUS_VARIANT[project.status]}>{project.status.toLowerCase()}</Badge>
-          {/* Same chip as the project card (§4.7) — the detail page must never
-              disagree with the list about a project's health. */}
+          {/* Same chips as the project card (§4.7) — the detail page must never
+              disagree with the list about a project's health or its lead. */}
           <HealthChip health={project.latestUpdate?.health ?? null} stale={isProjectUpdateStale(project.latestUpdate?.createdAt ?? null, today, timezone)} />
+          {project.status === 'ACTIVE' && !project.hasEffectiveLead && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-border px-1.5 py-0.5 text-2xs text-subtle"><UserX size={11} aria-hidden />No lead</span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {canEdit && (

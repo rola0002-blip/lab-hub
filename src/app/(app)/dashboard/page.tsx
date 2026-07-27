@@ -73,7 +73,11 @@ export default async function DashboardPage() {
     .sort((a, b) => {
       const ra = a.dueDate ? BUCKET_RANK[dueBucket(a.dueDate, a.status, today, tz) ?? 'upcoming'] : 3
       const rb = b.dueDate ? BUCKET_RANK[dueBucket(b.dueDate, b.status, today, tz) ?? 'upcoming'] : 3
-      return ra !== rb ? ra - rb : (a.dueDate ?? '') < (b.dueDate ?? '') ? -1 : 1
+      if (ra !== rb) return ra - rb
+      // Equal keys MUST compare 0 — returning 1 for ties (the undated bucket, where every
+      // dueDate is '') would defeat Array#sort's stability and reshuffle those rows.
+      const ad = a.dueDate ?? '', bd = b.dueDate ?? ''
+      return ad < bd ? -1 : ad > bd ? 1 : 0
     })
     .slice(0, 8)
 

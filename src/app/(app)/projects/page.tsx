@@ -27,6 +27,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   if (f.health) review = review.filter((p) => healthBucket(p, today, timezone) === f.health)
   if (f.attention) review = review.filter((p) => p.status === 'ACTIVE' && healthBucket(p, today, timezone) !== 'on_track')
   const closed = projects.filter((p) => p.status === 'COMPLETED' || p.status === 'CANCELED')
+  const filtered = Boolean(f.health || f.attention)
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -34,12 +35,20 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
         {user.role !== 'guest' && <NewProjectButton users={users} />}
       </div>
       <ProjectFilterBar />
-      {review.length === 0 ? (
-        <EmptyState icon={FolderKanban} title={f.health || f.attention ? 'No projects match this filter' : 'No projects yet'}
-          hint={f.health || f.attention ? 'Loosen or clear the filter to see more projects.' : 'Create a project to group issues and track progress toward a target date.'} />
-      ) : (
+      {/* "No projects yet" is a statement about the WHOLE lab, so it is gated on
+          `projects`, not on the review slice — a lab whose projects are all completed
+          would otherwise read "No projects yet" directly above its own cards. With an
+          active filter the empty review slice is the filter's own result; unfiltered,
+          an empty review slice over a non-empty closed grid says nothing at all. */}
+      {review.length > 0 ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{review.map((p) => <ProjectCard key={p.id} project={p} timezone={timezone} today={today} />)}</div>
-      )}
+      ) : filtered ? (
+        <EmptyState icon={FolderKanban} title="No projects match this filter"
+          hint="Loosen or clear the filter to see more projects." />
+      ) : projects.length === 0 ? (
+        <EmptyState icon={FolderKanban} title="No projects yet"
+          hint="Create a project to group issues and track progress toward a target date." />
+      ) : null}
       {closed.length > 0 && (
         <section className="space-y-3 pt-4">
           <h2 className="text-sm font-semibold text-muted">Completed &amp; cancelled</h2>
