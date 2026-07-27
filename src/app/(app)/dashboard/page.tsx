@@ -95,7 +95,13 @@ export default async function DashboardPage() {
   // would itself leak that the channel has traffic.
   const labPosts = labMember
     ? await prisma.message.findMany({
-        where: { conversationId: LAB_UPDATES_CHANNEL_ID, parentId: null, deletedAt: null },
+        // kind:'user' is the codebase-wide "this row is CONTENT" gate (unread counting,
+        // message-service.ts:229; the pane's own rendering, message-pane.tsx:346).
+        // #lab-updates is a PUBLIC channel, so emitSystemRow (conversation-service.ts:24)
+        // writes 'X joined'/'X was added' event rows into it via joinPublicChannel and
+        // addMembers — parentId:null and deletedAt:null, so without this term they would
+        // read as authored announcements and evict real posts from the top five.
+        where: { conversationId: LAB_UPDATES_CHANNEL_ID, kind: 'user', parentId: null, deletedAt: null },
         orderBy: { createdAt: 'desc' }, take: 5,
         include: { user: { select: { name: true } }, _count: { select: { attachments: true } } },
       })
