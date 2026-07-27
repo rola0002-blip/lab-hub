@@ -1,7 +1,7 @@
 'use client'
 import { useSyncExternalStore, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { CircleCheck, TriangleAlert, CircleAlert } from 'lucide-react'
+import { CircleCheck, TriangleAlert, CircleAlert, Check } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
 import { PROJECT_HEALTH_LABEL, HEALTH_TOKEN } from '@/features/issues/project-health'
 import { postProjectUpdateAction } from '@/app/(app)/issues/actions'
@@ -60,17 +60,28 @@ function Composer({ projects }: { projects: Opt[] }) {
           {/* Radio group, not a select: the health call is the point of the update,
               so all three options stay visible with their glyphs. The input is
               sr-only — the label carries the visible chip, the focus ring
-              (focus-within) and the accessible name. */}
-          <div className="mt-1 flex flex-wrap gap-2" role="radiogroup" aria-label="Project health">
+              (focus-within) and the accessible name. The fieldset/legend already
+              names and groups these, so no redundant role="radiogroup" here.
+              CHECKED STATE IS NEVER COLOUR-ALONE (SP8 review): bg-selected on its
+              own is ~1.1:1 against the surface, so the selected option also gains
+              a lucide Check glyph and semibold text (the accent-picker precedent)
+              — the shape/weight delta is what carries the state. Its border moves
+              to --ring-focus, the same token accent-picker's selected swatch uses
+              and the one `npm run contrast` gates at 3:1 vs canvas for all 10
+              accents × both themes. `ring-2` is deliberately NOT used (it would be
+              indistinguishable from the focus ring); an unchecked-but-focused
+              option therefore still reads apart — ring, but no Check, no bold. */}
+          <div className="mt-1 flex flex-wrap gap-2">
             {(['ON_TRACK', 'AT_RISK', 'OFF_TRACK'] as const).map((h) => {
               const Icon = GLYPH[h]
               const on = health === h
               return (
                 <label key={h}
-                  className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm text-default hover:bg-hover focus-within:ring-2 focus-within:ring-[var(--ring-focus)] ${on ? 'border-border-strong bg-selected' : 'border-border'}`}>
+                  className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm text-default hover:bg-hover focus-within:ring-2 focus-within:ring-[var(--ring-focus)] ${on ? 'border-[var(--ring-focus)] bg-selected font-semibold' : 'border-border'}`}>
                   <input type="radio" name="health" value={h} checked={on} onChange={() => setHealth(h)} className="sr-only" />
                   <Icon size={14} aria-hidden style={{ color: `var(${HEALTH_TOKEN[h]})` }} />
                   {PROJECT_HEALTH_LABEL[h]}
+                  {on && <Check size={12} aria-hidden />}
                 </label>
               )
             })}
