@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import type { IssueStatus } from '@prisma/client'
 import {
   STALE_ISSUE_DAYS,
   STALE_PROJECT_DAYS,
+  STARTED_STATUSES,
   daysSinceOrgDay,
   isIssueStalled,
   isProjectUpdateStale,
 } from '@/features/issues/stale'
+import { ISSUE_STATUSES } from '@/features/issues/status'
 
 // Staleness is DAY-granular in the ORG zone (mirrors due.ts), never a rolling
 // 14×86_400_000 ms window: the "stalled" chip, the stalled filter, the prompt
@@ -24,6 +25,12 @@ describe('stale thresholds', () => {
     expect(STALE_ISSUE_DAYS).toBe(14)
     expect(STALE_PROJECT_DAYS).toBe(21)
     expect(STALE_PROJECT_DAYS).toBe(3 * 7)
+  })
+})
+
+describe('STARTED_STATUSES', () => {
+  it('is exactly the started pair, in board order (the prompt job SELECTs this set)', () => {
+    expect(STARTED_STATUSES).toEqual(['IN_PROGRESS', 'IN_REVIEW'])
   })
 })
 
@@ -77,10 +84,12 @@ describe('isIssueStalled', () => {
     expect(isIssueStalled('IN_REVIEW', noonSgt('2026-07-07'), TODAY, SGT)).toBe(false)
   })
 
-  it('is false for every non-started status, however old the touch', () => {
-    for (const status of ['BACKLOG', 'TODO', 'DONE', 'CANCELED'] as IssueStatus[]) {
-      expect(isIssueStalled(status, noonSgt('2026-01-01'), TODAY, SGT)).toBe(false)
-    }
+  it('is true for the started pair only — every other status is never stalled, however old the touch', () => {
+    const ancient = noonSgt('2026-01-01')
+    expect(ISSUE_STATUSES.map((s) => [s, isIssueStalled(s, ancient, TODAY, SGT)])).toEqual([
+      ['BACKLOG', false], ['TODO', false], ['IN_PROGRESS', true],
+      ['IN_REVIEW', true], ['DONE', false], ['CANCELED', false],
+    ])
   })
 
   it('is false when the last touch is missing (optimistic mutation results)', () => {

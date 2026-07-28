@@ -10,7 +10,8 @@ import { startOfOrgDay, orgToday } from '@/features/issues/due'
 import { OPEN_STATUSES } from '@/features/issues/status'
 import { promptAtFor, shouldPrompt, promptDigestLine } from '@/features/issues/update-prompt'
 import { isEffectiveLead } from '@/features/issues/project-health'
-import { isIssueStalled } from '@/features/issues/stale'
+import { isIssueStalled, STARTED_STATUSES } from '@/features/issues/stale'
+import { lastTouchedByIssue } from '@/features/issues/issue-service'
 import * as bot from '@/features/bot'
 
 export async function expirePendingBookings(now: Date = new Date()): Promise<number> {
@@ -128,23 +129,12 @@ export async function promptProjectUpdates(now: Date = new Date()): Promise<numb
     const [closed, overdue, started] = await Promise.all([
       prisma.issue.count({ where: { projectId: p.id, status: 'DONE', completedAt: { gte: since } } }),
       prisma.issue.count({ where: { projectId: p.id, status: { in: OPEN_STATUSES }, dueDate: { lt: startOfOrgDay(now, tz) } } }),
-      prisma.issue.findMany({ where: { projectId: p.id, status: { in: ['IN_PROGRESS', 'IN_REVIEW'] } }, select: { id: true, status: true } }),
+      prisma.issue.findMany({ where: { projectId: p.id, status: { in: STARTED_STATUSES } }, select: { id: true, status: true } }),
     ])
-    // "Touched" = max(activity, non-deleted comment) — never Issue.updatedAt (§5.2).
-    const ids = started.map((i) => i.id)
-    const [acts, comms] = ids.length
-      ? await Promise.all([
-          prisma.issueActivity.groupBy({ by: ['issueId'], _max: { createdAt: true }, where: { issueId: { in: ids } } }),
-          prisma.issueComment.groupBy({ by: ['issueId'], _max: { createdAt: true }, where: { issueId: { in: ids }, deletedAt: null } }),
-        ])
-      : [[], []]
-    const actBy = new Map(acts.map((a) => [a.issueId, a._max.createdAt as Date]))
-    const commBy = new Map(comms.map((c) => [c.issueId, c._max.createdAt as Date]))
-    const stalled = started.filter((i) => {
-      const touches = [actBy.get(i.id), commBy.get(i.id)].filter(Boolean) as Date[]
-      const last = touches.length ? new Date(Math.max(...touches.map(Number))) : null
-      return isIssueStalled(i.status, last, today, tz)
-    }).length
+    // "Touched" = max(activity, non-deleted comment) — never Issue.updatedAt (§5.2);
+    // the same helper the stalled chip's lastTouchedAt is hydrated from.
+    const touched = await lastTouchedByIssue(started.map((i) => i.id))
+    const stalled = started.filter((i) => isIssueStalled(i.status, touched.get(i.id) ?? null, today, tz)).length
     const line = promptDigestLine({ projectName: p.name, projectId: p.id, since, closed, overdue, stalled, tz, appUrl: env.APP_URL })
 
     // Recipients: effective lead → distinct open-issue assignees → admins, all under
