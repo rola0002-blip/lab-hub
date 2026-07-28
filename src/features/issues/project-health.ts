@@ -31,6 +31,21 @@ export function healthBucket(p: HealthInput, today: string, tz: string): HealthB
   return 'on_track'
 }
 
+export type AttentionBucket = Exclude<HealthBucket, 'on_track'>
+
+// The ONE definition of the "needs attention" set (spec §4.7): an ACTIVE project
+// outside the on_track bucket. /projects?attention=1 filters on it and the dashboard
+// groups on it, so the dashboard's counts can never drift from what the review screen
+// lists. Returns the bucket the project is flagged under, or null when it needs none.
+export function attentionBucket(p: HealthInput, today: string, tz: string): AttentionBucket | null {
+  if (p.status !== 'ACTIVE') return null
+  const bucket = healthBucket(p, today, tz)
+  return bucket === 'on_track' ? null : bucket
+}
+export function needsAttention(p: HealthInput, today: string, tz: string): boolean {
+  return attentionBucket(p, today, tz) !== null
+}
+
 // Total order over ACTIVE+PAUSED: bucket, then oldest latestUpdate first with
 // never-updated FIRST, then openOverdue desc, then name asc (determinism).
 export function compareProjectsWorstFirst(a: HealthInput, b: HealthInput, today: string, tz: string): number {

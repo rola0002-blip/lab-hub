@@ -14,7 +14,7 @@ import { listProjects, type ProjectDto } from '@/features/issues/project-service
 import { listDocuments } from '@/features/documents/document-service'
 import { dueBucket, orgToday, startOfOrgDay } from '@/features/issues/due'
 import { OPEN_STATUSES } from '@/features/issues/status'
-import { compareProjectsWorstFirst, healthBucket } from '@/features/issues/project-health'
+import { attentionBucket, compareProjectsWorstFirst, type AttentionBucket } from '@/features/issues/project-health'
 import { isMember } from '@/features/chat/conversation-service'
 import { LAB_UPDATES_CHANNEL_ID } from '@/features/bot'
 import { messageToPlainText } from '@/features/chat/markdown'
@@ -82,14 +82,12 @@ export default async function DashboardPage() {
     .slice(0, 8)
 
   // The attention buckets are derived from the SAME listProjects() read and the SAME
-  // healthBucket predicate /projects?attention=1 filters on (ACTIVE, bucket !== on_track),
-  // so the four counts always sum to exactly what the review screen lists.
-  const buckets: Record<Exclude<ReturnType<typeof healthBucket>, 'on_track'>, ProjectDto[]> =
-    { off_track: [], at_risk: [], no_lead: [], no_update: [] }
+  // project-health attentionBucket helper that /projects?attention=1 filters on, so the
+  // four counts always sum to exactly what the review screen lists.
+  const buckets: Record<AttentionBucket, ProjectDto[]> = { off_track: [], at_risk: [], no_lead: [], no_update: [] }
   for (const p of projects) {
-    if (p.status !== 'ACTIVE') continue
-    const b = healthBucket(p, today, tz)
-    if (b !== 'on_track') buckets[b].push(p)
+    const b = attentionBucket(p, today, tz)
+    if (b) buckets[b].push(p)
   }
   for (const k of ATTENTION_ROWS) buckets[k.key].sort((a, b) => compareProjectsWorstFirst(a, b, today, tz))
   const attentionTotal = ATTENTION_ROWS.reduce((n, k) => n + buckets[k.key].length, 0)
