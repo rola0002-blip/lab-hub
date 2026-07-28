@@ -23,6 +23,12 @@ export function orgToday(now: Date, tz: string): string {
   return format(new TZDate(now, tz), 'yyyy-MM-dd')
 }
 
+// Day-of-week (0=Sunday) of `now` in the org zone — the prompt job's weekday gate.
+// Kept here so ALL org-day boundary math lives in one module.
+export function orgWeekday(now: Date, tz: string): number {
+  return new TZDate(now, tz).getDay()
+}
+
 // Display bucket for a list row / board card. Completed work (DONE/CANCELED) is
 // never flagged and a missing due date has no bucket → null. Day-granular compare
 // in the org zone: dueDay < today ⇒ overdue, dueDay === today ⇒ today, else upcoming.

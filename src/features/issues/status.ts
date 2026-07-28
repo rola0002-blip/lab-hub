@@ -48,6 +48,9 @@ export function labelTextVar(color: string): string {
 export type IssueFilterParams = {
   status?: IssueStatus; priority?: IssuePriority
   assignee?: string; project?: string; label?: string; due?: DueFilter
+  // Stalled quick-filter (SP8 §5.4). Unlike the rest this never reaches the service:
+  // staleness is derived from the DTO's lastTouchedAt, so the pages post-filter it.
+  stalled?: true
 }
 export function parseIssueFilters(sp: Record<string, string | string[] | undefined>): IssueFilterParams {
   const one = (v: string | string[] | undefined): string | undefined =>
@@ -62,5 +65,8 @@ export function parseIssueFilters(sp: Record<string, string | string[] | undefin
     // Due quick-filter — validated to the fixed set (a stale/typo'd ?due= degrades to
     // "no filter", never reaching the service), same posture as the enum params.
     due: due === 'overdue' || due === 'week' ? (due as DueFilter) : undefined,
+    // Boolean flag: only the exact string 'true' opts in; anything else (a repeated
+    // param, '1', a stale value) degrades to "no filter" like every param above.
+    stalled: one(sp.stalled) === 'true' ? true : undefined,
   }
 }

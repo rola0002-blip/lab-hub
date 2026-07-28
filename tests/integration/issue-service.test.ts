@@ -265,4 +265,43 @@ describe('issue-service', () => {
     await expect(setTitle({ actorId: guest.id, role: 'guest', issueId: 'ghost', title: '' }))
       .rejects.toMatchObject({ name: 'PolicyError', code: 'forbidden' })
   })
+
+  describe('lastTouchedAt (SP8 §5.2)', () => {
+    it('reflects max(activity, non-deleted comment); rank-only move and rebalance do NOT bump it', async () => {
+      const u = await makeUser()
+      const a = await createIssue({ actorId: u.id, role: 'member', title: 'A', status: 'IN_PROGRESS' })
+      const b = await createIssue({ actorId: u.id, role: 'member', title: 'B', status: 'IN_PROGRESS' })
+      const t0 = (await listIssues()).find((i) => i.id === a.id)!.lastTouchedAt!
+      expect(t0).toBeTypeOf('string') // the 'created' activity
+      // Deleted comments don't count; live ones do.
+      const c = await prisma.issueComment.create({ data: { issueId: a.id, userId: u.id, body: 'x', createdAt: new Date(Date.now() + 60_000) } })
+      await prisma.issueComment.update({ where: { id: c.id }, data: { deletedAt: new Date() } })
+      expect((await listIssues()).find((i) => i.id === a.id)!.lastTouchedAt).toBe(t0)
+      await prisma.issueComment.create({ data: { issueId: a.id, userId: u.id, body: 'y', createdAt: new Date(Date.now() + 120_000) } })
+      expect((await listIssues()).find((i) => i.id === a.id)!.lastTouchedAt! > t0).toBe(true)
+      // Rank-only drag (same status): moveIssue writes NO activity when status unchanged.
+      const before = (await listIssues()).find((i) => i.id === b.id)!.lastTouchedAt!
+      await moveIssue({ actorId: u.id, role: 'member', issueId: b.id, status: 'IN_PROGRESS', prevId: a.id, nextId: null })
+      expect((await listIssues()).find((i) => i.id === b.id)!.lastTouchedAt).toBe(before)
+      // A whole-column rebalance rewrites every rank (and every updatedAt) but writes no
+      // activity either — so it must not bump lastTouchedAt for a bystander like `a`.
+      const touchedA = (await listIssues()).find((i) => i.id === a.id)!.lastTouchedAt!
+      const rankA = (await prisma.issue.findUniqueOrThrow({ where: { id: a.id } })).rank
+      const deep = 'V' + '0'.repeat(60) // splitting these forces moveIssue → rebalanceAndPlace
+      const lo = await prisma.issue.create({ data: { title: 'lo', creatorId: u.id, status: 'IN_PROGRESS', rank: `${deep}1` } })
+      const hi = await prisma.issue.create({ data: { title: 'hi', creatorId: u.id, status: 'IN_PROGRESS', rank: `${deep}2` } })
+      await moveIssue({ actorId: u.id, role: 'member', issueId: b.id, status: 'IN_PROGRESS', prevId: lo.id, nextId: hi.id })
+      expect((await prisma.issue.findUniqueOrThrow({ where: { id: a.id } })).rank).not.toBe(rankA) // reseated
+      const after = await listIssues()
+      expect(after.find((i) => i.id === a.id)!.lastTouchedAt).toBe(touchedA)
+      expect(after.find((i) => i.id === b.id)!.lastTouchedAt).toBe(before)
+      // Issues with neither activity nor comment carry no lastTouchedAt at all.
+      expect(after.find((i) => i.id === lo.id)!.lastTouchedAt).toBeUndefined()
+    })
+    it('mutation return paths leave lastTouchedAt absent', async () => {
+      const u = await makeUser()
+      const dto = await createIssue({ actorId: u.id, role: 'member', title: 'C' })
+      expect(dto.lastTouchedAt).toBeUndefined()
+    })
+  })
 })

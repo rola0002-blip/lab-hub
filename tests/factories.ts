@@ -12,6 +12,7 @@ export async function resetDb() {
     try {
       await prisma.$executeRawUnsafe(`
         TRUNCATE TABLE "Document","DocumentFolder",
+          "ProjectUpdate",
           "IssueActivity","IssueAttachment","IssueComment","IssueLabel",
           "Label","Issue","Project",
           "Conversation","ConversationMember","Message","Reaction",
@@ -85,6 +86,10 @@ export async function makeMessage(conversationId: string, userId: string, over: 
 
 export async function makeProject(over: Record<string, unknown> = {}) {
   return prisma.project.create({ data: { name: `Project ${randomUUID().slice(0, 6)}`, ...over } })
+}
+
+export async function makeProjectUpdate(projectId: string, authorId: string, over: Record<string, unknown> = {}) {
+  return prisma.projectUpdate.create({ data: { projectId, authorId, health: 'ON_TRACK', body: `update ${randomUUID().slice(0, 6)}`, ...over } })
 }
 
 export async function makeLabel(over: Record<string, unknown> = {}) {

@@ -11,7 +11,12 @@ export async function updateOrgAction(fd: FormData): Promise<{ ok: boolean; mess
     name: z.string().min(1).max(100),
     accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
     timezone: z.string().min(1),
-  }).safeParse({ name: fd.get('name'), accentColor: fd.get('accentColor'), timezone: fd.get('timezone') })
+    updatePromptDay: z.coerce.number().int().min(0).max(6),   // FormData values are strings
+    updatePromptHour: z.coerce.number().int().min(0).max(23),
+  }).safeParse({
+    name: fd.get('name'), accentColor: fd.get('accentColor'), timezone: fd.get('timezone'),
+    updatePromptDay: fd.get('updatePromptDay'), updatePromptHour: fd.get('updatePromptHour'),
+  })
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message }
   let logoPath: string | undefined
   const logo = fd.get('logo') as File | null

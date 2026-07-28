@@ -36,6 +36,11 @@ describe('notificationHref', () => {
     expect(notificationHref({ type: 'issue_mention', payload: { identifier: 'LAB-7', conversationId: 'c1' } })).toBe('/issues/LAB-7')
   })
 
+  it('routes a project_update_prompt row to the bot DM at the prompt message (SP8)', () => {
+    expect(notificationHref({ type: 'project_update_prompt', payload: { message: 'Time for…', conversationId: 'c9', messageId: 'm4' } }))
+      .toBe('/chat/c9?msg=m4') // shape-identical to the chat fan-out payload — NO resolver change
+  })
+
   it('returns null when nothing resolves', () => {
     expect(notificationHref({ type: 'unknown_type', payload: {} })).toBeNull()
     expect(notificationHref({ type: 'message_dm', payload: {} })).toBeNull() // missing conversationId

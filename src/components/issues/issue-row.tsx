@@ -8,6 +8,7 @@ import { ISSUE_STATUSES, STATUS_LABEL, PRIORITIES, PRIORITY_LABEL, isDoneLike, l
 import { setStatusAction, setAssigneeAction, setPriorityAction } from '@/app/(app)/issues/actions'
 import { toast } from '@/lib/toast-store'
 import { DueDate } from './due-date'
+import { StalledChip } from './stalled-chip'
 import type { IssueDto } from '@/features/issues/issue-service'
 import type { Role } from '@/lib/session'
 
@@ -20,7 +21,7 @@ export function IssueRow({ issue, role, users, timezone, today, tabIndex, onFocu
   return (
     <div
       role="listitem" tabIndex={tabIndex} onFocus={onFocusIndex}
-      className="group grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto] items-center gap-3 px-3 py-1.5 outline-none hover:bg-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring-focus)]"
+      className="group grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto_auto] items-center gap-3 px-3 py-1.5 outline-none hover:bg-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring-focus)]"
     >
       {canEdit ? (
         <Menu label={`Priority: ${PRIORITY_LABEL[issue.priority]}`} button={<PriorityIcon priority={issue.priority} />}
@@ -38,6 +39,14 @@ export function IssueRow({ issue, role, users, timezone, today, tabIndex, onFocu
         {issue.labels.map((l) => (
           <span key={l.id} className="rounded-full px-1.5 py-0.5 text-2xs" style={{ color: `var(${labelTextVar(l.color)})`, background: `color-mix(in srgb, var(${l.color}) 14%, var(--bg-canvas))` }}>{l.name}</span>
         ))}
+      </span>
+      {/* Renders nothing (null) unless the issue is started and untouched for
+          STALE_ISSUE_DAYS — and nothing at all after an optimistic mutation, where
+          the client DTO carries no lastTouchedAt. Wrapped like the due cell below so
+          the cell always exists: a bare null child would leave the 8th track empty on
+          non-stalled rows, and its gutter still renders, nudging the avatar rail 12px. */}
+      <span className="shrink-0">
+        <StalledChip status={issue.status} lastTouchedAt={issue.lastTouchedAt} today={today} timezone={timezone} />
       </span>
       <span className="shrink-0 text-2xs text-subtle">{issue.project?.name ?? ''}</span>
       {/* Org-timezone rule (src/lib/time.ts): fixed pattern + org zone, never the

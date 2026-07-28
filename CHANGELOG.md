@@ -6,6 +6,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Weekly project updates: every project page gains an Updates section and a "Post update" composer. Pick a health call — On track, At risk, or Off track — and write the one-liner that says what actually moved. Updates are permanent and reverse-chronological, render `@mentions` and `LAB-<n>` references the same way chat does, and each one is announced to `#lab-updates` by the LabHub Bot.
+- Project health is now visible everywhere a project is: a chip carrying a distinct glyph *and* the word (never colour alone) on project cards, the project header, and the dashboard. A project that has been silent for three weeks derives a "No update" state automatically — silence is displayed, never stored.
+- "Post as project update" on any chat message's ⋯ menu: the message is quoted into the composer with its author's attribution, and the resulting update carries a backlink chip ("From a message in #channel"). The chip links back only for people still in that conversation and stays unlinked for everyone else, so capturing a message never widens who can read it.
+- `/projects` is now a review screen, ordered worst-first — off track, then at risk, then unowned, then silent, then on track — with "updated N days ago", the open-overdue count, and progress on every card. Completed and cancelled projects move into their own section below. A Health filter and a "Needs attention" checkbox round-trip through the URL, and an unknown value degrades to no filter rather than erroring.
+- A stalled signal on issues: an issue that is In progress or In review with no activity or comment for 14 days shows a muted "Stalled" chip on its list row and board card, and the filter bar gains an Activity → "Stalled only" quick filter that composes with every other filter. Staleness is derived from real activity and comments, so a drag-reorder or a board rebalance never clears it and a new comment always does.
+- A weekly update prompt: a background job runs on the organisation's chosen day and hour — new settings under Settings → Organisation, defaulting to Tuesday 16:00 in the org timezone — and sends one direct message per active project, once per prompt window, unless that project's prompts are snoozed. It goes to the project lead, or to the people with open work in the project, or to the admins if there is no one else, and carries a short digest of what closed, what is overdue, and what has stalled. The prompt is latched per project per window, so a restart never double-pings. Each project's menu gains "Skip the next prompt", "Pause updates for 4 weeks", and "Resume update prompts".
+- The dashboard is rebuilt as "Lab today": five fixed sections in a fixed order — My issues, Today in the lab, Projects needing attention, Latest in #lab-updates, Recent files — above the existing approvals banner, so it is a stable place to look rather than a layout that reshuffles as content appears. The attention section's four counts always agree with what `/projects?attention=1` lists, and the `#lab-updates` digest renders only for channel members and shows only real posts, never join or add event lines.
+
+### Fixed
+- The unscoped file listing now spans every folder instead of silently returning only root-level files, which also fixes the dashboard's "Recent files" section and the default folder offered by the Files Move dialog.
+- Assigning an issue to a person who no longer exists, filing it against a deleted project, or naming a missing project lead now returns a clear message instead of an unhandled 500 — including the empty-string ids a stale form can submit. Guests stay assignable and can still be stored as a project lead.
+
+### Changed
+- Project health glyphs use four new `--health-*` tokens, defined for both themes and gated by `npm run contrast` at the 3:1 non-text bar. They tint glyphs only, are never accent-themed, and never carry meaning on their own.
+- Removed the unused `canManageProjects` permission helper; `assertCanMutate` is now the single project-mutation gate.
+- One hand-written, additive database migration (`20260727000000_sp8_progress_loop`) adds the project-health enum, the project-update table, the per-project prompt latch and snooze columns, two project indexes, and the organisation's update-prompt day and hour. Nothing is renamed or dropped, so rolling back to the previous release stays data-safe.
+
 ## [0.9.5] - 2026-07-18
 
 ### Added

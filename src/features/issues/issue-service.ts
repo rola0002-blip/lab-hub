@@ -24,6 +24,10 @@ export type IssueDto = {
   dueDate: string | null; rank: string; completedAt: string | null; originMessageId: string | null
   labels: { id: string; name: string; color: string }[]
   createdAt: string; updatedAt: string
+  // SP8: populated by listIssues ONLY — max(latest activity, latest non-deleted comment);
+  // mutation returns leave it absent so optimistic results drop the chip until the next
+  // server render (§5.2)
+  lastTouchedAt?: string
 }
 
 export const ISSUE_INCLUDE = {
@@ -72,7 +76,24 @@ export async function listIssues(filter: IssueFilter = {}, now: Date = new Date(
     orderBy: [{ status: 'asc' }, { rank: 'asc' }], // rank ordered byte-wise (COLLATE "C")
     include: ISSUE_INCLUDE,
   })
-  return rows.map(toDto)
+  // SP8 §5.2: two grouped reads (the listProjects N+1-avoidance idiom), both served by
+  // the existing [issueId, createdAt] compound indexes. Issue.updatedAt is deliberately
+  // NOT consulted — a rank-only move or a column rebalance touches updatedAt but writes
+  // no activity, so it must not clear the stalled chip.
+  const ids = rows.map((r) => r.id)
+  const [acts, comms] = ids.length
+    ? await Promise.all([
+        prisma.issueActivity.groupBy({ by: ['issueId'], _max: { createdAt: true }, where: { issueId: { in: ids } } }),
+        prisma.issueComment.groupBy({ by: ['issueId'], _max: { createdAt: true }, where: { issueId: { in: ids }, deletedAt: null } }),
+      ])
+    : [[], []]
+  const actBy = new Map(acts.map((a) => [a.issueId, a._max.createdAt as Date]))
+  const commBy = new Map(comms.map((c) => [c.issueId, c._max.createdAt as Date]))
+  return rows.map((r) => {
+    const touches = [actBy.get(r.id), commBy.get(r.id)].filter(Boolean) as Date[]
+    const dto = toDto(r)
+    return touches.length ? { ...dto, lastTouchedAt: new Date(Math.max(...touches.map(Number))).toISOString() } : dto
+  })
 }
 
 export async function getIssue(id: string): Promise<IssueDto | null> {
@@ -84,6 +105,20 @@ async function loadOrThrow(id: string): Promise<Loaded> {
   const i = await prisma.issue.findUnique({ where: { id }, include: ISSUE_INCLUDE })
   if (!i) throw new PolicyError('not_found', 'Issue not found.')
   return i
+}
+
+// SP8 §3.2: assert-then-load FK validation, run BEFORE the transaction. A bad id
+// previously surfaced as a Prisma P2003 → unhandled 500. The predicate matches
+// exactly what the assignee/lead pickers enumerate ({ banned:false, isSystem:false }),
+// so the assert can never reject an option the UI offers — and it makes assigning
+// work to the LabHub Bot impossible. Guests are deliberately NOT rejected (§3.2).
+export async function assertAssigneeExists(id: string): Promise<void> {
+  const u = await prisma.user.findUnique({ where: { id }, select: { banned: true, isSystem: true } })
+  if (!u || u.banned || u.isSystem) throw new PolicyError('invalid', 'That person is no longer available.')
+}
+export async function assertProjectExists(id: string): Promise<void> {
+  const p = await prisma.project.findUnique({ where: { id }, select: { id: true } })
+  if (!p) throw new PolicyError('invalid', 'That project no longer exists.')
 }
 
 // ── notification helpers (offline-only email; never self) ─────────────────────
@@ -136,6 +171,10 @@ export async function createIssue(args: {
     const msg = await prisma.message.findUnique({ where: { id: args.originMessageId }, select: { conversationId: true } })
     if (!msg || !(await isMember(args.actorId, msg.conversationId))) throw new PolicyError('not_found', 'Message not found.')
   }
+  // `!= null` not truthiness: '' is falsy but IS written (`args.assigneeId ?? null`
+  // keeps it), so a truthy guard would let the empty string reach the FK → P2003.
+  if (args.assigneeId != null) await assertAssigneeExists(args.assigneeId)
+  if (args.projectId != null) await assertProjectExists(args.projectId)
   // Initial rank = end of the destination column.
   const last = await prisma.issue.findFirst({ where: { status }, orderBy: { rank: 'desc' }, select: { rank: true } })
   const rank = rankBetween(last?.rank ?? null, null)
@@ -207,6 +246,7 @@ export async function setStatus(args: { actorId: string; role: Role; issueId: st
 // ── assignee (+ issue_assigned) ───────────────────────────────────────────────
 export async function setAssignee(args: { actorId: string; role: Role; issueId: string; assigneeId: string | null }): Promise<IssueDto> {
   assertCanMutate(args.role)
+  if (args.assigneeId != null) await assertAssigneeExists(args.assigneeId) // §3.2; only null clears — '' is a bad id, not a clear
   const issue = await loadOrThrow(args.issueId)
   if (issue.assigneeId === args.assigneeId) return toDto(issue)
   const updated = await prisma.$transaction(async (tx) => {
@@ -251,6 +291,7 @@ export async function setPriority(args: { actorId: string; role: Role; issueId: 
 }
 export async function setProject(args: { actorId: string; role: Role; issueId: string; projectId: string | null }): Promise<IssueDto> {
   assertCanMutate(args.role)
+  if (args.projectId != null) await assertProjectExists(args.projectId) // §3.2; only null detaches — '' is a bad id, not a detach
   const issue = await loadOrThrow(args.issueId)
   return simpleSet({ actorId: args.actorId, issue, type: 'project', data: { projectId: args.projectId }, from: issue.projectId, to: args.projectId })
 }

@@ -3,7 +3,6 @@ import {
   PolicyError,
   assertCanMutate,
   canMutateIssues,
-  canManageProjects,
   canDeleteProject,
   canEditComment,
   canDeleteComment,
@@ -21,11 +20,6 @@ describe('issue-policy', () => {
     expect(canMutateIssues('admin')).toBe(true)
     expect(canMutateIssues('member')).toBe(true)
     expect(canMutateIssues('guest')).toBe(false)
-  })
-  it('project management (create/edit) is admins + members; guests excluded', () => {
-    expect(canManageProjects('admin')).toBe(true)
-    expect(canManageProjects('member')).toBe(true)
-    expect(canManageProjects('guest')).toBe(false)
   })
   it('project deletion is admin-only', () => {
     expect(canDeleteProject('admin')).toBe(true)

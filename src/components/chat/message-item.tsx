@@ -9,6 +9,7 @@ import { humanTime, clockTime } from '@/lib/humanize'
 import { tokenizeMessage, type Token } from '@/features/chat/markdown'
 import { EMOJI_MAP } from '@/features/chat/emoji'
 import { openIssueComposer } from '@/lib/issue-composer-store'
+import { openProjectUpdateComposer } from '@/lib/project-update-composer-store'
 import { toast } from '@/lib/toast-store'
 import { useChat } from './chat-store'
 import { EmojiPicker } from './emoji-picker'
@@ -173,9 +174,10 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
 
   const own = msg.author.id === selfId
   const canDelete = own || selfRole === 'admin'
-  // Guests are read-only for issues (issue-hotkeys.tsx / command-palette gate them
-  // too); hide both create-issue affordances so a guest never raises a modal that
-  // only 403s at submit. The service is the real gate; this is the UI half.
+  // Guests are read-only for issues AND project updates (issue-hotkeys.tsx /
+  // command-palette gate them too); hide the create-issue affordances and the
+  // "Post as project update" item so a guest never raises a modal that only 403s
+  // at submit. The service is the real gate; this is the UI half.
   const canCreateIssue = selfRole !== 'guest'
   const isTemp = msg.id.startsWith('tmp-')
   // A live message that @-mentions the viewer tints its row (accent rail + wash).
@@ -263,6 +265,13 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
     const quoted = msg.body.split('\n').map((l) => `> ${l}`).join('\n')
     openIssueComposer({ title: firstLine, description: `${quoted}\n\n— ${msg.author.name}`, originMessageId: msg.id, assignToSelf: true }) // quick capture → assign self
   }
+  // Capture an already-written narrative as a project update (SP8 §4.6): quoted
+  // body + author attribution, originMessageId for the backlink. Same guest gate
+  // as create-issue; the server rejects regardless.
+  function postAsUpdate() {
+    const quoted = msg.body.split('\n').map((l) => `> ${l}`).join('\n')
+    openProjectUpdateComposer({ body: `${quoted}\n\n— ${msg.author.name}`, originMessageId: msg.id })
+  }
 
   // Presence of the message author, mirrored off the store's `online` set (same
   // source the DM rows/header use). Shown on the leading avatar as a filled dot
@@ -276,6 +285,7 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
     ...(own ? [{ label: 'Edit', onSelect: () => { setDraft(msg.body); setEditing(true) } }] : []),
     { label: 'Copy link', onSelect: copyLink },
     ...(canCreateIssue ? [{ label: 'Create issue', onSelect: createFromMessage }] : []),
+    ...(canCreateIssue ? [{ label: 'Post as project update', onSelect: postAsUpdate }] : []),
     { label: 'Pin', onSelect: () => {}, disabled: true },
     ...(canDelete ? [{ label: 'Delete', onSelect: () => setConfirmDel(true), danger: true }] : []),
   ]

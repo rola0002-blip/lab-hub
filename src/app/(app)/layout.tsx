@@ -2,6 +2,7 @@ import { requireSetup } from '@/lib/org'
 import { requireUser } from '@/lib/session'
 import { prisma } from '@/lib/db'
 import { totalUnread } from '@/features/chat/conversation-service'
+import { listProjectOptions } from '@/features/issues/project-service'
 import { Sidebar } from '@/components/sidebar'
 import { APP_VERSION } from '@/lib/version'
 import Bell from '@/components/bell'
@@ -10,6 +11,7 @@ import { AccentSync } from '@/components/accent-picker'
 import { ChatProvider } from '@/components/chat/chat-store'
 import { CommandPalette } from '@/components/command-palette'
 import { CreateIssueModal } from '@/components/issues/create-issue-modal'
+import { ProjectUpdateModal } from '@/components/issues/project-update-modal'
 import { IssueHotkeys } from '@/components/issues/issue-hotkeys'
 import { UserMenu } from '@/components/user-menu'
 import { ToastHost } from '@/components/ui/toast'
@@ -26,10 +28,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const pref = await prisma.user.findUnique({ where: { id: user.id }, select: { themePreference: true, accentPreference: true, image: true } })
   // Small org-wide option lists for the globally-mounted create-issue composer
   // (raised by the `c` shortcut, the ⌘K "Create issue" command, and any
-  // "New issue" button); the modal itself gates opening for guests.
+  // "New issue" button); the modal itself gates opening for guests. The project
+  // list is ONE source — the project-update composer reads the same array.
   const [issueUsers, issueProjects] = await Promise.all([
     prisma.user.findMany({ where: { banned: false, isSystem: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
-    prisma.project.findMany({ orderBy: { createdAt: 'desc' }, select: { id: true, name: true } }),
+    listProjectOptions(),
   ])
 
   return (
@@ -68,6 +71,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {/* Global create-issue composer + `c` shortcut — mounted once so any page
           (or the ⌘K palette) can raise the modal. Hotkey is role-gated. */}
       <CreateIssueModal users={issueUsers} projects={issueProjects} currentUserId={user.id} />
+      {/* Global project-update composer — same one-source option list, so a chat
+          message's "Post as project update" can raise it from any page. */}
+      <ProjectUpdateModal projects={issueProjects} />
       <IssueHotkeys role={user.role} />
       {/* Global toast host — mounted once so `toast()` works from any page. */}
       <ToastHost />

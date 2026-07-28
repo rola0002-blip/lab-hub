@@ -52,7 +52,7 @@ describe('document-service', () => {
     await makeDocument(u.id, { folderId: f.id })
     await expect(deleteFolder({ userId: u.id, role: 'member', id: f.id })).rejects.toThrow(PolicyError) // non-empty
     // empty it, then a rename + delete succeed for the creator.
-    const docs = await listDocuments(f.id)
+    const docs = await listDocuments({ folderId: f.id })
     await moveDocument({ userId: u.id, role: 'member', id: docs[0].id, folderId: null })
     await renameFolder({ userId: u.id, role: 'member', id: f.id, name: 'Renamed' })
     await deleteFolder({ userId: u.id, role: 'member', id: f.id })
@@ -103,5 +103,27 @@ describe('document-service', () => {
     // `folder?.name` announce string (createFolder success path is exercised above).
     const dto = await createDocument({ uploaderId: u.id, uploaderName: u.name, name: 'in-folder.pdf', path: '/uploads/documents/inf.pdf', mime: 'application/pdf', size: 12, folderId: a.id })
     expect(dto.folderId).toBe(a.id)
+  })
+
+  describe('listDocuments scope (SP8 §3.1)', () => {
+    it('returns documents from every folder when folderId is omitted, root-only when null', async () => {
+      const u = await makeUser()
+      const folder = await makeDocumentFolder({ createdById: u.id })
+      const inFolder = await makeDocument(u.id, { folderId: folder.id })
+      const atRoot = await makeDocument(u.id)
+      const all = await listDocuments({})
+      expect(all.map((d) => d.id).sort()).toEqual([inFolder.id, atRoot.id].sort())
+      expect(all.find((d) => d.id === inFolder.id)?.folderName).toBe(folder.name)
+      expect(all.find((d) => d.id === atRoot.id)?.folderName).toBeNull()
+      const root = await listDocuments({ folderId: null })
+      expect(root.map((d) => d.id)).toEqual([atRoot.id])
+      const scoped = await listDocuments({ folderId: folder.id })
+      expect(scoped.map((d) => d.id)).toEqual([inFolder.id])
+    })
+    it('take bounds the newest-first read', async () => {
+      const u = await makeUser()
+      for (let i = 0; i < 3; i++) await makeDocument(u.id, { createdAt: new Date(Date.now() - i * 60_000) })
+      expect((await listDocuments({ take: 2 })).length).toBe(2)
+    })
   })
 })

@@ -15,11 +15,11 @@ import {
 } from './actions'
 
 type FolderVM = { id: string; name: string; createdById: string }
-type DocVM = { id: string; name: string; path: string; mime: string; size: number; uploaderId: string; uploaderName: string; created: string; folderId: string | null }
+type DocVM = { id: string; name: string; path: string; mime: string; size: number; uploaderId: string; uploaderName: string; created: string; folderId: string | null; folderName: string | null }
 type SearchHit = { id: string; name: string; path: string; mime: string }
 type Dialog =
   | { kind: 'newfolder' } | { kind: 'renamefolder'; id: string; name: string }
-  | { kind: 'renamedoc'; id: string; name: string } | { kind: 'movedoc'; id: string; name: string }
+  | { kind: 'renamedoc'; id: string; name: string } | { kind: 'movedoc'; id: string; name: string; folderId: string | null }
 
 function fmtSize(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
@@ -93,12 +93,15 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
   function openDialog(d: Dialog) {
     setDialog(d)
     setDialogName('name' in d ? d.name : '')
-    if (d.kind === 'movedoc') setMoveTarget(currentFolderId ?? '')
+    // Pre-select the file's OWN folder: since §3.1 the unscoped listing mixes folders,
+    // so currentFolderId (null here) is no longer the row's folder — defaulting to it
+    // would turn a straight-through "Move" into an accidental move to root.
+    if (d.kind === 'movedoc') setMoveTarget(d.folderId ?? '')
   }
 
   const link = 'flex h-8 items-center gap-2 rounded-md px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]'
   const rows: DocVM[] = hits
-    ? hits.map((h) => ({ id: h.id, name: h.name, path: h.path, mime: h.mime, size: 0, uploaderId: '', uploaderName: '', created: '', folderId: null }))
+    ? hits.map((h) => ({ id: h.id, name: h.name, path: h.path, mime: h.mime, size: 0, uploaderId: '', uploaderName: '', created: '', folderId: null, folderName: null }))
     : documents
 
   return (
@@ -186,6 +189,8 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
                     route sets Content-Disposition, so a single anchor handles both. */}
                 <a href={d.path} target="_blank" rel="noreferrer"
                   className="min-w-0 flex-1 truncate text-default hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">{d.name}</a>
+                {/* SP8 §3.1: the unscoped listing mixes folders, so the row names its folder ('—' at root). */}
+                {!hits && <span className="hidden w-32 shrink-0 truncate text-subtle sm:block">{d.folderName ?? '—'}</span>}
                 {!hits && <span className="hidden w-16 shrink-0 text-right tabular-nums text-subtle sm:block">{fmtSize(d.size)}</span>}
                 {!hits && <span className="hidden w-40 shrink-0 truncate text-muted md:block">{d.uploaderName}</span>}
                 {!hits && <span className="hidden w-44 shrink-0 truncate text-subtle lg:block">{d.created}</span>}
@@ -193,7 +198,7 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
                   <Menu label={`File ${d.name} actions`} button={<MoreHorizontal size={16} aria-hidden />} items={[
                     ...(mayUpload ? [
                       { label: 'Rename', onSelect: () => openDialog({ kind: 'renamedoc', id: d.id, name: d.name }) },
-                      { label: 'Move…', onSelect: () => openDialog({ kind: 'movedoc', id: d.id, name: d.name }) },
+                      { label: 'Move…', onSelect: () => openDialog({ kind: 'movedoc', id: d.id, name: d.name, folderId: d.folderId }) },
                     ] : []),
                     { label: 'Download', onSelect: () => window.open(d.path, '_blank', 'noopener') },
                     ...(canDeleteDocument(role, d.uploaderId, selfId) ? [{ label: 'Delete', danger: true, onSelect: () => del(d.id) }] : []),

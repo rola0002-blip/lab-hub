@@ -39,6 +39,7 @@ model User {
   pushSubscriptions PushSubscription[]
 
   projectsLed     Project[]         @relation("ProjectLead")
+  projectUpdates  ProjectUpdate[]
   issuesCreated   Issue[]           @relation("IssueCreator")
   issuesAssigned  Issue[]           @relation("IssueAssignee")
   issueComments   IssueComment[]
@@ -98,12 +99,16 @@ model Verification {
 
 // ---------- LabHub domain ----------
 model Organization {
-  id            String  @id @default(cuid())
-  name          String
-  logoPath      String?
-  accentColor   String  @default("#0d9488")
-  timezone      String  @default("Asia/Singapore")
-  setupComplete Boolean @default(false)
+  id               String  @id @default(cuid())
+  name             String
+  logoPath         String?
+  accentColor      String  @default("#0d9488")
+  timezone         String  @default("Asia/Singapore")
+  // SP8: org-level weekly update-prompt cadence (0=Sunday, matching Date.getDay()).
+  // NOT NULL DEFAULT so no read site re-decides a fallback (spec §4.0).
+  updatePromptDay  Int     @default(2)
+  updatePromptHour Int     @default(16)
+  setupComplete    Boolean @default(false)
 }
 
 enum InvitationStatus {
@@ -327,7 +332,8 @@ model Message {
   reactions   Reaction[]
   attachments ChatAttachment[]
 
-  originatedIssues Issue[] @relation("IssueOrigin")
+  originatedIssues         Issue[]         @relation("IssueOrigin")
+  originatedProjectUpdates ProjectUpdate[] @relation("ProjectUpdateOrigin")
 
   @@unique([conversationId, slackTs])
   @@index([conversationId, createdAt])
@@ -373,6 +379,15 @@ enum ProjectStatus {
   CANCELED
 }
 
+// SP8: three stored health values; the fourth visible state ("No update") is DERIVED
+// (no update, or latest older than STALE_PROJECT_DAYS) — storing it would require a
+// write to express silence (spec §4.1).
+enum ProjectHealth {
+  ON_TRACK
+  AT_RISK
+  OFF_TRACK
+}
+
 enum IssueStatus {
   BACKLOG
   TODO
@@ -391,18 +406,47 @@ enum IssuePriority {
 }
 
 model Project {
-  id          String        @id @default(cuid())
-  name        String
-  description String        @default("")
-  leadId      String?
-  lead        User?         @relation("ProjectLead", fields: [leadId], references: [id], onDelete: SetNull)
-  startDate   DateTime?
-  targetDate  DateTime?
-  status      ProjectStatus @default(ACTIVE)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id                       String        @id @default(cuid())
+  name                     String
+  description              String        @default("")
+  leadId                   String?
+  lead                     User?         @relation("ProjectLead", fields: [leadId], references: [id], onDelete: SetNull)
+  startDate                DateTime?
+  targetDate               DateTime?
+  status                   ProjectStatus @default(ACTIVE)
+  // SP8: recurring prompt latch — compared to the CURRENT week's promptAt, not the
+  // one-shot dueSoonPingedAt idiom (which would fire once per project, ever).
+  lastUpdatePromptAt       DateTime?
+  // SP8: snooze — anchored to a prompt instant + 1ms (update-prompt.ts nthPromptAfter),
+  // never a rolling 7 days. null = not paused.
+  updatePromptsPausedUntil DateTime?
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
 
-  issues Issue[]
+  issues         Issue[]
+  projectUpdates ProjectUpdate[]
+
+  @@index([status])
+  @@index([leadId])
+}
+
+model ProjectUpdate {
+  id              String        @id @default(cuid())
+  projectId       String
+  project         Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  // Restrict, deliberately unlike Document.uploaderId's Cascade: the update is the
+  // wave's one durable record (annual reports, committee meetings). Users are banned,
+  // never deleted, so this FK never fires; if a hard delete is ever added it must
+  // fail loudly rather than silently erase the lab's narrative history (spec §4.1).
+  authorId        String
+  author          User          @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  health          ProjectHealth
+  body            String // ≤ 4000, enforced in project-update-service
+  originMessageId String?
+  originMessage   Message?      @relation("ProjectUpdateOrigin", fields: [originMessageId], references: [id], onDelete: SetNull)
+  createdAt       DateTime      @default(now())
+
+  @@index([projectId, createdAt])
 }
 
 model Issue {

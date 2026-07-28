@@ -40,14 +40,21 @@ export async function announceToChannel(text: string): Promise<void> {
 // DM a user as the bot. `suppress` toggles the one-bell path for natively-notified
 // events (booking pending/decided/reminder); leave it off for the issue-due-soon DM
 // (no native notification → the normal DM fan-out provides the single message_dm bell).
-export async function dmUser(userId: string, text: string, opts: { suppress?: boolean } = {}): Promise<void> {
+// Returns the DM's conversation id + created message id so callers (the SP8 prompt
+// job) can hang a deep-linking notify() payload off the exact message — or null when
+// the DM could not be delivered (banned recipient, send failure): SP8 §4.0/§4.5.
+export async function dmUser(
+  userId: string, text: string, opts: { suppress?: boolean } = {},
+): Promise<{ conversationId: string; messageId: string } | null> {
   try {
     const dm = await getOrCreateDm({ userIds: [COLOSSUS_BOT_ID, userId], byId: COLOSSUS_BOT_ID })
-    if (!dm.ok) return
+    if (!dm.ok) return null
     // Same neutralization as announceToChannel: the bot never produces a mention,
     // so a token in the interpolated text can't bypass a peer's mute via <@id>.
-    await sendMessage({ userId: COLOSSUS_BOT_ID, conversationId: dm.conversationId, body: neutralizeMentions(text), suppressNotify: opts.suppress })
+    const sent = await sendMessage({ userId: COLOSSUS_BOT_ID, conversationId: dm.conversationId, body: neutralizeMentions(text), suppressNotify: opts.suppress })
+    return sent.ok ? { conversationId: dm.conversationId, messageId: sent.message.id } : null
   } catch (e) {
     console.error('bot.dmUser failed', e)
+    return null
   }
 }

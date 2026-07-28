@@ -6,6 +6,7 @@
 //  - issue_*        → { identifier }                 → /issues/<identifier>
 //  - message_dm|_mention → { conversationId, messageId } → /chat/<cid>?msg=<mid>
 //  - channel_added  → { conversationId }             → /chat/<cid>
+//  - project_update_prompt → { conversationId, messageId } → /chat/<cid>?msg=<mid> (chat-shaped; SP8)
 //  - booking_*      → { message } only (no id)       → a pending request is actioned
 //    in the approvals queue (it is sent to managers/admins); every other booking
 //    event lands on the recipient's own bookings list.

@@ -11,10 +11,11 @@ export default async function FilesPage({ searchParams }: { searchParams: Promis
   const { folder } = await searchParams
   const folderId = folder ?? null
 
-  const [folders, docs] = await Promise.all([listFolders(), listDocuments(folderId)])
+  // SP8 §3.1: no ?folder= ⇒ omit folderId entirely ⇒ every folder (was root-only).
+  const [folders, docs] = await Promise.all([listFolders(), listDocuments(folder ? { folderId: folder } : {})])
   const documents = docs.map((d) => ({
     id: d.id, name: d.name, path: d.path, mime: d.mime, size: d.size,
-    uploaderId: d.uploaderId, uploaderName: d.uploaderName, created: formatDateTime(d.createdAt, tz), folderId: d.folderId,
+    uploaderId: d.uploaderId, uploaderName: d.uploaderName, created: formatDateTime(d.createdAt, tz), folderId: d.folderId, folderName: d.folderName,
   }))
   return (
     <div>
