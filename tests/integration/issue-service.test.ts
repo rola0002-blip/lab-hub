@@ -279,6 +279,11 @@ describe('issue-service', () => {
       expect((await listIssues()).find((i) => i.id === a.id)!.lastTouchedAt).toBe(t0)
       await prisma.issueComment.create({ data: { issueId: a.id, userId: u.id, body: 'y', createdAt: new Date(Date.now() + 120_000) } })
       expect((await listIssues()).find((i) => i.id === a.id)!.lastTouchedAt! > t0).toBe(true)
+      // Reverse direction: a live comment OLDER than the latest activity must NOT
+      // clobber it — the fold keeps the max, not whichever group it read last.
+      const bCreated = (await listIssues()).find((i) => i.id === b.id)!.lastTouchedAt!
+      await prisma.issueComment.create({ data: { issueId: b.id, userId: u.id, body: 'stale', createdAt: new Date(Date.now() - 120_000) } })
+      expect((await listIssues()).find((i) => i.id === b.id)!.lastTouchedAt).toBe(bCreated)
       // Rank-only drag (same status): moveIssue writes NO activity when status unchanged.
       const before = (await listIssues()).find((i) => i.id === b.id)!.lastTouchedAt!
       await moveIssue({ actorId: u.id, role: 'member', issueId: b.id, status: 'IN_PROGRESS', prevId: a.id, nextId: null })

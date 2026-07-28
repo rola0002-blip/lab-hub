@@ -1,7 +1,7 @@
 'use client'
 import { useState, useTransition } from 'react'
 import { MoreHorizontal } from 'lucide-react'
-import { renderTokens } from '@/components/chat/message-item'
+import { renderTokens } from '@/components/chat/render-tokens'
 import type { RefData } from '@/components/chat/issue-ref-pill'
 import { Avatar } from '@/components/ui/avatar'
 import { Menu } from '@/components/ui/menu'
