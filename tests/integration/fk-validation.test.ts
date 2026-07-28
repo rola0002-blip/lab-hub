@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { resetDb, makeUser, makeIssue, makeProject, seedSystem } from '../factories'
-import { createIssue, setAssignee, setProject } from '@/features/issues/issue-service'
+import { resetDb, makeUser, makeIssue, makeProject, makeLabel, seedSystem } from '../factories'
+import { createIssue, setAssignee, setProject, setLabels } from '@/features/issues/issue-service'
 import { createProject, updateProject } from '@/features/issues/project-service'
 import { PolicyError } from '@/features/issues/issue-policy'
 import { COLOSSUS_BOT_ID } from '@/features/bot'
+import { prisma } from '@/lib/db'
 
 const invalid = (p: Promise<unknown>) =>
   p.then(() => { throw new Error('should have thrown') },
@@ -47,6 +48,41 @@ describe('FK validation (SP8 §3.2)', () => {
     await invalid(setProject({ actorId: u.id, role: 'member', issueId: i.id, projectId: '' }))
     await invalid(createProject({ actorId: u.id, role: 'member', name: 'P', leadId: '' }))
     await invalid(updateProject({ actorId: u.id, role: 'member', id: q.id, leadId: '' }))
+  })
+  // labelIds is a client-supplied ARRAY, so one forged entry among real ones used to
+  // sink the whole write with a P2003 → unhandled 500.
+  it('createIssue rejects a forged labelId — including one mixed in with a real one', async () => {
+    const u = await makeUser()
+    const real = await makeLabel()
+    await invalid(createIssue({ actorId: u.id, role: 'member', title: 't', labelIds: ['nope'] }))
+    await invalid(createIssue({ actorId: u.id, role: 'member', title: 't', labelIds: [real.id, 'nope'] }))
+    await invalid(createIssue({ actorId: u.id, role: 'member', title: 't', labelIds: [''] }))
+    expect(await prisma.issue.count()).toBe(0) // rejected BEFORE the transaction — no partial issue
+  })
+  it('setLabels rejects a forged labelId and leaves the existing labels intact', async () => {
+    const u = await makeUser()
+    const real = await makeLabel()
+    const i = await createIssue({ actorId: u.id, role: 'member', title: 't', labelIds: [real.id] })
+    await invalid(setLabels({ actorId: u.id, role: 'member', issueId: i.id, labelIds: ['nope'] }))
+    await invalid(setLabels({ actorId: u.id, role: 'member', issueId: i.id, labelIds: [real.id, 'nope'] }))
+    const after = await prisma.issueLabel.findMany({ where: { issueId: i.id }, select: { labelId: true } })
+    expect(after.map((l) => l.labelId)).toEqual([real.id])
+  })
+  it('real labels still pass both guards, and an empty set clears', async () => {
+    const u = await makeUser()
+    const [a, b] = [await makeLabel(), await makeLabel()]
+    const i = await createIssue({ actorId: u.id, role: 'member', title: 't', labelIds: [a.id, b.id] })
+    expect(i.labels.map((l) => l.id).sort()).toEqual([a.id, b.id].sort())
+    expect((await setLabels({ actorId: u.id, role: 'member', issueId: i.id, labelIds: [b.id] })).labels.map((l) => l.id)).toEqual([b.id])
+    expect((await setLabels({ actorId: u.id, role: 'member', issueId: i.id, labelIds: [] })).labels).toEqual([])
+  })
+  // @@unique([issueId,labelId]): a repeated id is the same 500 in P2002 clothing.
+  // setLabels already deduped; createIssue now does too.
+  it('a repeated labelId is deduped, not a unique-constraint 500', async () => {
+    const u = await makeUser()
+    const a = await makeLabel()
+    const i = await createIssue({ actorId: u.id, role: 'member', title: 't', labelIds: [a.id, a.id] })
+    expect(i.labels.map((l) => l.id)).toEqual([a.id])
   })
   it('createProject / updateProject validate leadId; a guest lead stays legal', async () => {
     const u = await makeUser()

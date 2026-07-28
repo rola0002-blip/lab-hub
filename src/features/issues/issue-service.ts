@@ -134,6 +134,15 @@ export async function assertProjectExists(id: string): Promise<void> {
   const p = await prisma.project.findUnique({ where: { id }, select: { id: true } })
   if (!p) throw new PolicyError('invalid', 'That project no longer exists.')
 }
+// Set-valued variant of the same guard: labels arrive as a client-supplied array, so
+// ONE forged id used to sink the whole write with a P2003. Ids are deduped before the
+// count because `id` is the primary key — count === unique.length iff every id exists.
+export async function assertLabelsExist(ids: string[]): Promise<void> {
+  const unique = [...new Set(ids)]
+  if (unique.length === 0) return
+  const found = await prisma.label.count({ where: { id: { in: unique } } })
+  if (found !== unique.length) throw new PolicyError('invalid', 'One or more of those labels no longer exist.')
+}
 
 // ── notification helpers (offline-only email; never self) ─────────────────────
 async function pushIssueNotif(
@@ -189,6 +198,8 @@ export async function createIssue(args: {
   // keeps it), so a truthy guard would let the empty string reach the FK → P2003.
   if (args.assigneeId != null) await assertAssigneeExists(args.assigneeId)
   if (args.projectId != null) await assertProjectExists(args.projectId)
+  const labelIds = [...new Set(args.labelIds ?? [])] // deduped like setLabels: @@unique([issueId,labelId])
+  await assertLabelsExist(labelIds)
   // Initial rank = end of the destination column.
   const last = await prisma.issue.findFirst({ where: { status }, orderBy: { rank: 'desc' }, select: { rank: true } })
   const rank = rankBetween(last?.rank ?? null, null)
@@ -201,7 +212,7 @@ export async function createIssue(args: {
         projectId: args.projectId ?? null, dueDate: args.dueDate ?? null, rank,
         completedAt: status === 'DONE' ? new Date() : null,
         originMessageId: args.originMessageId ?? null,
-        labels: { create: (args.labelIds ?? []).map((labelId) => ({ labelId })) },
+        labels: { create: labelIds.map((labelId) => ({ labelId })) },
       },
       include: ISSUE_INCLUDE,
     })
@@ -326,9 +337,10 @@ export async function setTitle(args: { actorId: string; role: Role; issueId: str
 // ── labels (replace set; one 'labels' activity) ───────────────────────────────
 export async function setLabels(args: { actorId: string; role: Role; issueId: string; labelIds: string[] }): Promise<IssueDto> {
   assertCanMutate(args.role)
+  const next = [...new Set(args.labelIds)]
+  await assertLabelsExist(next) // §3.2, before the load — mirrors setAssignee/setProject
   const issue = await loadOrThrow(args.issueId)
   const before = issue.labels.map((l) => l.labelId)
-  const next = [...new Set(args.labelIds)]
   const updated = await prisma.$transaction(async (tx) => {
     await tx.issueLabel.deleteMany({ where: { issueId: issue.id } })
     await tx.issueLabel.createMany({ data: next.map((labelId) => ({ issueId: issue.id, labelId })) })
