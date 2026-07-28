@@ -6,6 +6,7 @@ import * as bot from '@/features/bot'
 import { assertCanMutate, canDeleteProject, PolicyError } from './issue-policy'
 import { assertAssigneeExists } from './issue-service'
 import { isEffectiveLead } from './project-health'
+import { PROJECT_UPDATE_ORDER } from './project-update-service'
 import { startOfOrgDay } from './due'
 import { OPEN_STATUSES } from './status'
 
@@ -91,17 +92,22 @@ export async function listProjects(now: Date = new Date()): Promise<ProjectDto[]
     prisma.projectUpdate.groupBy({ by: ['projectId'], _max: { createdAt: true } }),
   ])
   // The newest update per project in ONE follow-up read: group for the max instant,
-  // then fetch exactly those (projectId, createdAt) rows for the author name.
+  // then fetch exactly those (projectId, createdAt) rows for the author name. A
+  // same-millisecond tie returns MORE than one row for a project, so the read is
+  // ordered by the shared tuple and the first row per project wins below — the same
+  // row getProject and listProjectUpdates call latest.
   const latestRows = latests.length
     ? await prisma.projectUpdate.findMany({
         where: { OR: latests.map((l) => ({ projectId: l.projectId, createdAt: l._max.createdAt! })) },
+        orderBy: PROJECT_UPDATE_ORDER,
         include: { author: { select: { name: true } } },
       })
     : []
   const totalBy = new Map(totals.map((t) => [t.projectId, t._count._all]))
   const doneBy = new Map(dones.map((d) => [d.projectId, d._count._all]))
   const overdueBy = new Map(overdues.map((o) => [o.projectId, o._count._all]))
-  const latestBy = new Map(latestRows.map((r) => [r.projectId, toLatestUpdate(r)]))
+  const latestBy = new Map<string, ProjectDto['latestUpdate']>()
+  for (const r of latestRows) if (!latestBy.has(r.projectId)) latestBy.set(r.projectId, toLatestUpdate(r))
   return projects.map((p) => toDto(p, doneBy.get(p.id) ?? 0, totalBy.get(p.id) ?? 0, {
     latestUpdate: latestBy.get(p.id) ?? null, openOverdue: overdueBy.get(p.id) ?? 0,
   }))
@@ -116,7 +122,7 @@ export async function getProject(id: string, now: Date = new Date()): Promise<Pr
   const [progress, openOverdue, latest] = await Promise.all([
     progressFor(id),
     prisma.issue.count({ where: { projectId: id, status: { in: OPEN_STATUSES }, dueDate: { lt: startOfOrgDay(now, tz) } } }),
-    prisma.projectUpdate.findFirst({ where: { projectId: id }, orderBy: { createdAt: 'desc' }, include: { author: { select: { name: true } } } }),
+    prisma.projectUpdate.findFirst({ where: { projectId: id }, orderBy: PROJECT_UPDATE_ORDER, include: { author: { select: { name: true } } } }),
   ])
   return toDto(p, progress.done, progress.total, { latestUpdate: toLatestUpdate(latest), openOverdue })
 }

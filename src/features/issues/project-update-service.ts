@@ -1,5 +1,5 @@
 import 'server-only'
-import type { ProjectHealth } from '@prisma/client'
+import type { Prisma, ProjectHealth } from '@prisma/client'
 import type { Role } from '@/lib/session'
 import { prisma } from '@/lib/db'
 import * as bot from '@/features/bot'
@@ -18,6 +18,17 @@ export type ProjectUpdateDto = {
 const AUTHOR_SELECT = { select: { id: true, name: true, image: true } } as const
 const BODY_MAX = 4000       // sendMessage truncates at 4000 — never exceed it (spec §4.0)
 const EXCERPT_MAX = 200     // the announce line can never be silently truncated mid-thought
+const FEED_MAX = 50         // the detail-page feed is bounded; a project's history is not
+
+// THE reverse-chron ordering for ProjectUpdate rows. `createdAt` alone is not a
+// total order — two updates posted in the same millisecond tie, and Postgres is
+// then free to return them in either order — so the newest-first feed and the two
+// "latest update" picks (project-service's getProject and listProjects) could each
+// name a different row as latest. The id tiebreaker makes the order total, and all
+// three sites import THIS tuple so they can never drift apart.
+export const PROJECT_UPDATE_ORDER: Prisma.ProjectUpdateOrderByWithRelationInput[] = [
+  { createdAt: 'desc' }, { id: 'desc' },
+]
 
 function toDto(u: { id: string; projectId: string; health: ProjectHealth; body: string; originMessageId: string | null; createdAt: Date; author: { id: string; name: string; image: string | null } }): ProjectUpdateDto {
   return {
@@ -54,9 +65,12 @@ export async function postProjectUpdate(args: {
   return toDto(created)
 }
 
+// Newest FEED_MAX updates. The page renders every row it gets (no pagination), so
+// an unbounded read would grow the payload with the project's whole history; the
+// cap keeps it flat and always includes the latest.
 export async function listProjectUpdates(projectId: string): Promise<ProjectUpdateDto[]> {
   const rows = await prisma.projectUpdate.findMany({
-    where: { projectId }, orderBy: { createdAt: 'desc' }, include: { author: AUTHOR_SELECT },
+    where: { projectId }, orderBy: PROJECT_UPDATE_ORDER, take: FEED_MAX, include: { author: AUTHOR_SELECT },
   })
   return rows.map(toDto)
 }
