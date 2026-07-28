@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-28
+
 ### Added
 - Weekly project updates: every project page gains an Updates section and a "Post update" composer. Pick a health call — On track, At risk, or Off track — and write the one-liner that says what actually moved. Updates are permanent and reverse-chronological, render `@mentions` and `LAB-<n>` references the same way chat does, and each one is announced to `#lab-updates` by the LabHub Bot.
 - Project health is now visible everywhere a project is: a chip carrying a distinct glyph *and* the word (never colour alone) on project cards, the project header, and the dashboard. A project that has been silent for three weeks derives a "No update" state automatically — silence is displayed, never stored.
