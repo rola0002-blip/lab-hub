@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Row menus on Files and My bookings no longer open as an unclickable sliver: a file row's ⋯ menu and an upcoming booking's "Add to calendar" menu now open at their full height with every option clickable. Both listings clipped their contents, and the row popover is positioned inside the list rather than portaled out of it, so on a short list — one or two rows, the common case — the menu was capped to a few pixels and clicks fell through to the page behind it. The defect got worse the shorter the list, which is how it went unnoticed.
+- Removing the clip is visually inert on Files, whose rows carry no fill of their own; on My bookings the first- and last-row corner rounding is now applied explicitly, so the row hover fill still follows the list's rounded corners. Both pages gain an end-to-end guard that clicks a menu option at its real on-screen position, so a re-introduced clip fails the suite instead of shipping.
+
 ## [0.10.0] - 2026-07-28
 
 ### Added
