@@ -173,7 +173,13 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
           </div>
         )}
 
-        {/* Table (or search results across all folders) */}
+        {/* Table (or search results across all folders). The listing <ul> deliberately
+            carries NO `overflow-hidden`: menu.tsx positions each row's action popover
+            absolutely and treats every clipping ancestor as a hard bound, so a clipped
+            listing caps the popover to the (short) list's own height — a one-row list
+            collapsed it to a 1px sliver. Same shape as the issues list container
+            (issue-list-view.tsx); rows carry no background of their own, so the rounded
+            corners need no clip anyway. */}
         {rows.length === 0 ? (
           <div className="mt-3">
             <EmptyState icon={FileText}
@@ -181,7 +187,7 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
               hint={hits ? 'Try a different filename.' : mayUpload ? 'Upload a file or drag one into the drop zone above.' : 'Files uploaded by your lab will appear here.'} />
           </div>
         ) : (
-          <ul className="mt-3 divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface shadow-xs">
+          <ul className="mt-3 divide-y divide-border rounded-xl border border-border bg-surface shadow-xs">
             {rows.map((d) => (
               <li key={d.id} className="flex items-center gap-3 px-3 py-2 text-sm">
                 <TypeIcon mime={d.mime} />

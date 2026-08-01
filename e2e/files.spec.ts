@@ -66,6 +66,29 @@ test('the command palette finds an uploaded file', async ({ browser }) => {
   expect(served.headers()['content-type']).toContain('application/pdf')
 })
 
+test('a file row action menu opens unclipped and its items are clickable', async ({ browser }) => {
+  const page = await newPage(browser)
+  await signIn(page, ADMIN.email, ADMIN.password)
+  await page.goto('/files')
+  await page.getByRole('button', { name: 'File graphene SOP.pdf actions' }).click()
+  const menu = page.getByRole('menu')
+  await expect(menu).toBeVisible()
+  // Regression (v0.10.0): the listing <ul> carried `overflow-hidden`, so menu.tsx's
+  // clip-bound pass measured that <ul> as the popover's clipping ancestor. On a short
+  // list the <ul> is barely taller than the trigger, so both spaceAbove and spaceBelow
+  // collapsed and the popover was capped to `max-height: 1px` — the items painted
+  // outside the 1px box and every click fell through to the page behind it.
+  // Assert the popover renders at its natural height…
+  await expect.poll(() => menu.evaluate((el) => el.getBoundingClientRect().height + 1 < el.scrollHeight)).toBe(false)
+  // …and that a real click lands on the item. locator.click() would MASK this: it
+  // auto-scrolls every scrollable ancestor, and an overflow:hidden box is still
+  // scriptably scrollable even though a user can never scroll it. So click the item's
+  // own coordinates, exactly as a user does.
+  const box = (await page.getByRole('menuitem', { name: 'Rename' }).boundingBox())!
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+  await expect(page.getByRole('heading', { name: 'Rename file' })).toBeVisible()
+})
+
 test('a guest sees the Files nav + table but no upload or row-menu affordances', async ({ browser }) => {
   const page = await newPage(browser)
   // Invite + accept a guest in a fresh (isolated-IP) context.
