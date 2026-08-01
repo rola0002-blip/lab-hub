@@ -49,12 +49,20 @@ export default function BookingsClient({ upcoming, past }: { upcoming: Item[]; p
       {msg && <p className="text-sm text-[var(--text-danger)]">{msg}</p>}
       <section>
         <h2 className="font-medium text-default">Upcoming</h2>
+        {/* The Upcoming list carries NO `overflow-hidden`: its rows render <AddToCalendar>,
+            which is a shared <Menu> — a non-portaled absolute popover that menu.tsx caps to
+            the space left inside its nearest clipping ancestor. A short Upcoming list is
+            barely taller than the trigger, so the clip collapsed the popover to an
+            unclickable sliver. Unlike the Files listing, these rows DO carry `hover:bg-hover`,
+            so the corners the clip used to round are restored explicitly on the first/last
+            row. The Past list below keeps its clip — it renders no Menu (AddToCalendar is
+            `upcoming`-gated), and its rows have the same hover fill to contain. */}
         {upcoming.length === 0 ? (
           <EmptyState icon={CalendarCheck} title="Nothing booked"
             hint="Head to Booking to reserve an instrument — your upcoming reservations will live here."
             action={<Link href="/booking" className="text-sm font-medium text-[var(--text-accent)] hover:underline">Browse equipment →</Link>} />
         ) : (
-          <ul className="mt-2 divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface shadow-xs">{upcoming.map((b) => <Row key={b.id} b={b} upcoming onErr={setMsg} />)}</ul>
+          <ul className="mt-2 divide-y divide-border rounded-xl border border-border bg-surface shadow-xs [&>li:first-child]:rounded-t-xl [&>li:last-child]:rounded-b-xl">{upcoming.map((b) => <Row key={b.id} b={b} upcoming onErr={setMsg} />)}</ul>
         )}
       </section>
       <section>

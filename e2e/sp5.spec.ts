@@ -80,4 +80,25 @@ test('a confirmed booking shows the Add to calendar affordance on /bookings', as
   expect((await r.json()).pending).toBe(false) // NONE policy → instant confirm
   await page.goto('/bookings')
   await expect(page.getByRole('button', { name: 'Add to calendar' }).first()).toBeVisible()
+
+  // …and the menu it opens is usable. Regression (v0.10.0): the Upcoming <ul> carried
+  // `overflow-hidden`, so menu.tsx's clip-bound pass treated that list as the popover's
+  // clipping ancestor; with a single upcoming row the list is barely taller than the
+  // trigger, so the popover was capped to a ~1px sliver whose options were scrolled out
+  // of sight while their layout rects sat below it — clicks fell through to the page.
+  await page.getByRole('button', { name: 'Add to calendar' }).first().click()
+  const menu = page.getByRole('menu')
+  await expect(menu).toBeVisible()
+  await expect.poll(() => menu.evaluate((el) => el.getBoundingClientRect().height + 1 < el.scrollHeight)).toBe(false)
+  // Click the item's measured coordinates rather than locator.click(): the latter
+  // scroll-into-views every scrollable ancestor (an overflow:hidden box included, which
+  // a user can never scroll), so it does not reproduce what the user's pointer does.
+  // 'Google Calendar' opens a new tab, which is observable without leaving /bookings.
+  const box = (await page.getByRole('menuitem', { name: 'Google Calendar' }).boundingBox())!
+  const [popup] = await Promise.all([
+    page.context().waitForEvent('page'),
+    page.mouse.click(box.x + box.width / 2, box.y + box.height / 2),
+  ])
+  expect(popup.url()).toContain('calendar.google.com')
+  await popup.close()
 })

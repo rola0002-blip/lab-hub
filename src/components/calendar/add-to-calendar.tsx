@@ -11,11 +11,21 @@ const CHIP = 'inline-flex items-center gap-1.5 rounded-md border border-border p
 
 // Reused on the My-bookings list and the post-booking confirmation. Times arrive as
 // ISO strings (UTC) and are rebuilt to Dates for the pure link builders. Rendered
-// through the shared Menu (F3): its layout pass measures the nearest clipping
-// ancestor and flips up / height-caps the popover, so the options are never cut off
-// by the bookings list's `overflow-hidden` (the old bespoke absolute popover was).
-// It also brings Escape / outside-click / close-on-select and menu semantics, and
-// its items inherit the app-wide unlayered :focus-visible outline (M7.2).
+// through the shared Menu (F3), which brings Escape / outside-click / close-on-select
+// and menu semantics, and whose items inherit the app-wide unlayered :focus-visible
+// outline (M7.2).
+//
+// CONSTRAINT ON CALLERS: the shared Menu is NOT portaled — its popover is absolutely
+// positioned inside the trigger's wrapper, so any ancestor with a clipping overflow
+// clips it. menu.tsx's layout pass does NOT rescue that: it intersects every clipping
+// ancestor and caps the popover to the room left inside them, which on a list barely
+// taller than its own rows collapses it to a ~1px, unclickable sliver. (An earlier
+// version of this comment claimed the opposite — that the pass made the options
+// "never cut off by the bookings list's overflow-hidden" — and that mistaken premise
+// is what left the clip on the Upcoming list until it was removed.) The flip-up /
+// height-cap behaviour only helps where the clip bound is genuinely tall, e.g. the
+// board's overflow-x-auto columns. So: do not mount this inside an overflow-hidden
+// container.
 export function AddToCalendar({ bookingId, summary, startsAt, endsAt, purpose, location }: Props) {
   const start = new Date(startsAt), end = new Date(endsAt)
   const google = googleCalendarLink({ summary, start, end, details: purpose, location })
