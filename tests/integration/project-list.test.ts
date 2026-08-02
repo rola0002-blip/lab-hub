@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { prisma } from '@/lib/db'
 import { resetDb, makeUser, makeProject, makeIssue, makeProjectUpdate, seedSystem } from '../factories'
 import { listProjects, getProject, listProjectOptions, createProject, updateProject } from '@/features/issues/project-service'
+import { listProjectUpdates } from '@/features/issues/project-update-service'
 import { COLOSSUS_BOT_ID } from '@/features/bot'
 
 describe('extended project reads (SP8 §4.7)', () => {
@@ -36,6 +37,23 @@ describe('extended project reads (SP8 §4.7)', () => {
     expect(dto.hasEffectiveLead).toBe(false)
     expect(dto.latestUpdate?.createdAt).toBeTypeOf('string')
     expect((await prisma.projectUpdate.findUniqueOrThrow({ where: { id: dto.latestUpdate!.id } })).body).toBe('new')
+  })
+  // createdAt alone is not a total order. Two updates posted in the same millisecond
+  // would otherwise let each read site pick a different row as "latest", so the card,
+  // the detail header and the feed head could disagree on the same page load.
+  it('same-millisecond updates: the feed head, getProject and listProjects name the SAME latest row', async () => {
+    const u = await makeUser({ name: 'Ana' })
+    const p = await makeProject()
+    const at = new Date('2026-07-20T09:00:00.000Z')
+    // Inserted lowest-id-first, so a physical-order read would answer 'pu-a'; the id
+    // tiebreaker makes 'pu-b' the unambiguous latest everywhere.
+    await makeProjectUpdate(p.id, u.id, { id: 'pu-a', createdAt: at, body: 'a', health: 'ON_TRACK' })
+    await makeProjectUpdate(p.id, u.id, { id: 'pu-b', createdAt: at, body: 'b', health: 'OFF_TRACK' })
+    const feed = await listProjectUpdates(p.id)
+    expect(feed.map((x) => x.id)).toEqual(['pu-b', 'pu-a'])
+    expect((await getProject(p.id))!.latestUpdate).toMatchObject({ id: 'pu-b', health: 'OFF_TRACK' })
+    const card = (await listProjects()).find((x) => x.id === p.id)!
+    expect(card.latestUpdate).toMatchObject({ id: 'pu-b', health: 'OFF_TRACK' })
   })
   it('query count does not grow with the number of projects (O(1) queries)', async () => {
     const u = await makeUser()

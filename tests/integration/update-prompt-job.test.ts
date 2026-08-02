@@ -77,6 +77,14 @@ describe('promptProjectUpdates (SP8 §4.3–§4.5)', () => {
     await prisma.issueActivity.updateMany({ where: { issueId: st.id }, data: { createdAt: new Date(+WED - 20 * DAY) } })
     // makeIssue writes no activity — backdate via a manual one:
     await prisma.issueActivity.create({ data: { issueId: st.id, actorId: lead.id, type: 'created', data: {}, createdAt: new Date(+WED - 20 * DAY) } })
+    // The digest derives "untouched" from the same lastTouchedByIssue helper as the
+    // stalled chip: a DELETED comment is not a touch (st stays counted)…
+    const gone = await prisma.issueComment.create({ data: { issueId: st.id, userId: lead.id, body: 'oops', createdAt: new Date(+WED - DAY) } })
+    await prisma.issueComment.update({ where: { id: gone.id }, data: { deletedAt: new Date(+WED - DAY) } })
+    // …while a live one is, so this equally-old started issue is NOT counted.
+    const cm = await makeIssue(lead.id, { projectId: p.id, status: 'IN_REVIEW' })
+    await prisma.issueActivity.create({ data: { issueId: cm.id, actorId: lead.id, type: 'created', data: {}, createdAt: new Date(+WED - 20 * DAY) } })
+    await prisma.issueComment.create({ data: { issueId: cm.id, userId: lead.id, body: 'still on it', createdAt: new Date(+WED - DAY) } })
     await promptProjectUpdates(WED)
     const [dm] = await botDmTo(lead.id)
     expect(dm.body).toContain('1 issue closed')

@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import { getOrg } from '@/lib/org'
 import { listProjects } from '@/features/issues/project-service'
 import { orgToday } from '@/features/issues/due'
-import { compareProjectsWorstFirst, healthBucket, parseProjectFilters } from '@/features/issues/project-health'
+import { compareProjectsWorstFirst, healthBucket, needsAttention, parseProjectFilters } from '@/features/issues/project-health'
 import { ProjectCard } from '@/components/issues/project-card'
 import { ProjectFilterBar } from '@/components/issues/project-filter-bar'
 import { NewProjectButton } from '@/components/issues/project-composer'
@@ -25,7 +25,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   let review = projects.filter((p) => p.status === 'ACTIVE' || p.status === 'PAUSED')
     .sort((a, b) => compareProjectsWorstFirst(a, b, today, timezone))
   if (f.health) review = review.filter((p) => healthBucket(p, today, timezone) === f.health)
-  if (f.attention) review = review.filter((p) => p.status === 'ACTIVE' && healthBucket(p, today, timezone) !== 'on_track')
+  if (f.attention) review = review.filter((p) => needsAttention(p, today, timezone))
   const closed = projects.filter((p) => p.status === 'COMPLETED' || p.status === 'CANCELED')
   const filtered = Boolean(f.health || f.attention)
   return (

@@ -1,12 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { ProjectHealth } from '@prisma/client'
+import { ProjectHealth, ProjectStatus } from '@prisma/client'
 import {
   isEffectiveLead,
   healthBucket,
+  attentionBucket,
+  needsAttention,
   compareProjectsWorstFirst,
   parseProjectFilters,
   PROJECT_HEALTH_LABEL,
   HEALTH_TOKEN,
+  type AttentionBucket,
   type HealthInput,
 } from '@/features/issues/project-health'
 
@@ -95,6 +98,49 @@ describe('healthBucket', () => {
     const p = project({ latestUpdate: update('ON_TRACK', '2026-06-29T16:30:00.000Z') })
     expect(healthBucket(p, TODAY, SGT)).toBe('on_track')
     expect(healthBucket(p, TODAY, 'UTC')).toBe('no_update')
+  })
+})
+
+describe('attentionBucket / needsAttention', () => {
+  it('flags an ACTIVE project in each non-on_track bucket, under that same bucket', () => {
+    const cases: [HealthInput, AttentionBucket][] = [
+      [project({ latestUpdate: update('OFF_TRACK', FRESH) }), 'off_track'],
+      [project({ latestUpdate: update('AT_RISK', FRESH) }), 'at_risk'],
+      [project({ hasEffectiveLead: false, latestUpdate: update('ON_TRACK', FRESH) }), 'no_lead'],
+      [project({ latestUpdate: update('ON_TRACK', STALE) }), 'no_update'],
+    ]
+    for (const [p, bucket] of cases) {
+      expect(attentionBucket(p, TODAY, SGT)).toBe(bucket)
+      expect(needsAttention(p, TODAY, SGT)).toBe(true)
+    }
+  })
+
+  it('leaves an on_track ACTIVE project alone', () => {
+    const p = project({ latestUpdate: update('ON_TRACK', FRESH) })
+    expect(attentionBucket(p, TODAY, SGT)).toBeNull()
+    expect(needsAttention(p, TODAY, SGT)).toBe(false)
+  })
+
+  it('never flags a non-ACTIVE project, however bad its bucket', () => {
+    // Every stored status except ACTIVE, straight off the enum — a new status is
+    // covered here the day it is added.
+    const nonActive = (Object.values(ProjectStatus) as ProjectStatus[]).filter((s) => s !== 'ACTIVE')
+    expect(nonActive).toEqual(['PAUSED', 'COMPLETED', 'CANCELED'])
+    for (const status of nonActive) {
+      for (const latestUpdate of [update('OFF_TRACK', FRESH), update('AT_RISK', FRESH), null]) {
+        const p = project({ status, hasEffectiveLead: false, latestUpdate })
+        expect(healthBucket(p, TODAY, SGT)).not.toBe('on_track') // the bucket IS bad...
+        expect(attentionBucket(p, TODAY, SGT)).toBeNull() // ...but only ACTIVE work is chased
+        expect(needsAttention(p, TODAY, SGT)).toBe(false)
+      }
+    }
+  })
+
+  it('resolves staleness in the org zone, like healthBucket', () => {
+    // 16:30Z on 29 Jun is 00:30 SGT on 30 Jun ⇒ 20 org days (fresh) but 21 UTC days.
+    const p = project({ latestUpdate: update('ON_TRACK', '2026-06-29T16:30:00.000Z') })
+    expect(needsAttention(p, TODAY, SGT)).toBe(false)
+    expect(attentionBucket(p, TODAY, 'UTC')).toBe('no_update')
   })
 })
 

@@ -12,7 +12,10 @@ export const STALE_ISSUE_DAYS = 14
 // Three missed weekly prompts — the number is tied to the cadence, not configurable.
 export const STALE_PROJECT_DAYS = 21
 
-const STARTED: IssueStatus[] = ['IN_PROGRESS', 'IN_REVIEW']
+// The "started" statuses — the only ones staleness applies to (backlog/todo work has
+// not begun, done/canceled work is finished). Exported so the weekly prompt job's
+// SELECT (src/lib/jobs.ts) and this predicate can never drift apart.
+export const STARTED_STATUSES: IssueStatus[] = ['IN_PROGRESS', 'IN_REVIEW']
 
 // Whole org-calendar days between `then`'s org day and `today` (yyyy-MM-dd, org zone).
 export function daysSinceOrgDay(then: Date | string, today: string, tz: string): number {
@@ -23,7 +26,7 @@ export function daysSinceOrgDay(then: Date | string, today: string, tz: string):
 // Stalled = started (IN_PROGRESS/IN_REVIEW) and untouched for >= STALE_ISSUE_DAYS.
 // An absent lastTouchedAt (optimistic mutation results — spec §5.2) is NOT stalled.
 export function isIssueStalled(status: IssueStatus, lastTouchedAt: Date | string | null | undefined, today: string, tz: string): boolean {
-  if (!STARTED.includes(status) || !lastTouchedAt) return false
+  if (!STARTED_STATUSES.includes(status) || !lastTouchedAt) return false
   return daysSinceOrgDay(lastTouchedAt, today, tz) >= STALE_ISSUE_DAYS
 }
 

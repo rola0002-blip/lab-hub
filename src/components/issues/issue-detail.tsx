@@ -2,7 +2,7 @@
 import { useState, useTransition, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { Paperclip } from 'lucide-react'
-import { renderTokens } from '@/components/chat/message-item'
+import { renderTokens } from '@/components/chat/render-tokens'
 import type { RefData } from '@/components/chat/issue-ref-pill'
 import { IssueMentionInput } from './issue-mention-input'
 import { IssueTimeline } from './issue-timeline'

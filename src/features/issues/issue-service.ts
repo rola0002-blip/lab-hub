@@ -76,24 +76,38 @@ export async function listIssues(filter: IssueFilter = {}, now: Date = new Date(
     orderBy: [{ status: 'asc' }, { rank: 'asc' }], // rank ordered byte-wise (COLLATE "C")
     include: ISSUE_INCLUDE,
   })
-  // SP8 §5.2: two grouped reads (the listProjects N+1-avoidance idiom), both served by
-  // the existing [issueId, createdAt] compound indexes. Issue.updatedAt is deliberately
-  // NOT consulted — a rank-only move or a column rebalance touches updatedAt but writes
-  // no activity, so it must not clear the stalled chip.
-  const ids = rows.map((r) => r.id)
-  const [acts, comms] = ids.length
-    ? await Promise.all([
-        prisma.issueActivity.groupBy({ by: ['issueId'], _max: { createdAt: true }, where: { issueId: { in: ids } } }),
-        prisma.issueComment.groupBy({ by: ['issueId'], _max: { createdAt: true }, where: { issueId: { in: ids }, deletedAt: null } }),
-      ])
-    : [[], []]
-  const actBy = new Map(acts.map((a) => [a.issueId, a._max.createdAt as Date]))
-  const commBy = new Map(comms.map((c) => [c.issueId, c._max.createdAt as Date]))
+  // Hydrated for LIST reads only — mutation returns leave lastTouchedAt absent (§5.2).
+  const touched = await lastTouchedByIssue(rows.map((r) => r.id))
   return rows.map((r) => {
-    const touches = [actBy.get(r.id), commBy.get(r.id)].filter(Boolean) as Date[]
     const dto = toDto(r)
-    return touches.length ? { ...dto, lastTouchedAt: new Date(Math.max(...touches.map(Number))).toISOString() } : dto
+    const at = touched.get(r.id)
+    return at ? { ...dto, lastTouchedAt: at.toISOString() } : dto
   })
+}
+
+// SP8 §5.2: "touched" = max(latest IssueActivity, latest non-deleted IssueComment),
+// per issue, for the given ids — the single source of both the stalled chip's input
+// (listIssues above) and the weekly prompt job's untouched count (src/lib/jobs.ts),
+// so the two can never diverge. Two grouped reads (the listProjects N+1-avoidance
+// idiom), both served by the existing [issueId, createdAt] compound indexes.
+// Issue.updatedAt is deliberately NOT consulted — a rank-only move or a column
+// rebalance touches updatedAt but writes no activity, so it must not clear the chip.
+// Ids with neither activity nor a live comment are ABSENT from the map (never
+// null-valued): callers read that as "no last touch", which is not stalled.
+export async function lastTouchedByIssue(ids: string[]): Promise<Map<string, Date>> {
+  const touched = new Map<string, Date>()
+  if (ids.length === 0) return touched
+  const [acts, comms] = await Promise.all([
+    prisma.issueActivity.groupBy({ by: ['issueId'], _max: { createdAt: true }, where: { issueId: { in: ids } } }),
+    prisma.issueComment.groupBy({ by: ['issueId'], _max: { createdAt: true }, where: { issueId: { in: ids }, deletedAt: null } }),
+  ])
+  for (const g of [...acts, ...comms]) {
+    const at = g._max.createdAt
+    if (!at) continue // unreachable: a group exists only where a row does
+    const prev = touched.get(g.issueId)
+    if (!prev || at > prev) touched.set(g.issueId, at)
+  }
+  return touched
 }
 
 export async function getIssue(id: string): Promise<IssueDto | null> {
@@ -119,6 +133,15 @@ export async function assertAssigneeExists(id: string): Promise<void> {
 export async function assertProjectExists(id: string): Promise<void> {
   const p = await prisma.project.findUnique({ where: { id }, select: { id: true } })
   if (!p) throw new PolicyError('invalid', 'That project no longer exists.')
+}
+// Set-valued variant of the same guard: labels arrive as a client-supplied array, so
+// ONE forged id used to sink the whole write with a P2003. Ids are deduped before the
+// count because `id` is the primary key — count === unique.length iff every id exists.
+export async function assertLabelsExist(ids: string[]): Promise<void> {
+  const unique = [...new Set(ids)]
+  if (unique.length === 0) return
+  const found = await prisma.label.count({ where: { id: { in: unique } } })
+  if (found !== unique.length) throw new PolicyError('invalid', 'One or more of those labels no longer exist.')
 }
 
 // ── notification helpers (offline-only email; never self) ─────────────────────
@@ -175,6 +198,8 @@ export async function createIssue(args: {
   // keeps it), so a truthy guard would let the empty string reach the FK → P2003.
   if (args.assigneeId != null) await assertAssigneeExists(args.assigneeId)
   if (args.projectId != null) await assertProjectExists(args.projectId)
+  const labelIds = [...new Set(args.labelIds ?? [])] // deduped like setLabels: @@unique([issueId,labelId])
+  await assertLabelsExist(labelIds)
   // Initial rank = end of the destination column.
   const last = await prisma.issue.findFirst({ where: { status }, orderBy: { rank: 'desc' }, select: { rank: true } })
   const rank = rankBetween(last?.rank ?? null, null)
@@ -187,7 +212,7 @@ export async function createIssue(args: {
         projectId: args.projectId ?? null, dueDate: args.dueDate ?? null, rank,
         completedAt: status === 'DONE' ? new Date() : null,
         originMessageId: args.originMessageId ?? null,
-        labels: { create: (args.labelIds ?? []).map((labelId) => ({ labelId })) },
+        labels: { create: labelIds.map((labelId) => ({ labelId })) },
       },
       include: ISSUE_INCLUDE,
     })
@@ -312,9 +337,10 @@ export async function setTitle(args: { actorId: string; role: Role; issueId: str
 // ── labels (replace set; one 'labels' activity) ───────────────────────────────
 export async function setLabels(args: { actorId: string; role: Role; issueId: string; labelIds: string[] }): Promise<IssueDto> {
   assertCanMutate(args.role)
+  const next = [...new Set(args.labelIds)]
+  await assertLabelsExist(next) // §3.2, before the load — mirrors setAssignee/setProject
   const issue = await loadOrThrow(args.issueId)
   const before = issue.labels.map((l) => l.labelId)
-  const next = [...new Set(args.labelIds)]
   const updated = await prisma.$transaction(async (tx) => {
     await tx.issueLabel.deleteMany({ where: { issueId: issue.id } })
     await tx.issueLabel.createMany({ data: next.map((labelId) => ({ issueId: issue.id, labelId })) })

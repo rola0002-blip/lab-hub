@@ -95,4 +95,19 @@ describe('project-update-service (SP8 §4.6)', () => {
     expect(list.map((x) => x.body)).toEqual(['second', 'first'])
     expect(typeof list[0].createdAt).toBe('string')
   })
+  // The page renders every row the service hands it, so the feed is capped at the
+  // newest 50 — a long-running project can accumulate years of weekly updates.
+  it('listProjectUpdates is bounded at the newest 50', async () => {
+    const u = await makeUser(); const p = await makeProject()
+    const t0 = +new Date() - 55 * 60_000
+    await prisma.projectUpdate.createMany({
+      data: Array.from({ length: 55 }, (_, i) => ({
+        projectId: p.id, authorId: u.id, health: 'ON_TRACK' as const, body: `u${i}`, createdAt: new Date(t0 + i * 60_000),
+      })),
+    })
+    const list = await listProjectUpdates(p.id)
+    expect(list).toHaveLength(50)
+    expect(list[0].body).toBe('u54')            // newest is always in
+    expect(list.at(-1)!.body).toBe('u5')        // the five oldest fall off the end
+  })
 })

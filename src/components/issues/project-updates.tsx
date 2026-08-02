@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { MessageSquareQuote } from 'lucide-react'
-import { renderTokens } from '@/components/chat/message-item'
+import { renderTokens } from '@/components/chat/render-tokens'
 import { HealthChip } from './health-chip'
 import { openProjectUpdateComposer } from '@/lib/project-update-composer-store'
 import { formatDateTime } from '@/lib/time'
