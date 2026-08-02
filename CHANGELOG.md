@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Creating or relabelling an issue with a label id that no longer exists — or with the same id twice — now returns a clear validation error instead of an unhandled 500, matching how a missing assignee or project already behaves.
+- Project updates now read in one stable, total order everywhere they appear — the project card, the project header, and the update feed — so two updates posted in the same millisecond can no longer name three different "latest" rows on a single page load. The detail page's feed is also bounded to the newest 50 updates, so its payload no longer grows with a project's entire update history.
+
+### Changed
+- Internal deduplication, with no behaviour change: the started-status set and the per-issue "last touched" derivation are now shared between the issue list and the weekly update-prompt job, so the Stalled chip and the prompt digest's untouched count cannot drift apart; the "needs attention" predicate is shared between `/projects?attention=1` and the dashboard, so their counts always agree; and chat's token renderer moved into its own module, which drops the emoji picker out of the project and issue route bundles.
+
 ## [0.10.1] - 2026-08-01
 
 ### Fixed
