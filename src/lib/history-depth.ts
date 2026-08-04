@@ -22,7 +22,8 @@ export type DepthState = {
  * - `replace` the current entry is overwritten in place (`router.replace`,
  *             `router.refresh`, a query-only filter update, or Next replaying a
  *             restored entry) — no entry is created, so the depth does not move.
- * - `restore` the React effect reading whichever entry is now current.
+ * - `restore` the store (`historyDepth.sync()` / `adopt()`) reading whichever entry
+ *             is now current — the entry's own stamp is trusted.
  */
 export type NavKind = 'push' | 'replace' | 'restore'
 
