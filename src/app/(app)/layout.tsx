@@ -17,6 +17,7 @@ import { UserMenu } from '@/components/user-menu'
 import { ToastHost } from '@/components/ui/toast'
 import { RegionCycler } from '@/components/region-cycler'
 import { MobileNavProvider, MobileNavToggle, MobileNavDrawer } from '@/components/mobile-nav'
+import { BackButton } from '@/components/back-button'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const org = await requireSetup()
@@ -55,6 +56,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </MobileNavDrawer>
         <div id="app-content" className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-12 items-center justify-between gap-2 border-b border-border px-3 md:px-6">
+            <BackButton />
             <MobileNavToggle />
             <div role="search" aria-label="Search" data-region-root tabIndex={-1} className="min-w-0 flex-1 outline-none">
               <CommandPalette orgName={org.name} role={user.role} />
