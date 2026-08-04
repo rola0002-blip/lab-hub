@@ -32,6 +32,17 @@ export function canDeleteComment(role: Role, authorId: string, userId: string): 
   return authorId === userId || role === 'admin'
 }
 
+// Issue deletion is creator-or-admin — the canDeleteComment shape, plus an explicit
+// guest bar. Deletion here is HARD and cascading, so a member demoted to guest must
+// not keep it on issues they once filed; canDeleteComment's identical demoted-creator
+// case is left alone (that delete is soft and recoverable) — spec §2.
+export function canDeleteIssue(role: Role, creatorId: string, userId: string): boolean {
+  return role !== 'guest' && (creatorId === userId || role === 'admin')
+}
+export function assertCanDeleteIssue(role: Role, creatorId: string, userId: string): void {
+  if (!canDeleteIssue(role, creatorId, userId)) throw new PolicyError('forbidden', 'Only the issue’s creator or an admin can delete it.')
+}
+
 export function policyStatus(code: PolicyError['code']): number {
   return code === 'forbidden' ? 403 : code === 'not_found' ? 404 : 400
 }

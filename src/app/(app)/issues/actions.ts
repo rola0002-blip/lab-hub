@@ -99,6 +99,9 @@ export async function updateProjectAction(id: string, input: { name?: string; de
 export async function deleteProjectAction(id: string) {
   return run((u) => projects.deleteProject({ role: u.role, id }))
 }
+export async function deleteIssueAction(issueId: string) {
+  return run((u) => issues.deleteIssue({ issueId, actorId: u.id, role: u.role }))
+}
 export async function createCommentAction(issueId: string, body: string) {
   return run((u) => comments.createComment({ actorId: u.id, role: u.role, issueId, body }))
 }
