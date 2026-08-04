@@ -85,7 +85,7 @@ test('sign-in: no serious/critical axe violations, both themes', async ({ browse
 })
 
 test('app surfaces: no serious/critical axe violations, both themes', async ({ browser }) => {
-  test.setTimeout(360_000) // core + SP4 + SP5 (files/bookings) + SP6 (settings/people) + SP8 (health projects + update modal), each audited in both themes
+  test.setTimeout(420_000) // core + SP4 + SP5 (files/bookings) + SP6 (settings/people) + SP8 (health projects + update modal) + v0.11 (back button + delete confirm), each audited in both themes
   const page = await newPage(browser)
   await runWizard(page)
   await signIn(page, ADMIN.email, ADMIN.password)
@@ -198,6 +198,25 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
   await page.goto('/issues/LAB-1')
   await expect(page.getByRole('textbox', { name: 'Issue title' })).toHaveValue('A11y issue')
   await auditBothThemes(page, 'issue-detail')
+
+  // v0.11 — the top-bar back button renders ONLY behind in-app history, so a page.goto
+  // could never put it on screen: reach the issue detail by CLICKING the list row, then
+  // audit the detail with the new control present.
+  await page.goto('/issues')
+  await expect(page.getByRole('heading', { name: 'Issues' })).toBeVisible()
+  await page.getByRole('main').getByRole('link', { name: /LAB-1/ }).first().click()
+  await page.waitForURL('**/issues/LAB-1')
+  await expect(page.getByRole('button', { name: 'Back' })).toBeVisible()
+  await auditBothThemes(page, 'issue-detail-with-back')
+
+  // v0.11 — the delete confirmation (role=dialog), including its danger-filled button.
+  // Escape dismisses it: LAB-1 must survive for the create-issue audit below.
+  await page.getByRole('button', { name: 'Issue actions' }).click()
+  await page.getByRole('menuitem', { name: 'Delete issue' }).click()
+  await expect(page.getByRole('dialog', { name: 'Delete issue?' })).toBeVisible()
+  await auditBothThemes(page, 'delete-issue-confirm')
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog', { name: 'Delete issue?' })).toHaveCount(0)
 
   // Open the create-issue modal (role=dialog) and audit it in both themes. The
   // "New issue" trigger lives on the list surface (the issue-detail page has none).
