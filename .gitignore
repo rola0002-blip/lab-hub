@@ -56,3 +56,6 @@ data/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# SDD per-plan workspaces (scratch — briefs, reports, review packages)
+.sdd/
