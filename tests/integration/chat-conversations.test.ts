@@ -5,8 +5,9 @@ import { subscribe, _resetForTests, type LabEvent } from '@/lib/events'
 import {
   createChannel, getOrCreateDm, addMembers, removeMember, joinPublicChannel,
   archiveChannel, renameChannel, setChannelTopic, isMember, canManage,
-  accessibleConversationIds, listConversations, listPublicChannels,
+  accessibleConversationIds, listConversations, listPublicChannels, totalUnread,
 } from '@/features/chat/conversation-service'
+import { sumUnread } from '@/features/chat/unread'
 import { listMessages, sendMessage } from '@/features/chat/message-service'
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -235,5 +236,49 @@ describe('conversation service', () => {
     expect(list[0].mentions).toBe(1)
     const pubs = await listPublicChannels(me.id)
     expect(pubs.find((p) => p.id === ch.id)?.isMember).toBe(true)
+  })
+})
+
+describe('totalUnread (v0.11 §3.2)', () => {
+  beforeEach(resetDb)
+
+  it('counts unmuted memberships and EXCLUDES muted ones, agreeing with the rail sum', async () => {
+    const me = await makeUser()
+    const other = await makeUser()
+    const loud = await makeChannel({ name: 'loud' })
+    const quiet = await makeChannel({ name: 'quiet' })
+    await makeMember(loud.id, me.id)
+    await makeMember(loud.id, other.id)
+    await makeMember(quiet.id, me.id, { muted: true })
+    await makeMember(quiet.id, other.id)
+    await makeMessage(loud.id, other.id)
+    await makeMessage(loud.id, other.id)
+    await makeMessage(quiet.id, other.id)   // muted → must not count
+
+    expect(await totalUnread(me.id)).toBe(2)
+    // The whole point of §3.2: the SSR seed and the live client sum are the same
+    // number computed by the same rule, so the badge cannot change on hydration.
+    expect(sumUnread(await listConversations(me.id))).toBe(await totalUnread(me.id))
+  })
+
+  it('is 0 with no memberships, and never counts the reader’s own messages', async () => {
+    const me = await makeUser()
+    expect(await totalUnread(me.id)).toBe(0)
+    const c = await makeChannel()
+    await makeMember(c.id, me.id)
+    await makeMessage(c.id, me.id)
+    expect(await totalUnread(me.id)).toBe(0)
+  })
+
+  it('un-muting a conversation restores its contribution', async () => {
+    const me = await makeUser()
+    const other = await makeUser()
+    const c = await makeChannel()
+    await makeMember(c.id, me.id, { muted: true })
+    await makeMember(c.id, other.id)
+    await makeMessage(c.id, other.id)
+    expect(await totalUnread(me.id)).toBe(0)
+    await prisma.conversationMember.updateMany({ where: { conversationId: c.id, userId: me.id }, data: { muted: false } })
+    expect(await totalUnread(me.id)).toBe(1)
   })
 })

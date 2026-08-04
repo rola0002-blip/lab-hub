@@ -9,6 +9,8 @@ import {
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Menu } from '@/components/ui/menu'
+import { useChat } from '@/components/chat/chat-store'
+import { sumUnread } from '@/features/chat/unread'
 import { authClient } from '@/lib/auth-client'
 import { isNavItemActive } from '@/lib/nav-active'
 import type { Role } from '@/lib/session'
@@ -65,6 +67,19 @@ export function Sidebar({ org, user, unread, role, version }: {
 }) {
   const pathname = usePathname()
   const router = useRouter()
+  // v0.11 §3.1: the `unread` prop is a SERVER value computed once in (app)/layout.tsx,
+  // and the App Router preserves that layout segment across every client navigation —
+  // so it never changes for the life of the SPA session, and reading a conversation
+  // left the badge stale. Derive it from the live chat store instead. Sidebar is
+  // already a client component already inside ChatProvider (layout.tsx:41), so this
+  // costs no provider hoisting and no extra subscription.
+  const { conversations } = useChat()
+  // The SSR seed holds until the store's first fetch lands, so the badge never flashes
+  // 0 on hydration and degrades to the server value if the fetch fails (chat-store.tsx:44-46
+  // leaves `conversations` empty on a non-ok response). `length > 0` is the loaded flag
+  // rather than a new store field, and it is provably safe: totalUnread returns 0 for a
+  // user with no memberships, so both branches coincide in the only ambiguous case.
+  const live = conversations.length > 0 ? sumUnread(conversations) : unread
   // Flat href list feeds the longest-prefix-wins active test (all sections,
   // regardless of role visibility, so activeness is stable across roles).
   const allHrefs = NAV_SECTIONS.flatMap((s) => s.items.map((i) => i.href))
@@ -119,7 +134,7 @@ export function Sidebar({ org, user, unread, role, version }: {
                       >
                         <Icon size={15} aria-hidden />
                         <span className="truncate">{label}</span>
-                        {label === 'Chat' && <Badge count={unread} />}
+                        {label === 'Chat' && <Badge count={live} />}
                       </Link>
                     </li>
                   )
