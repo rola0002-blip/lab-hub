@@ -70,8 +70,8 @@ export function Sidebar({ org, user, unread, role, version }: {
   // v0.11 §3.1: the `unread` prop is a SERVER value computed once in (app)/layout.tsx,
   // and the App Router preserves that layout segment across every client navigation —
   // so it never changes for the life of the SPA session, and reading a conversation
-  // left the badge stale. Derive it from the live chat store instead. Sidebar is
-  // already a client component already inside ChatProvider (layout.tsx:41), so this
+  // left the badge stale. Derive it from the live chat store instead. Sidebar is already
+  // a client component, and it already sits inside ChatProvider (layout.tsx:41), so this
   // costs no provider hoisting and no extra subscription.
   const { conversations } = useChat()
   // The SSR seed holds until the store's first fetch lands, so the badge never flashes

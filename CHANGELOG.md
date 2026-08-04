@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Issues can be deleted, by whoever filed them or by any admin. The confirmation names exactly what goes: the issue, its comments, its full activity history and its attachments, which are removed from disk. Deletion is permanent and silent — nothing is posted to `#lab-updates`. The identifier is never reissued, so an old `LAB-n` link is always a clean 404 and never a different issue, and historical `#lab-updates` mentions of it stay readable as plain text instead of turning into broken links.
+- A back button in the top bar, plus `⌘[` / `Ctrl+[`. It appears only when there is somewhere in the app to go back to, so it can never drop you out of an installed PWA or off the end of a notification link, and it stays out of the way on a page you arrived at directly.
+- The Project property on an issue now links to that project, for every role including guests; changing the project is a separate control beside it.
+
+### Fixed
+- The sidebar Chat badge is now live: opening a conversation clears it immediately, with no page reload, and its value always equals the sum of the rail's own per-conversation counts. A muted conversation no longer contributes to it, so a muted noisy channel can't leave a permanent count you have no way to clear.
+- Filing an issue, uploading a file, creating or editing a project, or posting a project update no longer makes your own Chat badge tick up. If you were already behind in `#lab-updates`, nothing changes — the announcement joins the pile you have yet to read, rather than quietly marking other people's messages read.
+
 ## [0.10.2] - 2026-08-02
 
 ### Fixed

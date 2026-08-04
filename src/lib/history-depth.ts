@@ -5,8 +5,8 @@
 // that (it counts entries that existed before the app was ever loaded) and neither can a
 // bare counter (it only climbs, so after walking back to the first entry it would still
 // offer a Back that exits). The depth is therefore stamped onto each history ENTRY, and
-// this module holds the three transitions that maintain it. The component owns the
-// `window.history` plumbing and the module-scope current value; everything here is pure.
+// this module holds the three transitions that maintain it. `@/lib/history-depth-store` owns
+// the `window.history` plumbing and the current value; everything here is pure.
 
 export const DEPTH_KEY = 'labhubDepth'
 
