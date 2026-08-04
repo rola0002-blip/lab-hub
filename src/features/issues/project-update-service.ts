@@ -61,6 +61,7 @@ export async function postProjectUpdate(args: {
   const excerpt = body.length > EXCERPT_MAX ? `${body.slice(0, EXCERPT_MAX)}…` : body
   await bot.announceToChannel(
     `${created.author.name} posted an update on ${project.name} — ${PROJECT_HEALTH_LABEL[args.health]}: ${excerpt} — /projects/${args.projectId}`,
+    args.actorId,
   )
   return toDto(created)
 }
