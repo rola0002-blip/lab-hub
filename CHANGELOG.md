@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-08-04
+
 ### Added
 - Issues can be deleted, by whoever filed them or by any admin. The confirmation names what goes: the issue, how many comments it has, its full activity history, and how many attachments — when it has any. Deletion is permanent and silent: the comments, the activity history and the attachment files all go, the files are unlinked from disk, and nothing is posted to `#lab-updates`. The identifier is never reissued, so an old `LAB-n` link is always a clean 404 and never a different issue, and historical `#lab-updates` mentions of it stay readable as plain text instead of turning into broken links.
 - A back button in the top bar, plus `⌘[` / `Ctrl+[`. It appears only when there is somewhere in the app to go back to, so it can never drop you out of an installed PWA or off the end of a notification link, and it stays out of the way on a page you arrived at directly.
