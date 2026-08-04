@@ -171,7 +171,7 @@ export async function createProject(args: {
     },
     include: { lead: LEAD_SELECT },
   })
-  void bot.announceToChannel(`New project: ${p.name} — /projects/${p.id}`)
+  void bot.announceToChannel(`New project: ${p.name} — /projects/${p.id}`, args.actorId)
   // A just-created project provably has no issues and no updates, so the extras are
   // exact without a re-read (getProject would only re-derive these same zeros).
   return toDto(p, 0, 0, { latestUpdate: null, openOverdue: 0 })
@@ -219,7 +219,7 @@ export async function updateProject(args: {
   if (args.targetDate !== undefined && args.targetDate?.getTime() !== existing.targetDate?.getTime()) {
     changes.push(args.targetDate ? `target date updated` : 'target date cleared')
   }
-  if (changes.length) void bot.announceToChannel(`Project ${p.name}: ${changes.join(', ')} — /projects/${p.id}`)
+  if (changes.length) void bot.announceToChannel(`Project ${p.name}: ${changes.join(', ')} — /projects/${p.id}`, args.actorId)
   // One read path for the full DTO — the update's own row can't carry the §4.7
   // extras (progress, latest update, overdue count), and a second definition of
   // them here is exactly how the card and the detail page would drift apart.

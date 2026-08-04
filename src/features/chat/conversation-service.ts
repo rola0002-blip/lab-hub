@@ -204,8 +204,13 @@ export async function listConversations(userId: string): Promise<ConversationLis
 }
 
 export async function totalUnread(userId: string): Promise<number> {
+  // `muted: false` (v0.11 §3.2): the rail never shows a count on a muted row, so the
+  // sidebar total must not either — otherwise a muted noisy channel permanently
+  // inflates the badge with no way to clear it short of reading the channel you
+  // muted. This is the SAME rule sumUnread() applies to the live client value, so
+  // the seed and the live derivation can never disagree on hydration.
   const memberships = await prisma.conversationMember.findMany({
-    where: { userId }, select: { conversationId: true, lastReadAt: true },
+    where: { userId, muted: false }, select: { conversationId: true, lastReadAt: true },
   })
   if (memberships.length === 0) return 0
   const counts = await Promise.all(

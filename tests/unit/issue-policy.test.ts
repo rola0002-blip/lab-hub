@@ -6,6 +6,8 @@ import {
   canDeleteProject,
   canEditComment,
   canDeleteComment,
+  canDeleteIssue,
+  assertCanDeleteIssue,
   policyStatus,
 } from '@/features/issues/issue-policy'
 
@@ -32,6 +34,23 @@ describe('issue-policy', () => {
     expect(canDeleteComment('member', 'u1', 'u1')).toBe(true) // author
     expect(canDeleteComment('admin', 'u1', 'u2')).toBe(true)  // admin may delete any
     expect(canDeleteComment('member', 'u1', 'u2')).toBe(false)
+  })
+  it('issue deletion is creator-or-admin, with guests barred outright', () => {
+    // admin: both ways
+    expect(canDeleteIssue('admin', 'u1', 'u1')).toBe(true)
+    expect(canDeleteIssue('admin', 'u1', 'u2')).toBe(true)
+    // member: only their own
+    expect(canDeleteIssue('member', 'u1', 'u1')).toBe(true)
+    expect(canDeleteIssue('member', 'u1', 'u2')).toBe(false)
+    // guest: never — not even on an issue they filed before being demoted. Deletion
+    // here is HARD and cascading, unlike canDeleteComment's soft, recoverable delete.
+    expect(canDeleteIssue('guest', 'u1', 'u1')).toBe(false)
+    expect(canDeleteIssue('guest', 'u1', 'u2')).toBe(false)
+  })
+  it('assertCanDeleteIssue throws a forbidden PolicyError for a non-creator member', () => {
+    expect(() => assertCanDeleteIssue('admin', 'u1', 'u2')).not.toThrow()
+    try { assertCanDeleteIssue('member', 'u1', 'u2'); throw new Error('should have thrown') }
+    catch (e) { expect(e).toBeInstanceOf(PolicyError); expect((e as PolicyError).code).toBe('forbidden') }
   })
   it('maps codes to HTTP statuses', () => {
     expect(policyStatus('forbidden')).toBe(403)

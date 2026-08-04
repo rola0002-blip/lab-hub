@@ -15,17 +15,35 @@ const TEST_DB = 'postgresql://labhub:labhub@localhost:5432/labhub_test'
 export const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: TEST_DB }) })
 
 export async function wipe() {
-  await db.$executeRawUnsafe(`
-    TRUNCATE TABLE "Document","DocumentFolder",
-      "ProjectUpdate",
-      "IssueActivity","IssueAttachment","IssueComment","IssueLabel",
-      "Label","Issue","Project",
-      "Conversation","ConversationMember","Message","Reaction",
-      "ChatAttachment","PushSubscription",
-      "Notification","EmailOutbox","Booking","RecurrenceRule",
-      "MaintenanceWindow","Certification","EquipmentManager","Equipment",
-      "Invitation","Organization","session","account","verification","user" CASCADE
-  `)
+  // A fire-and-forget bot announce (`void bot.announceToChannel` in the issue/project
+  // services) from the PREVIOUS spec file can still be executing in the dev server when
+  // this TRUNCATE grabs its ACCESS EXCLUSIVE locks, racing into a transient deadlock
+  // (40P01) — observed on a full-suite run, where v011.spec.ts wipes immediately behind
+  // status-menu.spec.ts's last issue mutation. The straggler is short-lived, so retry:
+  // by then it has settled. Identical to resetDb's loop (tests/factories.ts:11-33).
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await db.$executeRawUnsafe(`
+        TRUNCATE TABLE "Document","DocumentFolder",
+          "ProjectUpdate",
+          "IssueActivity","IssueAttachment","IssueComment","IssueLabel",
+          "Label","Issue","Project",
+          "Conversation","ConversationMember","Message","Reaction",
+          "ChatAttachment","PushSubscription",
+          "Notification","EmailOutbox","Booking","RecurrenceRule",
+          "MaintenanceWindow","Certification","EquipmentManager","Equipment",
+          "Invitation","Organization","session","account","verification","user" CASCADE
+      `)
+      break
+    } catch (e) {
+      const msg = String(e).toLowerCase()
+      if (attempt < 5 && (msg.includes('deadlock') || msg.includes('40p01') || msg.includes('p2034'))) {
+        await new Promise((r) => setTimeout(r, 20 * (attempt + 1)))
+        continue
+      }
+      throw e
+    }
+  }
   await db.$executeRawUnsafe(`ALTER SEQUENCE "issue_number_seq" RESTART WITH 1`)
 }
 

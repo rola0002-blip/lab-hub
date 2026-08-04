@@ -1,7 +1,7 @@
 import 'server-only'
 import { prisma } from '@/lib/db'
 import { getOrCreateDm } from '@/features/chat/conversation-service'
-import { sendMessage } from '@/features/chat/message-service'
+import { sendMessage, markReadUpTo } from '@/features/chat/message-service'
 import { neutralizeMentions } from '@/features/chat/mentions'
 
 // LabHub Bot — the single isSystem=true account. The fixed ids live in the pure
@@ -28,10 +28,34 @@ async function ensureBotInChannel(): Promise<void> {
 // The body interpolates user-controlled text (issue/project/document/user names), so
 // neutralize any literal mention tokens first: the bot must never @-mention (§5.4),
 // and without this a title like `<!channel>` would bell + email + push the whole org.
-export async function announceToChannel(text: string): Promise<void> {
+export async function announceToChannel(text: string, actorId?: string): Promise<void> {
   try {
     await ensureBotInChannel()
-    await sendMessage({ userId: COLOSSUS_BOT_ID, conversationId: LAB_UPDATES_CHANNEL_ID, body: neutralizeMentions(text) })
+    const sent = await sendMessage({ userId: COLOSSUS_BOT_ID, conversationId: LAB_UPDATES_CHANNEL_ID, body: neutralizeMentions(text) })
+    // v0.11 §3.3 — own-action exclusion. The bot posts as itself, and every unread
+    // predicate excludes only the READER's own messages, so without this the act of
+    // filing an issue / uploading a file / creating or editing a project / posting an
+    // update bumps the actor's OWN Chat badge. Runs entirely AFTER the insert, inside
+    // the same try, so the function's non-fatal contract (:14-16) is preserved.
+    if (!actorId || !sent.ok) return
+    const m = await prisma.conversationMember.findUnique({
+      where: { conversationId_userId: { conversationId: LAB_UPDATES_CHANNEL_ID, userId: actorId } },
+      select: { lastReadAt: true },
+    })
+    if (!m) return
+    const at = new Date(sent.message.createdAt)    // MessageDto.createdAt is an ISO string, not a Date
+    // Character-identical to listConversations' unread predicate (conversation-service.ts:188)
+    // plus an upper bound that excludes the announce we just wrote — so `behind === 0`
+    // means exactly "their unread count for this channel was 0 a moment ago".
+    const behind = await prisma.message.count({
+      where: {
+        conversationId: LAB_UPDATES_CHANNEL_ID, kind: 'user', deletedAt: null,
+        userId: { not: actorId }, createdAt: { gt: m.lastReadAt, lt: at },
+      },
+    })
+    // Caught up ⇒ advance past the announce. Behind ⇒ do nothing: it joins the pile
+    // they have yet to read, and marking it read would hide other people's messages.
+    if (behind === 0) await markReadUpTo({ userId: actorId, conversationId: LAB_UPDATES_CHANNEL_ID, at })
   } catch (e) {
     console.error('bot.announceToChannel failed', e)
   }

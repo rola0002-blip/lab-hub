@@ -257,3 +257,18 @@ export async function markRead(args: { userId: string; conversationId: string })
   })
   await emitEvent({ t: 'read', cid: args.conversationId, uid: args.userId })
 }
+
+// Advance a member's read cursor to an EXACT instant (v0.11 §3.3). The `lt` guard
+// makes it monotone — the cursor can only move forward — so a concurrent markRead
+// from the user's own client can never be rewound, and a repeat call is idempotent.
+// A non-member matches zero rows, so no {t:'read'} frame is emitted for someone who
+// cannot read the channel. Deliberately a SIBLING of markRead, not a refactor of it:
+// markRead's four message-pane call sites are untouched.
+export async function markReadUpTo(args: { userId: string; conversationId: string; at: Date }): Promise<boolean> {
+  const { count } = await prisma.conversationMember.updateMany({
+    where: { conversationId: args.conversationId, userId: args.userId, lastReadAt: { lt: args.at } },
+    data: { lastReadAt: args.at },
+  })
+  if (count > 0) await emitEvent({ t: 'read', cid: args.conversationId, uid: args.userId })
+  return count > 0
+}

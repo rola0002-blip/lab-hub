@@ -10,7 +10,8 @@ import {
 import { parseMentions } from '@/features/chat/mentions'
 import { isMember } from '@/features/chat/conversation-service'
 import * as bot from '@/features/bot'
-import { assertCanMutate, PolicyError } from './issue-policy'
+import { removeUpload } from '@/lib/uploads'
+import { assertCanMutate, assertCanDeleteIssue, PolicyError } from './issue-policy'
 import { rankBetween, rebalance, REBALANCE_THRESHOLD } from './rank'
 import { formatIdentifier } from './identifier'
 import { dueRange, type DueFilter } from './due'
@@ -222,7 +223,7 @@ export async function createIssue(args: {
 
   await emitEvent({ t: 'issue', id: created.id, projectId: created.projectId ?? undefined })
   const dto = toDto(created)
-  void bot.announceToChannel(`New issue ${dto.identifier}: ${dto.title}`)
+  void bot.announceToChannel(`New issue ${dto.identifier}: ${dto.title}`, args.actorId)
   // Mention-wins de-dup (matches comment-service): if the assignee is also @-mentioned
   // in the description, the mention notification covers them — don't also fire
   // issue_assigned (one create → one notification for that user), never self.
@@ -249,7 +250,7 @@ async function applyStatus(tx: P.TransactionClient, issue: Loaded, actorId: stri
 async function maybeNotifyDone(issue: Loaded, prevStatus: IssueStatus, status: IssueStatus, actorId: string): Promise<void> {
   if (status === 'DONE' && prevStatus !== 'DONE') {
     const id = formatIdentifier(issue.number)
-    void bot.announceToChannel(`${id} done: ${issue.title}`)
+    void bot.announceToChannel(`${id} done: ${issue.title}`, actorId)
     if (issue.creatorId !== actorId) {
       const actor = await prisma.user.findUnique({ where: { id: actorId }, select: { name: true } })
       await pushIssueNotif(issue.creatorId, 'issue_done', `${actor?.name ?? 'Someone'} completed ${id}`,
@@ -442,6 +443,33 @@ export async function attachIssueFiles(args: {
     await emitEvent({ t: 'issue', id: issue.id, projectId: issue.projectId ?? undefined })
   }
   return toDto(await loadOrThrow(issue.id))
+}
+
+// ── delete (hard, cascading) ──────────────────────────────────────────────────
+// Hard, cascading delete — the deleteDocument shape (document-service.ts:66-73).
+// Creator-or-admin, guests barred; SILENT (no #lab-updates announce, matching
+// deleteProject/deleteDocument); no new SSE event type.
+export async function deleteIssue(args: { issueId: string; actorId: string; role: Role }): Promise<void> {
+  // Load BEFORE the assert (deleteDocument:67-69): a forged or already-deleted id is
+  // a 404, and only a real issue can ever produce a 403.
+  const issue = await prisma.issue.findUnique({
+    where: { id: args.issueId },
+    select: { id: true, creatorId: true, projectId: true, attachments: { select: { path: true } } },
+  })
+  if (!issue) throw new PolicyError('not_found', 'Issue not found.')
+  assertCanDeleteIssue(args.role, issue.creatorId, args.actorId)
+  // One delete removes IssueLabel / IssueComment / IssueAttachment / IssueActivity —
+  // all four cascade (schema.prisma:504, :514, :529, :543). No transaction needed.
+  await prisma.issue.delete({ where: { id: issue.id } })
+  // Best-effort unlink, per path. Unlike deleteDocument's single call this loops, so a
+  // per-path guard keeps one EACCES from aborting the rest — the row is already gone.
+  for (const a of issue.attachments) {
+    try { await removeUpload(a.path) } catch (e) { console.error('deleteIssue: unlink failed', a.path, e) }
+  }
+  // The EXISTING { t: 'issue' } member (events.ts:17) — isIssueRefetchEvent already
+  // returns true for it (issue-events.ts:11), so the list and board drop the row and
+  // anyone holding the detail page open re-renders into notFound().
+  await emitEvent({ t: 'issue', id: issue.id, projectId: issue.projectId ?? undefined })
 }
 
 // ── detail (issue + attachments; the merged timeline lives in comment-service) ─

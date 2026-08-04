@@ -42,7 +42,7 @@ export async function createDocument(args: {
   })
   // §6.9: one line, uploader + filename + folder (root if none); NO @-mention → posted,
   // not pinged. Awaited but non-fatal (announceToChannel is internally try/caught).
-  await bot.announceToChannel(`New file: ${name} (in ${folder?.name ?? 'root'}) — uploaded by ${args.uploaderName}`)
+  await bot.announceToChannel(`New file: ${name} (in ${folder?.name ?? 'root'}) — uploaded by ${args.uploaderName}`, args.uploaderId)
   return { ...doc, uploaderName: args.uploaderName, folderName: folder?.name ?? null }
 }
 
