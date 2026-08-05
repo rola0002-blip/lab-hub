@@ -4,8 +4,10 @@ import { prisma } from '@/lib/db'
 import { getOrg } from '@/lib/org'
 import { listProjects } from '@/features/issues/project-service'
 import { orgToday } from '@/features/issues/due'
-import { compareProjectsWorstFirst, healthBucket, needsAttention, parseProjectFilters } from '@/features/issues/project-health'
+import { healthBucket, needsAttention, parseProjectFilters } from '@/features/issues/project-health'
+import { projectOrderSignature } from '@/features/issues/project-order'
 import { ProjectCard } from '@/components/issues/project-card'
+import { ProjectsGrid } from '@/components/issues/projects-grid'
 import { ProjectFilterBar } from '@/components/issues/project-filter-bar'
 import { NewProjectButton } from '@/components/issues/project-composer'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -21,9 +23,10 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   ])
   const timezone = org?.timezone ?? 'Asia/Singapore'
   const today = orgToday(new Date(), timezone)
-  // Review list = ACTIVE + PAUSED, worst-first; closed work keeps today's order below.
+  // Review list = ACTIVE + PAUSED in the lab's own manual arrangement (v0.12).
+  // listProjects() already reads rank-ascending, so no sort belongs here — the
+  // grid re-sorts by rank client-side after an optimistic move.
   let review = projects.filter((p) => p.status === 'ACTIVE' || p.status === 'PAUSED')
-    .sort((a, b) => compareProjectsWorstFirst(a, b, today, timezone))
   if (f.health) review = review.filter((p) => healthBucket(p, today, timezone) === f.health)
   if (f.attention) review = review.filter((p) => needsAttention(p, today, timezone))
   // The closed grid ignores the manual arrangement and stays newest-first — the read
@@ -45,7 +48,11 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
           active filter the empty review slice is the filter's own result; unfiltered,
           an empty review slice over a non-empty closed grid says nothing at all. */}
       {review.length > 0 ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{review.map((p) => <ProjectCard key={p.id} project={p} timezone={timezone} today={today} />)}</div>
+        // Keyed on server truth so a revalidation re-seeds the grid's local order.
+        // Arranging is off for guests and under any active filter (a filtered view
+        // is not the arrangement, so dropping into it would be a lie).
+        <ProjectsGrid key={projectOrderSignature(review)} projects={review} timezone={timezone} today={today}
+          canArrange={user.role !== 'guest' && !filtered} />
       ) : filtered ? (
         <EmptyState icon={FolderKanban} title="No projects match this filter"
           hint="Loosen or clear the filter to see more projects." />

@@ -10,13 +10,21 @@ import type { ProjectDto } from '@/features/issues/project-service'
 
 const STATUS_VARIANT = { ACTIVE: 'success', PAUSED: 'warning', COMPLETED: 'neutral', CANCELED: 'danger' } as const
 
-export function ProjectCard({ project, timezone, today }: { project: ProjectDto; timezone: string; today: string }) {
+// Shared component: no 'use client' directive. The page server-renders it for the
+// closed grid (and for guests / filtered views); ProjectsGrid pulls it into the
+// client bundle when the arrangement affordances are live. v0.12 moved the link
+// off the card root onto the name so the card can host the grip + Move menu
+// (`controls`) without nesting interactive elements inside an anchor.
+export function ProjectCard({ project, timezone, today, controls }: { project: ProjectDto; timezone: string; today: string; controls?: React.ReactNode }) {
   const stale = isProjectUpdateStale(project.latestUpdate?.createdAt ?? null, today, timezone)
   const updatedDays = project.latestUpdate ? daysSinceOrgDay(project.latestUpdate.createdAt, today, timezone) : null
   return (
-    <Link href={`/projects/${project.id}`} className="block rounded-xl border border-border bg-surface p-4 shadow-xs transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
+    <div className="rounded-xl border border-border bg-surface p-4 shadow-xs">
       <div className="flex items-start justify-between gap-2">
-        <h2 className="truncate text-md font-semibold text-default">{project.name}</h2>
+        {controls}
+        <h2 className="min-w-0 flex-1 truncate text-md font-semibold">
+          <Link href={`/projects/${project.id}`} className="text-default hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">{project.name}</Link>
+        </h2>
         <Badge variant={STATUS_VARIANT[project.status]}>{project.status.toLowerCase()}</Badge>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -36,6 +44,6 @@ export function ProjectCard({ project, timezone, today }: { project: ProjectDto;
         {project.targetDate && <span className="ml-auto">{formatDay(new Date(project.targetDate), timezone)}</span>}
       </div>
       <div className="mt-3"><ProgressBar {...project.progress} /></div>
-    </Link>
+    </div>
   )
 }
