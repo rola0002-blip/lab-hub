@@ -22,7 +22,8 @@ const screenReaderInstructions: ScreenReaderInstructions = {
   draggable: 'To pick up a project card, press space or enter. Use the arrow keys to move it, space or enter to drop, escape to cancel.',
 }
 
-type Commit = (id: string, target: MoveTarget) => void
+// Never rejects (it try/catches every failure class itself), so callers `void` it.
+type Commit = (id: string, target: MoveTarget) => Promise<void>
 
 export function ProjectsGrid({ projects, timezone, today, canArrange }: {
   projects: ProjectDto[]; timezone: string; today: string; canArrange: boolean
@@ -39,7 +40,7 @@ export function ProjectsGrid({ projects, timezone, today, canArrange }: {
   )
 
   // The single mutation path for BOTH drops and the Move menu.
-  const commit: Commit = (id, { prevId, nextId }) => {
+  const commit: Commit = async (id, { prevId, nextId }) => {
     const snapshot = items // recreated each render, so this is the current state (rollback target)
     try {
       // rankBetween throws on non-strictly-ordered bounds (a stale neighbour pair
@@ -48,11 +49,19 @@ export function ProjectsGrid({ projects, timezone, today, canArrange }: {
       const rankOf = (pid: string | null): string | null => (pid ? items.find((p) => p.id === pid)?.rank ?? null : null)
       const optimistic = rankBetween(rankOf(prevId), rankOf(nextId))
       setItems((prev) => prev.map((p) => (p.id === id ? { ...p, rank: optimistic } : p)))
-    } catch { /* no optimistic paint; the server response below still lands */ }
-    void moveProjectAction({ projectId: id, prevId, nextId }).then((r) => {
-      if (r.ok) setItems((prev) => prev.map((p) => (p.id === id ? r.data : p)))
-      else { setItems(snapshot); toast('Could not move that project. Please try again.') }
-    })
+    } catch { /* no optimistic paint; the mutation below still runs */ }
+    // Rollback covers EVERY failure class, not just `!r.ok` (board-view.tsx:70–83).
+    // `run()` in actions.ts rethrows anything that is not a PolicyError, and the
+    // server-action call itself rejects on network failure — a `.then`-only branch
+    // would leave the optimistic move painted over a mutation that never landed.
+    try {
+      const r = await moveProjectAction({ projectId: id, prevId, nextId })
+      if (!r.ok) throw new Error(r.message)
+      setItems((prev) => prev.map((p) => (p.id === id ? r.data : p)))
+    } catch {
+      setItems(snapshot)
+      toast('Could not move that project. Please try again.')
+    }
   }
 
   function onDragEnd(e: DragEndEvent) {
@@ -70,7 +79,7 @@ export function ProjectsGrid({ projects, timezone, today, canArrange }: {
     if (oi < 0) return
     const column = ids.filter((id) => id !== activeId)
     const insertAt = oi
-    commit(activeId, { prevId: column[insertAt - 1] ?? null, nextId: column[insertAt] ?? null })
+    void commit(activeId, { prevId: column[insertAt - 1] ?? null, nextId: column[insertAt] ?? null })
   }
 
   // Announcements name the project and give 1-based positions in the current
@@ -114,7 +123,7 @@ function SortableProjectCard({ project, index, ids, timezone, today, commit }: {
   // design — do not dedupe them.
   const t = moveTargets(ids, index)
   const item = (label: string, target: MoveTarget | null) => ({
-    label, disabled: !target, onSelect: () => { if (target) commit(project.id, target) },
+    label, disabled: !target, onSelect: () => { if (target) void commit(project.id, target) },
   })
   return (
     // No JS reduced-motion gate: client components still server-render, so a
