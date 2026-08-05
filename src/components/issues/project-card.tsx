@@ -22,8 +22,13 @@ export function ProjectCard({ project, timezone, today, controls }: { project: P
     <div className="rounded-xl border border-border bg-surface p-4 shadow-xs">
       <div className="flex items-start justify-between gap-2">
         {controls}
-        <h2 className="min-w-0 flex-1 truncate text-md font-semibold">
-          <Link href={`/projects/${project.id}`} className="text-default hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">{project.name}</Link>
+        {/* `truncate` (overflow:hidden) sits on the LINK, not on the h2: an ancestor's
+            overflow clips a descendant's focus ring, so a ring on an anchor inside a
+            truncating h2 is cut off on every side. An element's own overflow never
+            clips its own ring, so this is the one arrangement that keeps the
+            indicator whole while the long name still ellipses. */}
+        <h2 className="min-w-0 flex-1 text-md font-semibold">
+          <Link href={`/projects/${project.id}`} className="block truncate text-default hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">{project.name}</Link>
         </h2>
         <Badge variant={STATUS_VARIANT[project.status]}>{project.status.toLowerCase()}</Badge>
       </div>

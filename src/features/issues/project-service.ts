@@ -172,6 +172,11 @@ export async function createProject(args: {
   if (args.leadId != null) await assertLeadExists(args.leadId) // '' is falsy but IS stored — guard on null, not truthiness
   // A new project lands at the FRONT of the arrangement (an empty table yields a
   // null bound, which rankBetween reads as "no neighbour" on that side).
+  // No REBALANCE_THRESHOLD guard here, unlike moveProject — deliberate. Repeated
+  // front-mints lengthen the key slowly (~1 character per 5 creates) and nothing
+  // breaks when they do; the first move of any card self-heals the whole table via
+  // rebalanceProjectsAndPlace. Guarding here would cost a whole-table read on every
+  // create to defend against a cost that only a move ever pays.
   const front = await prisma.project.findFirst({ orderBy: { rank: 'asc' }, select: { rank: true } })
   const p = await prisma.project.create({
     data: {

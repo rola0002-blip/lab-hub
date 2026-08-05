@@ -7,7 +7,7 @@ import { orgToday } from '@/features/issues/due'
 import { healthBucket, needsAttention, parseProjectFilters } from '@/features/issues/project-health'
 import { projectOrderSignature } from '@/features/issues/project-order'
 import { ProjectCard } from '@/components/issues/project-card'
-import { ProjectsGrid } from '@/components/issues/projects-grid'
+import { ProjectsGrid, PROJECT_GRID_CLASS } from '@/components/issues/projects-grid'
 import { ProjectFilterBar } from '@/components/issues/project-filter-bar'
 import { NewProjectButton } from '@/components/issues/project-composer'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -63,7 +63,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
       {closed.length > 0 && (
         <section className="space-y-3 pt-4">
           <h2 className="text-sm font-semibold text-muted">Completed &amp; cancelled</h2>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{closed.map((p) => <ProjectCard key={p.id} project={p} timezone={timezone} today={today} />)}</div>
+          <div className={PROJECT_GRID_CLASS}>{closed.map((p) => <ProjectCard key={p.id} project={p} timezone={timezone} today={today} />)}</div>
         </section>
       )}
     </div>

@@ -15,7 +15,9 @@ import { toast } from '@/lib/toast-store'
 import { ProjectCard } from './project-card'
 import type { ProjectDto } from '@/features/issues/project-service'
 
-const GRID = 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3'
+// One source of truth for the /projects card grid: the arranged review grid below
+// and the closed grid in page.tsx must stay visually identical.
+export const PROJECT_GRID_CLASS = 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3'
 
 // The prop type is `{ draggable: string }`, not a bare string.
 const screenReaderInstructions: ScreenReaderInstructions = {
@@ -97,14 +99,14 @@ export function ProjectsGrid({ projects, timezone, today, canArrange }: {
   // Guests, and any filtered view (the visible order is not the arrangement), get
   // the plain grid: no controls, no DndContext at all.
   if (!canArrange) {
-    return <div className={GRID}>{sorted.map((p) => <ProjectCard key={p.id} project={p} timezone={timezone} today={today} />)}</div>
+    return <div className={PROJECT_GRID_CLASS}>{sorted.map((p) => <ProjectCard key={p.id} project={p} timezone={timezone} today={today} />)}</div>
   }
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}
       accessibility={{ screenReaderInstructions, announcements }}>
       <SortableContext items={ids} strategy={rectSortingStrategy}>
-        <div className={GRID}>
+        <div className={PROJECT_GRID_CLASS}>
           {sorted.map((p, i) => (
             <SortableProjectCard key={p.id} project={p} index={i} ids={ids} timezone={timezone} today={today} commit={commit} />
           ))}
