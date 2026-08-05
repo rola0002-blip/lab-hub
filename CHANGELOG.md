@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Projects can be arranged by hand. `/projects` is now the lab's shelf: drag a card by its grip, move it with the keyboard alone (focus the grip, space to lift, arrows to move, space to drop, escape to cancel), or use the per-card Move menu — Move to front, earlier, later, or to end — which is the reliable path on touch and needs no dragging at all. The arrangement is one shared lab-wide order, not a per-person view: what you arrange is what everyone sees. Every control names its project ("Reorder Memristor array", "Move Memristor array"), and the drag announcements read as names and positions rather than raw ids.
+- Guests see the same arrangement, read-only — no grip, no Move menu, and a forged move request is refused. The controls are also hidden whenever a Health or "Needs attention" filter is active, because dropping a card between two neighbours you cannot see would put it somewhere you did not choose.
+
+### Changed
+- The `/projects` review grid no longer re-sorts itself worst-first on every render; it renders in the manual arrangement. Health is untouched everywhere else — chips, glyphs, the `?health=` and `?attention=1` filters, and the weekly update prompts all behave exactly as before, and the dashboard's "Projects needing attention" section keeps the worst-first ordering, which is where the review instrument now lives (superseding the grid half of SP8's worst-first decision, by product decision).
+- Project dropdowns follow the arrangement instead of newest-first: the create-issue composer, the issue filter bar, the issue-detail Project property, and the project-update composer all list projects in the same order as the grid, so a dropdown can never contradict the shelf.
+- A newly created project lands at the front of the arrangement rather than being sorted in by date — the place you look first for work you just set up. Completed and cancelled projects keep their own newest-first section below the grid and are unaffected by arranging.
+- One hand-written, additive database migration (`20260805000000_project_manual_order`) adds `Project.rank`, a base-62 fractional index stored `COLLATE "C"` with its own index. Existing projects are backfilled in the order they were already displayed in (newest first), every statement is guarded so the migration is re-runnable, and nothing is renamed or dropped — rolling back to the previous release stays data-safe.
+
 ## [0.11.0] - 2026-08-04
 
 ### Added
