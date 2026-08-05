@@ -8,9 +8,14 @@
 -- 1. Nullable first: existing rows need a backfill before NOT NULL can hold.
 ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "rank" TEXT COLLATE "C";
 
--- 2. Backfill: pre-existing projects keep the order they were already displayed in
---    (newest first), mapped onto evenly-spaced two-character base-62 keys so later
---    inserts have room on both sides. The markers below are load-bearing — the
+-- 2. Backfill: pre-existing projects are seeded NEWEST FIRST — the baseline the
+--    dropdowns and the closed grid already used, NOT the review grid's order, which
+--    was worst-first by health (compareProjectsWorstFirst). So the first post-upgrade
+--    render of /projects differs from the last pre-upgrade one, once, before anyone
+--    arranges; that is intended. Seeding worst-first is impossible here anyway —
+--    healthBucket needs org-timezone staleness math. Keys are evenly-spaced
+--    two-character base-62 so later inserts have room on both sides. The markers
+--    below are load-bearing — the
 --    integration suite slices this block out of the file and re-runs it against
 --    deliberately re-nulled rows (tests/integration/project-list.test.ts).
 -- BACKFILL-START
