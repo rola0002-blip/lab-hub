@@ -4,7 +4,7 @@ import type { Role } from '@/lib/session'
 import { prisma } from '@/lib/db'
 import * as bot from '@/features/bot'
 import { assertCanMutate, canDeleteProject, PolicyError } from './issue-policy'
-import { rankBetween } from './rank'
+import { rankBetween, rebalance, REBALANCE_THRESHOLD } from './rank'
 import { assertAssigneeExists } from './issue-service'
 import { isEffectiveLead } from './project-health'
 import { PROJECT_UPDATE_ORDER } from './project-update-service'
@@ -238,6 +238,59 @@ export async function updateProject(args: {
   const dto = await getProject(args.id)
   if (!dto) throw new PolicyError('not_found', 'Project not found.')
   return dto
+}
+
+// ── arrangement move (v0.12 §6.1) ─────────────────────────────────────────────
+// The client sends only the neighbours the project sits between AFTER the move;
+// the server mints the key. The moveIssue shape minus status/activity/SSE — and
+// deliberately silent: rearranging the shelf is not lab news, so no announce.
+// `actorId` is carried for signature symmetry with every other mutation (nothing
+// records an actor for a move).
+export async function moveProject(args: {
+  actorId: string; role: Role; projectId: string
+  prevId: string | null; nextId: string | null
+}): Promise<ProjectDto> {
+  assertCanMutate(args.role)
+  const existing = await prisma.project.findUnique({ where: { id: args.projectId }, select: { id: true } })
+  if (!existing) throw new PolicyError('not_found', 'Project not found.')
+  // A neighbour id that no longer resolves degrades to null = boundary, exactly
+  // like the board: a stale client places its card, it does not error.
+  const [prev, next] = await Promise.all([
+    args.prevId ? prisma.project.findUnique({ where: { id: args.prevId }, select: { rank: true } }) : null,
+    args.nextId ? prisma.project.findUnique({ where: { id: args.nextId }, select: { rank: true } }) : null,
+  ])
+  let rank: string
+  try {
+    rank = rankBetween(prev?.rank ?? null, next?.rank ?? null)
+  } catch {
+    rank = await rebalanceProjectsAndPlace(args.projectId, args.prevId, args.nextId)
+  }
+  if (rank.length > REBALANCE_THRESHOLD) {
+    rank = await rebalanceProjectsAndPlace(args.projectId, args.prevId, args.nextId)
+  }
+  await prisma.project.update({ where: { id: args.projectId }, data: { rank } })
+  // One read path for the full DTO (the §4.7 extras), as updateProject does.
+  // Null only if a concurrent admin delete slipped in — a genuine 404.
+  const dto = await getProject(args.projectId)
+  if (!dto) throw new PolicyError('not_found', 'Project not found.')
+  return dto
+}
+
+// Reseat the WHOLE table with evenly-spaced keys, placing the moved project at
+// its target slot; returns its fresh key. Rare, self-healing. Whole-table scope
+// is the deliberate analogue of the board's per-column scope — one arrangement
+// sequence across all statuses, tens of rows. With inverted bounds "between the
+// two" does not exist, so prevId wins; when neither bound resolves the project
+// lands at the FRONT (the grid's entry point, §5.3, where the board appends).
+async function rebalanceProjectsAndPlace(movedId: string, prevId: string | null, nextId: string | null): Promise<string> {
+  const all = await prisma.project.findMany({ orderBy: { rank: 'asc' }, select: { id: true } })
+  const ordered = all.map((p) => p.id).filter((id) => id !== movedId)
+  const prevIdx = prevId ? ordered.indexOf(prevId) : -1
+  const insertAt = prevId ? prevIdx + 1 : nextId ? Math.max(0, ordered.indexOf(nextId)) : 0
+  ordered.splice(insertAt, 0, movedId)
+  const keys = rebalance(ordered.length)
+  await prisma.$transaction(ordered.map((id, i) => prisma.project.update({ where: { id }, data: { rank: keys[i] } })))
+  return keys[ordered.indexOf(movedId)]
 }
 
 // Admin-only. Cascades issues to projectId = null (the Issue.projectId FK is

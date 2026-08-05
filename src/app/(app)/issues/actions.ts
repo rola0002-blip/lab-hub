@@ -99,6 +99,21 @@ export async function updateProjectAction(id: string, input: { name?: string; de
 export async function deleteProjectAction(id: string) {
   return run((u) => projects.deleteProject({ role: u.role, id }))
 }
+// v0.12 §6.2 — the grid's arrangement move. The client sends only the neighbour
+// ids the card sits between after the drop; the server mints the key. `.nullish()`
+// keeps the boundary drops expressible (no prev = front, no next = end) while an
+// empty-string id is rejected outright rather than silently read as a boundary.
+const moveProjectSchema = z.object({
+  projectId: z.string().min(1, 'Choose a project.'),
+  prevId: z.string().min(1).nullish(),
+  nextId: z.string().min(1).nullish(),
+})
+export async function moveProjectAction(input: { projectId: string; prevId: string | null; nextId: string | null }) {
+  const parsed = moveProjectSchema.safeParse(input)
+  if (!parsed.success) return { ok: false as const, message: firstIssue(parsed.error) }
+  const v = parsed.data
+  return run((u) => projects.moveProject({ actorId: u.id, role: u.role, projectId: v.projectId, prevId: v.prevId ?? null, nextId: v.nextId ?? null }))
+}
 export async function deleteIssueAction(issueId: string) {
   return run((u) => issues.deleteIssue({ issueId, actorId: u.id, role: u.role }))
 }
