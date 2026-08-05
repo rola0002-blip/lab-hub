@@ -105,6 +105,16 @@ describe('project arrangement rank (v0.12 §4.1)', () => {
     expect(await listProjectOptions()).toEqual([{ id: b.id, name: 'B' }, { id: c.id, name: 'C' }, { id: d.id, name: 'D' }])
   })
 
+  // The factory's default mint must stay strictly later than every rank it has
+  // handed out, INCLUDING literals a test pinned itself — two fixtures sharing a
+  // key would leave the read order to Postgres (neither read has a tiebreak).
+  it('makeProject appends after an explicit rank literal', async () => {
+    const pinned = await makeProject({ name: 'Pinned', rank: 'V' })
+    const appended = await makeProject({ name: 'Appended' })
+    expect(appended.rank > pinned.rank).toBe(true)
+    expect((await listProjects()).map((p) => p.id)).toEqual([pinned.id, appended.id])
+  })
+
   it('the list and the detail read agree on rank (one DTO, one arrangement key)', async () => {
     const p = await makeProject()
     const listed = (await listProjects())[0]

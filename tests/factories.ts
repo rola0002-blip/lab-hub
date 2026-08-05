@@ -91,9 +91,17 @@ export async function makeMessage(conversationId: string, userId: string, over: 
 }
 
 export async function makeProject(over: Record<string, unknown> = {}) {
-  // An explicit `rank` in `over` wins (spread last) and leaves the cursor alone, so
-  // a test can pin literal keys without disturbing the default mints around it.
-  const rank = over.rank !== undefined ? (over.rank as string) : (lastProjectRank = rankBetween(lastProjectRank, null))
+  // An explicit `rank` in `over` wins (spread last) and ADVANCES the cursor past
+  // itself, so the next default mint is still strictly later than every fixture
+  // before it. Two rows sharing a key would leave the read order to Postgres —
+  // neither listProjects nor listProjectOptions has a tiebreak.
+  let rank: string
+  if (over.rank !== undefined) {
+    rank = over.rank as string
+    if (lastProjectRank === null || rank > lastProjectRank) lastProjectRank = rank
+  } else {
+    rank = lastProjectRank = rankBetween(lastProjectRank, null)
+  }
   return prisma.project.create({ data: { name: `Project ${randomUUID().slice(0, 6)}`, rank, ...over } })
 }
 
