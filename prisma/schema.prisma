@@ -417,6 +417,8 @@ model Project {
   // Fractional-index arrangement key for the /projects grid. COLLATE "C" (set in
   // the migration) so Postgres orders it by byte = base-62 order (rank.ts).
   // Lowest key = front. One sequence across all statuses; the closed grid ignores it.
+  // No @default here on purpose — the app always mints; the SQL-only DEFAULT 'zz' the
+  // migration sets exists solely so a rolled-back pre-0.12 binary can still INSERT.
   rank                     String
   // SP8: recurring prompt latch — compared to the CURRENT week's promptAt, not the
   // one-shot dueSoonPingedAt idiom (which would fire once per project, ever).

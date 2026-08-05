@@ -15,9 +15,9 @@ ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "rank" TEXT COLLATE "C";
 --    arranges; that is intended. Seeding worst-first is impossible here anyway —
 --    healthBucket needs org-timezone staleness math. Keys are evenly-spaced
 --    two-character base-62 so later inserts have room on both sides. The markers
---    below are load-bearing — the
---    integration suite slices this block out of the file and re-runs it against
---    deliberately re-nulled rows (tests/integration/project-list.test.ts).
+--    below are load-bearing: the integration suite slices this block out of the
+--    file and re-runs it against deliberately re-nulled rows
+--    (tests/integration/project-list.test.ts).
 -- BACKFILL-START
 DO $$
 DECLARE
@@ -55,5 +55,21 @@ END $$;
 -- 3. Now enforceable, and safe on re-run: step 2 leaves no NULLs behind.
 ALTER TABLE "Project" ALTER COLUMN "rank" SET NOT NULL;
 
--- 4. The grid's only ordering read.
+-- 4. ROLLBACK SAFETY, and nothing else. The app never relies on this default: every
+--    key is minted by rank.ts, and prisma/schema.prisma deliberately keeps
+--    `rank String` with no @default. Its ONLY purpose is an out-of-band INSERT from
+--    a rolled-back pre-0.12 binary, whose Prisma client does not know the column and
+--    would otherwise fail its first "New project" with a 23502 not-null violation.
+--    'z' is the highest digit of rank.ts's DIGITS (0-9, then A-Z, then a-z — the same
+--    order Postgres byte-sorts under COLLATE "C"), so 'zz' is the largest two-character
+--    key there is: it sorts after every one-character key and strictly after every key
+--    this backfill can mint (its ceiling is 'zy', at n = 1890). A project created on a
+--    rolled-back build therefore lands at the END of the grid with its data intact, and
+--    the first arrange re-mints it. Two such rows tie at 'zz' — as would a later
+--    "Move to end" that happens to mint 'zz' — which moveProject's inverted-bounds catch
+--    already self-heals by rebalancing the whole table.
+--    Re-running this statement just sets the same default again.
+ALTER TABLE "Project" ALTER COLUMN "rank" SET DEFAULT 'zz';
+
+-- 5. The grid's only ordering read.
 CREATE INDEX IF NOT EXISTS "Project_rank_idx" ON "Project"("rank");
