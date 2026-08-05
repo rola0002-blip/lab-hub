@@ -26,7 +26,11 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
     .sort((a, b) => compareProjectsWorstFirst(a, b, today, timezone))
   if (f.health) review = review.filter((p) => healthBucket(p, today, timezone) === f.health)
   if (f.attention) review = review.filter((p) => needsAttention(p, today, timezone))
+  // The closed grid ignores the manual arrangement and stays newest-first — the read
+  // is rank-ordered now, so that chronology has to be stated here (ISO strings
+  // compare lexically = chronologically).
   const closed = projects.filter((p) => p.status === 'COMPLETED' || p.status === 'CANCELED')
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   const filtered = Boolean(f.health || f.attention)
   return (
     <div className="space-y-4">

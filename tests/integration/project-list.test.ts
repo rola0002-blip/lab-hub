@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { prisma } from '@/lib/db'
 import { resetDb, makeUser, makeProject, makeIssue, makeProjectUpdate, seedSystem } from '../factories'
 import { listProjects, getProject, listProjectOptions, createProject, updateProject } from '@/features/issues/project-service'
@@ -86,9 +88,80 @@ describe('extended project reads (SP8 §4.7)', () => {
     expect(updated.latestUpdate).toMatchObject({ id: up.id, health: 'OFF_TRACK', authorName: admin.name })
     expect(updated.progress).toEqual({ done: 0, total: 1, percent: 0 })
   })
-  it('listProjectOptions returns { id, name } newest-first', async () => {
-    await makeProject({ name: 'Old', createdAt: new Date(Date.now() - 60_000) })
-    await makeProject({ name: 'New' })
-    expect(await listProjectOptions()).toEqual([expect.objectContaining({ name: 'New' }), expect.objectContaining({ name: 'Old' })])
+})
+
+// v0.12 §4.1: one shared manual arrangement, stored as a base-62 fractional index
+// (rank.ts) ordered by byte (COLLATE "C"). Lowest key = front of the grid.
+describe('project arrangement rank (v0.12 §4.1)', () => {
+  beforeEach(async () => { await resetDb(); await seedSystem() })
+
+  it('listProjects and listProjectOptions read in ascending rank order, not creation order', async () => {
+    const d = await makeProject({ name: 'D', rank: 'D' })
+    const b = await makeProject({ name: 'B', rank: 'B' })
+    const c = await makeProject({ name: 'C', rank: 'C' })
+    expect((await listProjects()).map((p) => p.id)).toEqual([b.id, c.id, d.id])
+    // Same arrangement on the narrow option source, whose { id, name } shape is
+    // pinned here too (it feeds the issue pages and both global composers).
+    expect(await listProjectOptions()).toEqual([{ id: b.id, name: 'B' }, { id: c.id, name: 'C' }, { id: d.id, name: 'D' }])
+  })
+
+  it('the list and the detail read agree on rank (one DTO, one arrangement key)', async () => {
+    const p = await makeProject()
+    const listed = (await listProjects())[0]
+    expect(listed.rank).toBeTypeOf('string')
+    expect(listed.rank.length).toBeGreaterThan(0)
+    expect((await getProject(p.id))!.rank).toBe(listed.rank)
+  })
+
+  it('createProject mints the FRONT rank — a new project lands first in the grid', async () => {
+    const member = await makeUser({ role: 'member' })
+    const seeded = await makeProject({ rank: 'V' })
+    const created = await createProject({ actorId: member.id, role: 'member', name: 'Newest' })
+    expect(created.rank < 'V').toBe(true)
+    expect((await listProjects()).map((p) => p.id)).toEqual([created.id, seeded.id])
+  })
+
+  // The migration's backfill is the only code that ever mints keys for pre-existing
+  // rows, and it runs exactly once in production — so it is exercised here by
+  // extracting the marked DO block from the migration file and re-running it against
+  // rows deliberately re-nulled. NOT NULL is dropped and restored in a finally, so a
+  // failing assertion can never leave the column nullable for the rest of the run.
+  it('the migration backfill ranks legacy rows newest-first with distinct two-char keys', async () => {
+    const sql = readFileSync(path.join(process.cwd(), 'prisma/migrations/20260805000000_project_manual_order/migration.sql'), 'utf8')
+    const start = sql.indexOf('-- BACKFILL-START')
+    const end = sql.indexOf('-- BACKFILL-END')
+    expect(start).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(start)
+    const backfill = sql.slice(start + '-- BACKFILL-START'.length, end)
+    expect(backfill.trim().length).toBeGreaterThan(0)
+
+    await prisma.$executeRawUnsafe('ALTER TABLE "Project" ALTER COLUMN "rank" DROP NOT NULL')
+    try {
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO "Project" ("id","name","description","status","rank","createdAt","updatedAt") VALUES
+          ('bf-old','Old','','ACTIVE',NULL,'2026-01-01 00:00:00','2026-01-01 00:00:00'),
+          ('bf-mid','Mid','','ACTIVE',NULL,'2026-02-01 00:00:00','2026-02-01 00:00:00'),
+          ('bf-new','New','','ACTIVE',NULL,'2026-03-01 00:00:00','2026-03-01 00:00:00')
+      `)
+      await prisma.$executeRawUnsafe(backfill) // one DO block = one statement
+      const rows = await prisma.$queryRawUnsafe<{ id: string; rank: string | null }[]>(
+        'SELECT "id","rank" FROM "Project" ORDER BY "createdAt" DESC, "id" ASC',
+      )
+      expect(rows.map((r) => r.id)).toEqual(['bf-new', 'bf-mid', 'bf-old'])
+      expect(rows.every((r) => r.rank !== null)).toBe(true)
+      const ranks = rows.map((r) => r.rank!)
+      expect(new Set(ranks).size).toBe(ranks.length)
+      // Newest first = lowest key, strictly ascending down the createdAt DESC order.
+      expect([...ranks].sort()).toEqual(ranks)
+      for (const r of ranks) {
+        expect(r).toMatch(/^[0-9A-Za-z]{2}$/)
+        expect(r.endsWith('0')).toBe(false) // rank.ts invariant: lexicographic order = fraction order
+      }
+    } finally {
+      // Drop anything the backfill failed to rank, so restoring NOT NULL cannot throw
+      // over the top of the real failure.
+      await prisma.$executeRawUnsafe('DELETE FROM "Project" WHERE "rank" IS NULL')
+      await prisma.$executeRawUnsafe('ALTER TABLE "Project" ALTER COLUMN "rank" SET NOT NULL')
+    }
   })
 })

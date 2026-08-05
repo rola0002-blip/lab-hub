@@ -4,6 +4,7 @@ import type { Role } from '@/lib/session'
 import { prisma } from '@/lib/db'
 import * as bot from '@/features/bot'
 import { assertCanMutate, canDeleteProject, PolicyError } from './issue-policy'
+import { rankBetween } from './rank'
 import { assertAssigneeExists } from './issue-service'
 import { isEffectiveLead } from './project-health'
 import { PROJECT_UPDATE_ORDER } from './project-update-service'
@@ -21,6 +22,9 @@ export type ProjectDto = {
   openOverdue: number
   startDate: string | null; targetDate: string | null; status: ProjectStatus
   progress: { done: number; total: number; percent: number }
+  // v0.12: the grid's manual arrangement key (lowest = front). Every DTO producer
+  // fills it, so a card can be reordered straight from a list or a detail read.
+  rank: string
   createdAt: string; updatedAt: string
 }
 
@@ -32,7 +36,7 @@ const LEAD_SELECT = { select: { id: true, name: true, image: true, banned: true,
 type LoadedProject = {
   id: string; name: string; description: string
   lead: { id: string; name: string; image: string | null; banned: boolean; isSystem: boolean; role: string } | null
-  startDate: Date | null; targetDate: Date | null; status: ProjectStatus; createdAt: Date; updatedAt: Date
+  startDate: Date | null; targetDate: Date | null; status: ProjectStatus; rank: string; createdAt: Date; updatedAt: Date
 }
 
 type Extras = { latestUpdate: ProjectDto['latestUpdate']; openOverdue: number }
@@ -45,6 +49,7 @@ function toDto(p: LoadedProject, done: number, total: number, extras: Extras): P
     latestUpdate: extras.latestUpdate, openOverdue: extras.openOverdue,
     startDate: p.startDate?.toISOString() ?? null, targetDate: p.targetDate?.toISOString() ?? null, status: p.status,
     progress: { done, total, percent: total === 0 ? 0 : Math.round((done / total) * 100) },
+    rank: p.rank,
     createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString(),
   }
 }
@@ -78,7 +83,7 @@ async function progressFor(projectId: string): Promise<{ done: number; total: nu
 export async function listProjects(now: Date = new Date()): Promise<ProjectDto[]> {
   const tz = await orgTimezone()
   const [projects, totals, dones, overdues, latests] = await Promise.all([
-    prisma.project.findMany({ orderBy: { createdAt: 'desc' }, include: { lead: LEAD_SELECT } }),
+    prisma.project.findMany({ orderBy: { rank: 'asc' }, include: { lead: LEAD_SELECT } }),
     // Two grouped counts instead of N per-project queries. CANCELED issues are
     // excluded from the denominator (same Linear semantics as progressFor).
     prisma.issue.groupBy({ by: ['projectId'], _count: { _all: true }, where: { projectId: { not: null }, status: { not: 'CANCELED' } } }),
@@ -128,9 +133,10 @@ export async function getProject(id: string, now: Date = new Date()): Promise<Pr
 }
 
 // Narrow companion (§4.7): the issue pages and the global composer need only
-// { id, name } — one option-list source, no review-screen joins.
+// { id, name } — one option-list source, no review-screen joins. Same arrangement
+// order as listProjects, so a dropdown never contradicts the grid.
 export async function listProjectOptions(): Promise<{ id: string; name: string }[]> {
-  return prisma.project.findMany({ orderBy: { createdAt: 'desc' }, select: { id: true, name: true } })
+  return prisma.project.findMany({ orderBy: { rank: 'asc' }, select: { id: true, name: true } })
 }
 
 function validateName(name: string): string {
@@ -164,10 +170,14 @@ export async function createProject(args: {
   const name = validateName(args.name)
   validateDateOrder(args.startDate ?? null, args.targetDate ?? null)
   if (args.leadId != null) await assertLeadExists(args.leadId) // '' is falsy but IS stored — guard on null, not truthiness
+  // A new project lands at the FRONT of the arrangement (an empty table yields a
+  // null bound, which rankBetween reads as "no neighbour" on that side).
+  const front = await prisma.project.findFirst({ orderBy: { rank: 'asc' }, select: { rank: true } })
   const p = await prisma.project.create({
     data: {
       name, description: (args.description ?? '').slice(0, 4000),
       leadId: args.leadId ?? null, startDate: args.startDate ?? null, targetDate: args.targetDate ?? null, status: args.status ?? 'ACTIVE',
+      rank: rankBetween(null, front?.rank ?? null),
     },
     include: { lead: LEAD_SELECT },
   })
