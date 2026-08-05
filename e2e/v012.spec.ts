@@ -35,6 +35,16 @@ const names = (page: Page) => main(page).locator('h2 a[href^="/projects/"]').all
 const grips = (page: Page) => page.getByRole('button', { name: /^Reorder / })
 const moveMenus = (page: Page) => page.getByRole('button', { name: /^Move / })
 
+// The `moveProjectAction` server action POSTs to the CURRENT route url (the App Router
+// convention), so this is the one signal that the move actually reached the server.
+// `commit()` (projects-grid.tsx:43-65) paints optimistically BEFORE awaiting the action,
+// so an order assertion alone is satisfied while the POST is still in flight — and the
+// `page.reload()` that follows would abort it, losing the write and failing the very
+// assertion the journey exists for. Bracket the triggering input with it instead
+// (the Promise.all idiom proven at helpers.ts:145-148).
+const movePosted = (page: Page) =>
+  page.waitForResponse((r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/projects')
+
 async function adminId(): Promise<string> {
   return (await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })).id
 }
@@ -65,9 +75,14 @@ test('1: the Move menu rearranges the grid and the new order survives a reload',
   await page.goto('/projects')
   await expect.poll(() => names(page)).toEqual([A, B, C])
 
-  // Pointer-free path: the same four commands the keyboard drag writes.
+  // Pointer-free path: the same four commands the keyboard drag writes. Bracket the
+  // server-action POST, or the reload below can abort a still-in-flight write.
   await page.getByRole('button', { name: `Move ${A}` }).click()
-  await page.getByRole('menu').getByRole('menuitem', { name: 'Move to end' }).click()
+  const [res] = await Promise.all([
+    movePosted(page),
+    page.getByRole('menu').getByRole('menuitem', { name: 'Move to end' }).click(),
+  ])
+  expect(res.ok()).toBe(true)
   await expect.poll(() => names(page), { timeout: 15_000 }).toEqual([B, C, A])
 
   // The reload is the real assertion: it re-reads `Project.rank` from Postgres, so an
@@ -106,7 +121,14 @@ test('2: a keyboard drag from the grip rearranges the grid and the new order sur
     await page.keyboard.press('ArrowLeft')
     await expect(live).toContainText('moved to position 2 of 3', { timeout: 800 })
   }).toPass({ timeout: 10_000 })
-  await page.keyboard.press('Space')                                       // drop
+  // The drop is what calls `commit()`, so bracket THIS press (J1 brackets its click) —
+  // the optimistic paint would otherwise satisfy the order assertion below while the
+  // POST is still in flight, and the reload would abort it.
+  const [res] = await Promise.all([
+    movePosted(page),
+    page.keyboard.press('Space'),                                          // drop
+  ])
+  expect(res.ok()).toBe(true)
   await expect(live).toContainText('dropped at position 2 of 3')
   await expect.poll(() => names(page), { timeout: 15_000 }).toEqual([A, C, B])
 
