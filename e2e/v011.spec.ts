@@ -34,7 +34,11 @@ const chatBadge = (page: Page) => page.getByRole('link', { name: /^Chat/ }).loca
 // The issue detail's <aside aria-label="Properties"> — scopes the project-row assertions
 // away from the page's other links and buttons.
 const props = (page: Page) => page.getByRole('complementary', { name: 'Properties' })
-const backBtn = (page: Page) => page.getByRole('button', { name: 'Back' })
+// `exact: true`: accessible-name matching is a case-insensitive SUBSTRING match, and
+// the v0.13 sidebar footer button "Give feedback" contains "back" — without this the
+// toHaveCount(0) assertions below would see the footer button and the toBeVisible()
+// ones would be strict-mode ambiguous. The top-bar control's name is exactly "Back".
+const backBtn = (page: Page) => page.getByRole('button', { name: 'Back', exact: true })
 
 // The depth STAMPED ON THE CURRENT HISTORY ENTRY (src/lib/history-depth.ts). Visibility
 // alone would pass against a bare counter; the stamp is the actual invariant.
