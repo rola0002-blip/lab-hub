@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-08-06
+
 ### Added
 - Projects can be arranged by hand. `/projects` is now the lab's shelf: drag a card by its grip, move it with the keyboard alone (focus the grip, space to lift, arrows to move, space to drop, escape to cancel), or use the per-card Move menu — Move to front, earlier, later, or to end — which is the reliable path on touch and needs no dragging at all. The arrangement is one shared lab-wide order, not a per-person view: what you arrange is what everyone sees. Every control names its project ("Reorder Memristor array", "Move Memristor array"), and the drag announcements read as names and positions rather than raw ids.
 - Guests see the same arrangement, read-only — no grip, no Move menu, and a forged move request is refused. The controls are also hidden whenever a Health or "Needs attention" filter is active, because dropping a card between two neighbours you cannot see would put it somewhere you did not choose.
