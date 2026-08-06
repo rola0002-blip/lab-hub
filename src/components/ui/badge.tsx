@@ -1,6 +1,11 @@
+// Chip ink must clear the 4.5:1 AA TEXT bar over its own chip fill (these are real
+// words, and `npm run contrast` cannot see them — they are literals here, not tokens).
+// The light `warning` ink was #8a6d10 = 4.43:1 on #fdf3d5, an axe serious violation
+// wherever a warning chip renders (bookings, approvals, /feedback's default New
+// filter); #856810 is the same hue at 4.76:1. Do not lighten it back.
 const CHIP = {
   success: 'bg-[#eaf6ef] text-[#00583f] dark:bg-[#0d2b21] dark:text-[#57c99a]',
-  warning: 'bg-[#fdf3d5] text-[#8a6d10] dark:bg-[#3a3320] dark:text-[#e8d9a0]',
+  warning: 'bg-[#fdf3d5] text-[#856810] dark:bg-[#3a3320] dark:text-[#e8d9a0]',
   danger:  'bg-[#fdeaf0] text-[#a3184a] dark:bg-[#3a1622] dark:text-[#f291b5]',
   neutral: 'bg-active text-muted',
 } as const

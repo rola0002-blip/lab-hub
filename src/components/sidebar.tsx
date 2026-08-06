@@ -26,6 +26,9 @@ export const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/chat', label: 'Chat', icon: MessageCircle },
     { href: '/files', label: 'Files', icon: Files },
+    // All roles, deliberately absent from NON_GUEST/ADMIN_ONLY: /feedback is
+    // role-adaptive, not role-gated (a guest sees their own submissions there).
+    { href: '/feedback', label: 'Feedback', icon: Megaphone },
   ] },
   { title: 'Projects', items: [
     { href: '/issues/me', label: 'My issues', icon: Inbox },
