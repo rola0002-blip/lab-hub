@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-08-06
+
 ### Added
 - Feedback from inside the app. "Give feedback" sits at the foot of the sidebar and in the ⌘K palette on every page: say whether it is a bug or an idea, describe it, optionally attach a screenshot, and send. The page you were on, the app version and your browser are recorded with it — listed on the form before you send, so nothing goes along invisibly. Everyone can send feedback, guests included; unlike filing an issue, it needs no permission and no triage vocabulary.
 - A review queue on the new Feedback page. Admins see every report newest-first, filter it by status and by bug-versus-idea, and move an item through New → Reviewed → Planned → Done → Declined from the chip on the row. Everyone else — members and guests — sees the same page with their own submissions only, and never receives anyone else's. New items land under the New filter, so triaging one clears it from view.
