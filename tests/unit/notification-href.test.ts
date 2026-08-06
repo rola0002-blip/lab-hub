@@ -41,6 +41,18 @@ describe('notificationHref', () => {
       .toBe('/chat/c9?msg=m4') // shape-identical to the chat fan-out payload — NO resolver change
   })
 
+  it('routes both feedback rows to /feedback (v0.13 — no per-item anchor)', () => {
+    expect(notificationHref({ type: 'feedback_new', payload: { feedbackId: 'f1', message: 'New feedback from Roland' } })).toBe('/feedback')
+    expect(notificationHref({ type: 'feedback_decided', payload: { feedbackId: 'f1', status: 'PLANNED', message: 'Your feedback was marked Planned' } })).toBe('/feedback')
+  })
+
+  it('never lets a message-only payload fall into the issue or chat branches', () => {
+    // feedback payloads carry `message` but no identifier/conversationId; if an earlier
+    // branch ever started matching on `message`, these rows would link to a bogus route.
+    expect(notificationHref({ type: 'feedback_new', payload: { message: 'm' } })).toBe('/feedback')
+    expect(notificationHref({ type: 'feedback_decided', payload: {} })).toBe('/feedback')
+  })
+
   it('returns null when nothing resolves', () => {
     expect(notificationHref({ type: 'unknown_type', payload: {} })).toBeNull()
     expect(notificationHref({ type: 'message_dm', payload: {} })).toBeNull() // missing conversationId
