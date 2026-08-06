@@ -122,6 +122,16 @@ describe('feedback-policy', () => {
     expect(normalizePagePath('https://evil.example/x')).toBe('/')
   })
 
+  it('normalizePagePath lets a protocol-relative path through — which is why it is never an href', () => {
+    // '//host/path' has the leading slash the check requires, so it SURVIVES intact.
+    // That is deliberate and safe only because the open-redirect guard lives at the
+    // RENDER layer: pagePath is displayed as text (feedback-client.tsx's `context`
+    // line) and must never become an href — as an href this string navigates
+    // off-origin to evil.example. If this expectation ever flips to '/', the render
+    // layer is still the contract; do not relax it there on the strength of this.
+    expect(normalizePagePath('//evil.example/x')).toBe('//evil.example/x')
+  })
+
   it('normalizePagePath slices to 300 characters', () => {
     const long = '/' + 'a'.repeat(349)
     expect(long.length).toBe(350)

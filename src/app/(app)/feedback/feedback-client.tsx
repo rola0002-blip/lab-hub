@@ -91,8 +91,12 @@ function FeedbackCard({ item, tz, showAuthor, mayReview, mayDelete }: {
         )}
         <Badge variant={TYPE_VARIANT[item.type]}>{TYPE_WORD[item.type]}</Badge>
         {mayReview ? (
+          // The chip beside this trigger is the row's ONLY rendering of its status, and
+          // it lives INSIDE the button — so the accessible name must speak the status
+          // too, or a screen-reader user hears no current value at all. The e2e/a11y
+          // locators match this name as a SUBSTRING, so the prefix must not change.
           <Menu
-            label={`Change status of feedback${who}`} buttonClassName={TRIGGER}
+            label={`Change status of feedback${who} — currently ${word(item.status)}`} buttonClassName={TRIGGER}
             button={<>{chip}<ChevronDown size={14} className="text-subtle" aria-hidden /></>}
             items={FEEDBACK_STATUSES.map((s) => ({ label: word(s), onSelect: () => setStatus(s), disabled: s === item.status }))}
           />
@@ -102,7 +106,10 @@ function FeedbackCard({ item, tz, showAuthor, mayReview, mayDelete }: {
       <p className="mt-2 whitespace-pre-wrap break-words text-sm text-default">{item.body}</p>
       <p className="mt-2 truncate text-xs text-muted" title={context}>{context}</p>
       {item.screenshotPath && (
-        <a href={item.screenshotPath} target="_blank" rel="noreferrer" className={`mt-2 inline-block rounded-md ${RING}`}>
+        // The p-0.5 is what makes the house hover/active fill visible: with no padding
+        // the image covers the anchor's whole box and the state paints nowhere.
+        <a href={item.screenshotPath} target="_blank" rel="noreferrer"
+          className={`mt-2 inline-block rounded-md p-0.5 transition-colors hover:bg-hover active:bg-active ${RING}`}>
           {/* eslint-disable-next-line @next/next/no-img-element -- uploads are served by our own route */}
           <img src={item.screenshotPath} alt={`Screenshot attached to this feedback${who}`}
             className="h-16 w-16 rounded-md border border-border object-cover" />
@@ -113,7 +120,10 @@ function FeedbackCard({ item, tz, showAuthor, mayReview, mayDelete }: {
           {confirmDel ? (
             <>
               <span className="text-xs text-muted">Delete this permanently?</span>
-              <button type="button" onClick={del} disabled={pending}
+              {/* autoFocus: the trigger that raised this confirm has just unmounted, so
+                  without it focus falls to the document body and the keyboard path
+                  is stranded mid-task. */}
+              <button type="button" onClick={del} disabled={pending} autoFocus
                 className={`${SMALL_BTN} font-medium text-[var(--text-danger)] disabled:opacity-50`}>Delete</button>
               <button type="button" onClick={() => setConfirmDel(false)} className={`${SMALL_BTN} text-default`}>Cancel</button>
             </>

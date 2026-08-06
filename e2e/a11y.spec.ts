@@ -58,17 +58,26 @@ function isApprovedAccentFill(node: any, accent: string): boolean {
 // The accent fill as painted RIGHT NOW, in the '#rrggbb' form axe reports in
 // `data.bgColor`. Measured off a throwaway probe rather than read from `--accent`, so a
 // color-mix()/var() chain resolves exactly the way the browser painted the real control.
+//
+// FAIL-CLOSED, deliberately: if `bg-accent` ever stops resolving, getComputedStyle
+// returns the transparent 'rgba(0, 0, 0, 0)', which the old parse folded to '#000000'
+// — and '#000000' is a REAL background, so the tolerance above would have quietly
+// excused every true-black-backed contrast failure in the audit. A probe that cannot
+// be read is a broken harness, not a passing one, so it throws.
 async function accentFillHex(page: Page): Promise<string> {
-  return page.evaluate(() => {
+  const painted = await page.evaluate(() => {
     const probe = document.createElement('div')
     probe.className = 'bg-accent'
     probe.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px'
     document.body.appendChild(probe)
-    const painted = getComputedStyle(probe).backgroundColor
+    const value = getComputedStyle(probe).backgroundColor
     probe.remove()
-    const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(painted)
-    return m ? '#' + m.slice(1, 4).map((n) => Number(n).toString(16).padStart(2, '0')).join('') : painted
+    return value
   })
+  const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/.exec(painted)
+  if (!m) throw new Error(`a11y harness: bg-accent did not resolve to an rgb() colour (got "${painted}") — the accent-fill tolerance cannot be matched.`)
+  if (m[4] !== undefined && Number(m[4]) === 0) throw new Error(`a11y harness: bg-accent resolved to a fully transparent colour ("${painted}") — the accent fill is not painting.`)
+  return '#' + m.slice(1, 4).map((n) => Number(n).toString(16).padStart(2, '0')).join('')
 }
 
 // Force the theme deterministically (the pre-paint boot script reads localStorage

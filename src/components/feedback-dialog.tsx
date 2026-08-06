@@ -130,8 +130,10 @@ function Composer({ version, pagePath }: { version: string; pagePath: string }) 
 
         <label className="block text-sm font-medium text-default">
           Details
+          {/* No autoFocus: Modal's useFocusTrap lands focus on its Close button after
+              mount, so the attribute never held — it only implied a lie about focus. */}
           <textarea
-            autoFocus required maxLength={4000} rows={5} value={body}
+            required maxLength={4000} rows={5} value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder="What happened, or what would you change?"
             className="mt-1.5 w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-base font-normal text-default placeholder:text-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]"
