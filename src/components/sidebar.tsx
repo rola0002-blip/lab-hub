@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import {
   ChevronDown, LayoutDashboard, MessageCircle, CalendarDays, CalendarCheck,
   ClipboardCheck, Award, Users, Microscope, Settings, ListTodo, Inbox,
-  FolderKanban, Files, type LucideIcon,
+  FolderKanban, Files, Megaphone, type LucideIcon,
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -12,6 +12,7 @@ import { Menu } from '@/components/ui/menu'
 import { useChat } from '@/components/chat/chat-store'
 import { sumUnread } from '@/features/chat/unread'
 import { authClient } from '@/lib/auth-client'
+import { openFeedbackComposer } from '@/lib/feedback-composer-store'
 import { isNavItemActive } from '@/lib/nav-active'
 import type { Role } from '@/lib/session'
 
@@ -149,6 +150,19 @@ export function Sidebar({ org, user, unread, role, version }: {
           <Avatar name={user.name} id={user.id} image={user.image} size={24} presence="active" />
           <span className="truncate text-sm text-sidebar-fg">{user.name}</span>
         </div>
+        {/* Rail tokens only — never accent (the --sidebar-* family is not accent-themed);
+            the focus ring is the global :focus-visible outline, as for every other rail
+            control. The path is captured at click time so the submission records the page
+            the user was actually on. */}
+        <button
+          type="button"
+          data-close-nav
+          onClick={() => openFeedbackComposer(window.location.pathname + window.location.search)}
+          className="flex h-8 items-center gap-2 rounded-md px-2 text-sm text-sidebar-muted transition-colors hover:bg-sidebar-hover hover:text-sidebar-fg-strong active:bg-sidebar-hover"
+        >
+          <Megaphone size={15} aria-hidden />
+          <span className="truncate">Give feedback</span>
+        </button>
         <span className="px-0.5 text-2xs text-sidebar-muted">v{version}</span>
       </div>
     </div>

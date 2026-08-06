@@ -100,8 +100,10 @@ export function MobileNavDrawer({ children }: { children: React.ReactNode }) {
             // Close on any nav-link tap. The pathname effect already covers route changes;
             // this also dismisses when the tapped item is the CURRENT route (no pathname
             // change to react to). Scoped to <a> so the workspace menu / sign-out buttons
-            // inside the rail don't trip it.
-            onClick={(e) => { if ((e.target as HTMLElement).closest('a')) setOpen(false) }}
+            // inside the rail don't trip it — plus an explicit opt-in attribute for the rail
+            // buttons that DO need it: "Give feedback" raises a modal with its own focus
+            // trap, and leaving the drawer's trap alive underneath breaks both.
+            onClick={(e) => { if ((e.target as HTMLElement).closest('a,[data-close-nav]')) setOpen(false) }}
           >
             {children}
           </div>

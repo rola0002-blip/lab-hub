@@ -1,12 +1,13 @@
 'use client'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Hash, Lock, LayoutGrid, MessageSquare, ListTodo, Plus, FileText } from 'lucide-react'
+import { Search, Hash, Lock, LayoutGrid, MessageSquare, ListTodo, Plus, FileText, Megaphone } from 'lucide-react'
 import { NAV_SECTIONS, isNavVisible } from '@/components/sidebar'
 import { Avatar } from '@/components/ui/avatar'
 import { useChat, dmName } from '@/components/chat/chat-store'
 import { useGlobalHotkey } from '@/components/hooks/use-global-hotkey'
 import { openIssueComposer } from '@/lib/issue-composer-store'
+import { openFeedbackComposer } from '@/lib/feedback-composer-store'
 import { useFocusTrap } from '@/components/hooks/use-focus-trap'
 import { nextRovingIndex } from '@/lib/roving'
 import { filterCommands, type Cmd } from '@/lib/palette'
@@ -58,7 +59,11 @@ function KindIcon({ cmd }: { cmd: Cmd }) {
     : <Hash size={16} aria-hidden className="shrink-0 text-subtle" />)
   if (cmd.kind === 'person') return <MessageSquare size={16} aria-hidden className="shrink-0 text-subtle" />
   if (cmd.kind === 'issue') return <ListTodo size={16} aria-hidden className="shrink-0 text-subtle" />
-  if (cmd.kind === 'command') return <Plus size={16} aria-hidden className="shrink-0 text-subtle" />
+  // `command` rows are heterogeneous now — Plus reads as "create", which the
+  // feedback row is not, so it carries the same Megaphone as the sidebar button.
+  if (cmd.kind === 'command') return cmd.id === 'give-feedback'
+    ? <Megaphone size={16} aria-hidden className="shrink-0 text-subtle" />
+    : <Plus size={16} aria-hidden className="shrink-0 text-subtle" />
   if (cmd.kind === 'document') return <FileText size={16} aria-hidden className="shrink-0 text-subtle" />
   return null // dm rows render an Avatar instead
 }
@@ -104,10 +109,15 @@ export function CommandPalette({ orgName = 'LabHub', role }: { orgName?: string;
     const people: Cmd[] = users
       .filter((u) => u.id !== selfId && !peered.has(u.id))
       .map((u) => ({ id: u.id, label: u.name, sub: 'Message', href: `/chat?dm=${u.id}`, kind: 'person' as const }))
-    // Non-guests get a static "Create issue" command that raises the composer.
-    const commands: Cmd[] = role !== 'guest'
-      ? [{ id: 'create-issue', label: 'Create issue', sub: 'Command', href: '', kind: 'command' as const }]
-      : []
+    // Static commands. "Give feedback" is registered for EVERY role (guests submit
+    // feedback too — spec §9.1); "Create issue" stays non-guest, matching the
+    // composer's own gate.
+    const commands: Cmd[] = [
+      ...(role !== 'guest'
+        ? [{ id: 'create-issue', label: 'Create issue', sub: 'Command', href: '', kind: 'command' as const }]
+        : []),
+      { id: 'give-feedback', label: 'Give feedback', sub: 'Command', href: '', kind: 'command' as const },
+    ]
     return [...commands, ...pages, ...channels, ...dms, ...people, ...issueHits, ...docHits]
   }, [conversations, users, selfId, role, issueHits, docHits])
 
@@ -173,6 +183,8 @@ export function CommandPalette({ orgName = 'LabHub', role }: { orgName?: string;
     close()
     if (cmd.kind === 'document') { window.open(cmd.href, '_blank', 'noopener'); return }
     if (cmd.kind === 'command' && cmd.id === 'create-issue') { openIssueComposer({ assignToSelf: true }); return } // quick capture → assign self
+    // close() above already ran, so the captured path is the page BEHIND the palette.
+    if (cmd.kind === 'command' && cmd.id === 'give-feedback') { openFeedbackComposer(window.location.pathname + window.location.search); return }
     if (cmd.kind === 'person') {
       // No static DM yet: create-or-open the 1:1, then navigate to it.
       try {

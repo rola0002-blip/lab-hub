@@ -11,6 +11,7 @@ import { AccentSync } from '@/components/accent-picker'
 import { ChatProvider } from '@/components/chat/chat-store'
 import { CommandPalette } from '@/components/command-palette'
 import { CreateIssueModal } from '@/components/issues/create-issue-modal'
+import { FeedbackDialog } from '@/components/feedback-dialog'
 import { ProjectUpdateModal } from '@/components/issues/project-update-modal'
 import { IssueHotkeys } from '@/components/issues/issue-hotkeys'
 import { UserMenu } from '@/components/user-menu'
@@ -76,6 +77,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {/* Global project-update composer — same one-source option list, so a chat
           message's "Post as project update" can raise it from any page. */}
       <ProjectUpdateModal projects={issueProjects} />
+      {/* Global "Give feedback" dialog — raised from the sidebar footer or the ⌘K
+          palette on any page. Deliberately NOT role-gated: guests submit too. */}
+      <FeedbackDialog version={APP_VERSION} />
       <IssueHotkeys role={user.role} />
       {/* Global toast host — mounted once so `toast()` works from any page. */}
       <ToastHost />
