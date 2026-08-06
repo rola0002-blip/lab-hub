@@ -11,6 +11,9 @@ export type NotificationType =
   | 'issue_assigned' | 'issue_mention' | 'issue_comment' | 'issue_done'
   // SP8: weekly project-update prompt (suppressed bot DM + this no-email bell)
   | 'project_update_prompt'
+  // v0.13 feedback: in-app only — admins on every submission, the author on a
+  // decision. Both are three-arg (no email) and carry { feedbackId, message }.
+  | 'feedback_new' | 'feedback_decided'
 
 export async function notify(
   userId: string, type: NotificationType, payload: Record<string, unknown>,

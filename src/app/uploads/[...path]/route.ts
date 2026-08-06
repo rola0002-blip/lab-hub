@@ -25,7 +25,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
   const isAvatar = path[0].toLowerCase() === 'avatars'
   const isIssue = path[0].toLowerCase() === 'issues'
   const isDocument = path[0].toLowerCase() === 'documents'
-  const isPrivate = isChat || isAvatar || isIssue || isDocument
+  const isFeedback = path[0].toLowerCase() === 'feedback'
+  const isPrivate = isChat || isAvatar || isIssue || isDocument || isFeedback
 
   // Chat attachments are chat reads of potentially confidential lab data, so
   // they go through the ConversationMember gate like every other chat read.
@@ -41,11 +42,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
     })
     if (!attachment) return new Response('Not found', { status: 404 })
     if (!(await isMember(user.id, attachment.message.conversationId))) return new Response('Forbidden', { status: 403 })
-  } else if (isAvatar || isIssue || isDocument) {
-    // Avatars, issue attachments AND shared documents are private but workspace-
-    // visible: any authenticated session (incl. guests) may read them. The
-    // traversal/case-fold guard above already proved path[0] names the same
-    // top-level dir readUpload will open.
+  } else if (isAvatar || isIssue || isDocument || isFeedback) {
+    // Avatars, issue attachments, shared documents AND feedback screenshots are
+    // private but workspace-visible: any authenticated session (incl. guests) may
+    // read them. The traversal/case-fold guard above already proved path[0] names
+    // the same top-level dir readUpload will open. A new kind is served PUBLICLY,
+    // with a shared-cache header, until this arm learns it — feedback screenshots
+    // can show lab data, so the kind must never fall through (spec §7.1).
     const user = await getSessionUser()
     if (!user) return new Response('Unauthorized', { status: 401 })
   }
@@ -54,8 +57,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
   if (!file) return new Response('Not found', { status: 404 })
   const headers: Record<string, string> = {
     'Content-Type': file.mime,
-    // Chat files, avatars and documents are private and must never be retained by
-    // shared/proxy caches; SP1 public assets keep the long, shared cache.
+    // Chat files, avatars, documents and feedback screenshots are private and must
+    // never be retained by shared/proxy caches; SP1 public assets keep the long,
+    // shared cache.
     'Cache-Control': isPrivate ? 'private, no-store' : 'public, max-age=86400',
     // Attacker-supplied bytes are served inline (pdf/image), so never let a browser
     // MIME-sniff them into an executable type. Belt-and-suspenders alongside the global

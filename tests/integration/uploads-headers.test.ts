@@ -1,4 +1,17 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import path from 'node:path'
+import os from 'node:os'
+import { rm } from 'node:fs/promises'
+
+// Confine every write to a throwaway dir: these tests save real bytes through the same
+// saveUpload the app uses, and without this each run deposits permanent files into the
+// repo's own ./data/uploads. uploadsDir() reads UPLOADS_DIR lazily on every call —
+// including the request-time reads in the serving route below — so setting it here,
+// before the route modules import, is enough (the feedback-api.test.ts idiom).
+const UPLOAD_DIR = path.join(os.tmpdir(), 'labhub-uploads-headers')
+process.env.UPLOADS_DIR = UPLOAD_DIR
+
+import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest'
+import { saveUpload } from '@/lib/uploads'
 import { resetDb, makeUser, seedSystem } from '../factories'
 
 const mockUser = vi.hoisted(() => ({ current: null as null | { id: string; name: string; email: string; role: string } }))
@@ -18,6 +31,7 @@ const fileForm = (file: File) => { const f = new FormData(); f.set('file', file)
 
 describe('uploads route — internet-facing nosniff', () => {
   beforeEach(async () => { await resetDb(); await seedSystem(); mockUser.current = null })
+  afterAll(async () => { await rm(UPLOAD_DIR, { recursive: true, force: true }) })
 
   it('sets X-Content-Type-Options: nosniff on a served document (inline attacker bytes can never be MIME-sniffed)', async () => {
     const m = await makeUser({ role: 'member' })
@@ -28,5 +42,35 @@ describe('uploads route — internet-facing nosniff', () => {
     const res = await serveReq(path)
     expect(res.status).toBe(200)
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')
+  })
+
+  it('session-gates feedback screenshots: 401 signed out, 200 private+no-store for any authed session incl. a guest', async () => {
+    const m = await makeUser({ role: 'member' })
+    mockUser.current = { ...m, role: 'member' }
+    // The kind must be gated the moment it exists: the route's fall-through would
+    // otherwise serve /uploads/feedback/* publicly with a SHARED cache header, and a
+    // screenshot may show lab data (spec §7.1 — a release blocker).
+    const shot = await saveUpload(new File([new Uint8Array(64)], 'shot.png', { type: 'image/png' }), 'feedback')
+    expect(shot).toMatch(/^\/uploads\/feedback\//)
+
+    mockUser.current = null
+    expect((await serveReq(shot)).status).toBe(401)
+
+    // Workspace-visible, not per-author: any session (guests included) may read, the
+    // issues/documents posture rather than chat's membership model.
+    const g = await makeUser({ role: 'guest' })
+    mockUser.current = { ...g, role: 'guest' }
+    const res = await serveReq(shot)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store')
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')
+  })
+
+  it('leaves the public SP1 kinds public — the new gate must not widen to logo/equipment', async () => {
+    const logo = await saveUpload(new File([new Uint8Array(32)], 'logo.png', { type: 'image/png' }), 'logo')
+    mockUser.current = null
+    const res = await serveReq(logo)
+    expect(res.status).toBe(200) // the sign-in page renders it without a session
+    expect(res.headers.get('Cache-Control')).toBe('public, max-age=86400')
   })
 })

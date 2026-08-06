@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Feedback from inside the app. "Give feedback" sits at the foot of the sidebar and in the ⌘K palette on every page: say whether it is a bug or an idea, describe it, optionally attach a screenshot, and send. The page you were on, the app version and your browser are recorded with it — listed on the form before you send, so nothing goes along invisibly. Everyone can send feedback, guests included; unlike filing an issue, it needs no permission and no triage vocabulary.
+- A review queue on the new Feedback page. Admins see every report newest-first, filter it by status and by bug-versus-idea, and move an item through New → Reviewed → Planned → Done → Declined from the chip on the row. Everyone else — members and guests — sees the same page with their own submissions only, and never receives anyone else's. New items land under the New filter, so triaging one clears it from view.
+- Notifications close the loop. Admins are alerted when feedback arrives; the person who sent it is alerted when it is decided — Planned, Done or Declined — and the alert opens the Feedback page with the new status showing. Marking something Reviewed is bookkeeping and stays silent, and no feedback is ever announced in `#lab-updates` or emailed.
+- You can delete your own report while it is still New — a correction path, since feedback cannot be edited. Once review has started the item is part of the record and only an admin can remove it. Deleting also removes the attached screenshot from disk.
+
+### Fixed
+- Amber status chips are readable again, everywhere they appear. The ink on the light-theme warning chip sat just under the AA contrast bar for text against its own fill (4.43:1); it is now the same hue one step darker, at 4.76:1. The chip is the "New" marker on the feedback queue, and the same repair carries to the pending-approval chips on a booking, the bookings list and the dashboard, and to the certification chips on the approvals page.
+
+### Security
+- Feedback screenshots are session-gated. The image bytes are served only to a signed-in session and always with `private, no-store`, so a shared or proxy cache can never retain one and a leaked link is worthless to a signed-out reader. A report can only ever reference a file uploaded as a screenshot — an attachment from chat, an issue or the file library cannot be attached to one.
+
 ## [0.12.0] - 2026-08-06
 
 ### Added

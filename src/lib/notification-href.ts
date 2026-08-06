@@ -10,6 +10,9 @@
 //  - booking_*      → { message } only (no id)       → a pending request is actioned
 //    in the approvals queue (it is sent to managers/admins); every other booking
 //    event lands on the recipient's own bookings list.
+//  - feedback_*     → { feedbackId, message }        → /feedback (v0.13). The route is
+//    role-adaptive (admin queue / own submissions) and has no per-item anchor, so the
+//    id rides along for the future without being resolved here.
 
 export type NotificationLike = { type: string; payload?: Record<string, string> | null }
 
@@ -25,5 +28,8 @@ export function notificationHref(n: NotificationLike): string | null {
   }
   // Booking rows carry no id: pending requests → approvals queue, the rest → bookings.
   if (n.type.startsWith('booking_')) return n.type === 'booking_pending' ? '/approvals' : '/bookings'
+  // Feedback rows carry a feedbackId the page does not deep-link to: both the admin's
+  // "new feedback" bell and the author's decision bell land on the one /feedback route.
+  if (n.type.startsWith('feedback_')) return '/feedback'
   return null
 }

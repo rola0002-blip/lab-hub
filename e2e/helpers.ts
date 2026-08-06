@@ -24,7 +24,8 @@ export async function wipe() {
   for (let attempt = 0; ; attempt++) {
     try {
       await db.$executeRawUnsafe(`
-        TRUNCATE TABLE "Document","DocumentFolder",
+        TRUNCATE TABLE "Feedback",
+          "Document","DocumentFolder",
           "ProjectUpdate",
           "IssueActivity","IssueAttachment","IssueComment","IssueLabel",
           "Label","Issue","Project",

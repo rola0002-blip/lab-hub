@@ -19,12 +19,14 @@ const IMAGE_MAX = 2 * 1024 * 1024
 const CHAT_MAX = 25 * 1024 * 1024
 const AVATAR_MAX = 5 * 1024 * 1024
 const DOCUMENT_MAX = 100 * 1024 * 1024 // shared library files; office allowlist, big cap
+const FEEDBACK_MAX = 10 * 1024 * 1024  // phone PNG screenshots overflow IMAGE_MAX; 25 MB headroom is unneeded
 
-export type UploadKind = 'logo' | 'equipment' | 'chat' | 'avatars' | 'issues' | 'documents'
+export type UploadKind = 'logo' | 'equipment' | 'chat' | 'avatars' | 'issues' | 'documents' | 'feedback'
 
 // Doc-kind uploads (chat + issue attachments) share the 25 MB cap + the wider
 // document MIME allowlist; image kinds (logo/equipment/avatars) stay image-only.
 // 'documents' shares the same office allowlist but takes the 100 MB cap.
+// 'feedback' is image-only (IMAGE_ALLOWED, by fall-through) with its OWN 10 MB cap.
 const DOC_KINDS = new Set<UploadKind>(['chat', 'issues'])
 
 export function uploadsDir() {
@@ -33,7 +35,7 @@ export function uploadsDir() {
 
 export function validateUpload(mime: string, size: number, kind: UploadKind = 'logo'): string {
   const table = kind === 'documents' || DOC_KINDS.has(kind) ? CHAT_ALLOWED : IMAGE_ALLOWED
-  const max = kind === 'documents' ? DOCUMENT_MAX : DOC_KINDS.has(kind) ? CHAT_MAX : kind === 'avatars' ? AVATAR_MAX : IMAGE_MAX
+  const max = kind === 'documents' ? DOCUMENT_MAX : DOC_KINDS.has(kind) ? CHAT_MAX : kind === 'avatars' ? AVATAR_MAX : kind === 'feedback' ? FEEDBACK_MAX : IMAGE_MAX
   const ext = table[mime]
   if (!ext || size > max || size === 0) throw new Error('invalid_upload')
   return ext
