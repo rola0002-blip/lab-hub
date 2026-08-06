@@ -136,33 +136,41 @@ test('2: "Post as project update" captures a chat message and backlinks to it', 
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-test('3: /projects orders worst-first and its filters round-trip through the URL', async ({ browser }) => {
+test('3: /projects renders the manual arrangement and its filters round-trip through the URL', async ({ browser }) => {
   test.setTimeout(120_000)
   const page = await newPage(browser)
   await signIn(page, ADMIN.email, ADMIN.password)
   const me = await adminId()
 
-  // Names are deliberately in REVERSE alphabetical order of the expected DOM order,
-  // so a name-ordered list could never pass this test. All three carry a lead, so the
-  // no_lead bucket cannot swallow them.
-  const off = await db.project.create({ data: { name: 'Zulu films', leadId: me } })
+  // v0.12: the grid is the lab's MANUAL arrangement, so the seeded `rank` literals
+  // ('B' < 'C' < 'D' < 'E' byte-wise, matching COLLATE "C") ARE the expected DOM
+  // order. The names are not in that alphabetical order and the health buckets do
+  // not agree with it either — Papa films carries a fresh OFF_TRACK update yet
+  // sorts LAST — so neither a name sort nor the old worst-first sort could pass.
+  // All four carry a lead, so the no_lead bucket cannot swallow them.
+  const off = await db.project.create({ data: { name: 'Zulu films', leadId: me, rank: 'B' } })
   offTrackProjectId = off.id
   await db.projectUpdate.create({ data: { projectId: off.id, authorId: me, health: 'OFF_TRACK', body: 'Chamber leak; growths halted.' } })
-  await db.project.create({ data: { name: 'Mike films', leadId: me } }) // no updates ever → "No update"
-  const on = await db.project.create({ data: { name: 'Alpha films', leadId: me } })
+  await db.project.create({ data: { name: 'Mike films', leadId: me, rank: 'C' } }) // no updates ever → "No update"
+  const on = await db.project.create({ data: { name: 'Alpha films', leadId: me, rank: 'D' } })
   await db.projectUpdate.create({ data: { projectId: on.id, authorId: me, health: 'ON_TRACK', body: 'Two clean transfers this week.' } })
   // PAUSED + a fresh OFF_TRACK update: sits in the review list, but the attention
   // predicate is ACTIVE-only, so it must never surface under ?attention=1.
-  const paused = await db.project.create({ data: { name: 'Papa films', leadId: me, status: 'PAUSED' } })
+  const paused = await db.project.create({ data: { name: 'Papa films', leadId: me, status: 'PAUSED', rank: 'E' } })
   await db.projectUpdate.create({ data: { projectId: paused.id, authorId: me, health: 'OFF_TRACK', body: 'Parked until the new furnace lands.' } })
 
   await page.goto('/projects')
   await expect(page.getByRole('heading', { name: 'Zulu films' })).toBeVisible()
-  // Card titles in DOM order. Compare INDICES only, so unrelated projects seeded by
-  // the earlier tests can interleave without breaking the ordering contract.
-  const order = await main(page).locator('a[href^="/projects/"] h2').allTextContents()
-  expect(order.indexOf('Zulu films')).toBeLessThan(order.indexOf('Mike films'))   // off_track before no_update
-  expect(order.indexOf('Mike films')).toBeLessThan(order.indexOf('Alpha films'))  // no_update before on_track
+  // Card titles in DOM order. v0.12 moved the link off the card root onto the name,
+  // so the title is `h2 > a[href^="/projects/"]` (the old `a … h2` matches nothing).
+  // Compare INDICES only, so projects seeded by the earlier tests (which mint their
+  // rank at the FRONT) can interleave without breaking the ordering contract.
+  const order = await main(page).locator('h2 a[href^="/projects/"]').allTextContents()
+  expect(order.indexOf('Zulu films')).toBeLessThan(order.indexOf('Mike films'))   // rank B before C
+  expect(order.indexOf('Mike films')).toBeLessThan(order.indexOf('Alpha films'))  // rank C before D
+  expect(order.indexOf('Alpha films')).toBeLessThan(order.indexOf('Papa films'))  // rank D before E
+  // Unfiltered, the arrangement is live: every card carries its grip.
+  expect(await page.getByRole('button', { name: /^Reorder / }).count()).toBeGreaterThan(0)
 
   // Health filter round-trips through the URL and narrows the list.
   await page.getByRole('combobox', { name: 'Health' }).selectOption('off_track')
@@ -170,6 +178,10 @@ test('3: /projects orders worst-first and its filters round-trip through the URL
   await expect(page.getByRole('heading', { name: 'Zulu films' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Mike films' })).toHaveCount(0)
   await expect(page.getByRole('heading', { name: 'Alpha films' })).toHaveCount(0)
+  // A filtered view is not the arrangement, so dropping into it would be a lie:
+  // the grip disappears entirely (canArrange is false → no DndContext at all).
+  await expect(page.getByRole('button', { name: /^Reorder / })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^Move / })).toHaveCount(0)
 
   // Unknown values degrade to "no filter" (parseProjectFilters), never a Prisma enum.
   await page.goto('/projects?health=bogus')
@@ -234,7 +246,7 @@ test('5: "Lab today" renders five sections whose attention counts agree with /pr
   //                                 past the off_track/at_risk arms into no_lead)
   //   no_update  ← Mike films      (test 3: lead, no update ever)
   // Papa films (PAUSED) is deliberately in none of them — the buckets are ACTIVE-only.
-  const risky = await db.project.create({ data: { name: 'Kilo films', leadId: me } })
+  const risky = await db.project.create({ data: { name: 'Kilo films', leadId: me, rank: 'B' } })
   await db.projectUpdate.create({ data: { projectId: risky.id, authorId: me, health: 'AT_RISK', body: 'Precursor delivery slipped a week.' } })
 
   // A REAL join writes a kind:'system' "X joined #lab-updates" row — the newest message

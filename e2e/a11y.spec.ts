@@ -174,14 +174,23 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
   // "No lead" chip and the worst-first ordering when there is health data to render,
   // so seed it first (the /files seeding precedent above). One fresh OFF_TRACK
   // project plus one lead-less ACTIVE project puts every new mark on the page.
+  // v0.12: `Project.rank` is NOT NULL with no default, so a raw create must supply
+  // one. Explicit ascending literals ('B' < 'C' byte-wise, the COLLATE "C" order)
+  // rather than a rank.ts import — Playwright's runner would have to resolve the
+  // module graph, and the literals also make the expected arrangement self-evident.
   const meSp8 = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
-  const offTrack = await db.project.create({ data: { name: 'a11y off-track growth', leadId: meSp8.id } })
+  const offTrack = await db.project.create({ data: { name: 'a11y off-track growth', leadId: meSp8.id, rank: 'B' } })
   await db.projectUpdate.create({ data: { projectId: offTrack.id, authorId: meSp8.id, health: 'OFF_TRACK', body: 'Chamber leak — seal rebuilt, growths halted.' } })
-  await db.project.create({ data: { name: 'a11y unowned survey' } }) // no lead → the "No lead" chip
+  await db.project.create({ data: { name: 'a11y unowned survey', rank: 'C' } }) // no lead → the "No lead" chip
 
+  // The admin is not a guest and no filter is applied, so the grid renders the v0.12
+  // arrangement affordances — the grip and the Move menu are inside this audit
+  // (the issues-board precedent at 'Reorder LAB-1' above).
   await page.goto('/projects')
   await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'a11y off-track growth' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Reorder a11y off-track growth' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Move a11y off-track growth' })).toBeVisible()
   await auditBothThemes(page, 'projects')
 
   // The project-update composer (role=dialog): the health radio group's non-colour

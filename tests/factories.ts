@@ -1,6 +1,11 @@
 import { prisma } from '@/lib/db'
 import { randomUUID } from 'node:crypto'
 import { COLOSSUS_BOT_ID, LAB_UPDATES_CHANNEL_ID } from '@/features/bot'
+import { rankBetween } from '@/features/issues/rank'
+
+// Cursor for makeProject's default rank: each unranked fixture appends after the
+// previous mint, so creation order is arrangement order. Reset by resetDb.
+let lastProjectRank: string | null = null
 
 export async function resetDb() {
   // A fire-and-forget bot announce (`void bot.announceToChannel` in the issue/project
@@ -32,6 +37,7 @@ export async function resetDb() {
     }
   }
   await prisma.$executeRawUnsafe(`ALTER SEQUENCE "issue_number_seq" RESTART WITH 1`)
+  lastProjectRank = null
 }
 
 export async function makeUser(over: { role?: string; name?: string; banned?: boolean } = {}) {
@@ -85,7 +91,18 @@ export async function makeMessage(conversationId: string, userId: string, over: 
 }
 
 export async function makeProject(over: Record<string, unknown> = {}) {
-  return prisma.project.create({ data: { name: `Project ${randomUUID().slice(0, 6)}`, ...over } })
+  // An explicit `rank` in `over` wins (spread last) and ADVANCES the cursor past
+  // itself, so the next default mint is still strictly later than every fixture
+  // before it. Two rows sharing a key would leave the read order to Postgres —
+  // neither listProjects nor listProjectOptions has a tiebreak.
+  let rank: string
+  if (over.rank !== undefined) {
+    rank = over.rank as string
+    if (lastProjectRank === null || rank > lastProjectRank) lastProjectRank = rank
+  } else {
+    rank = lastProjectRank = rankBetween(lastProjectRank, null)
+  }
+  return prisma.project.create({ data: { name: `Project ${randomUUID().slice(0, 6)}`, rank, ...over } })
 }
 
 export async function makeProjectUpdate(projectId: string, authorId: string, over: Record<string, unknown> = {}) {

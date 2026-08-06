@@ -4,6 +4,7 @@ import type { Role } from '@/lib/session'
 import { prisma } from '@/lib/db'
 import * as bot from '@/features/bot'
 import { assertCanMutate, canDeleteProject, PolicyError } from './issue-policy'
+import { rankBetween, rebalance, REBALANCE_THRESHOLD } from './rank'
 import { assertAssigneeExists } from './issue-service'
 import { isEffectiveLead } from './project-health'
 import { PROJECT_UPDATE_ORDER } from './project-update-service'
@@ -21,6 +22,9 @@ export type ProjectDto = {
   openOverdue: number
   startDate: string | null; targetDate: string | null; status: ProjectStatus
   progress: { done: number; total: number; percent: number }
+  // v0.12: the grid's manual arrangement key (lowest = front). Every DTO producer
+  // fills it, so a card can be reordered straight from a list or a detail read.
+  rank: string
   createdAt: string; updatedAt: string
 }
 
@@ -32,7 +36,7 @@ const LEAD_SELECT = { select: { id: true, name: true, image: true, banned: true,
 type LoadedProject = {
   id: string; name: string; description: string
   lead: { id: string; name: string; image: string | null; banned: boolean; isSystem: boolean; role: string } | null
-  startDate: Date | null; targetDate: Date | null; status: ProjectStatus; createdAt: Date; updatedAt: Date
+  startDate: Date | null; targetDate: Date | null; status: ProjectStatus; rank: string; createdAt: Date; updatedAt: Date
 }
 
 type Extras = { latestUpdate: ProjectDto['latestUpdate']; openOverdue: number }
@@ -45,6 +49,7 @@ function toDto(p: LoadedProject, done: number, total: number, extras: Extras): P
     latestUpdate: extras.latestUpdate, openOverdue: extras.openOverdue,
     startDate: p.startDate?.toISOString() ?? null, targetDate: p.targetDate?.toISOString() ?? null, status: p.status,
     progress: { done, total, percent: total === 0 ? 0 : Math.round((done / total) * 100) },
+    rank: p.rank,
     createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString(),
   }
 }
@@ -78,7 +83,7 @@ async function progressFor(projectId: string): Promise<{ done: number; total: nu
 export async function listProjects(now: Date = new Date()): Promise<ProjectDto[]> {
   const tz = await orgTimezone()
   const [projects, totals, dones, overdues, latests] = await Promise.all([
-    prisma.project.findMany({ orderBy: { createdAt: 'desc' }, include: { lead: LEAD_SELECT } }),
+    prisma.project.findMany({ orderBy: { rank: 'asc' }, include: { lead: LEAD_SELECT } }),
     // Two grouped counts instead of N per-project queries. CANCELED issues are
     // excluded from the denominator (same Linear semantics as progressFor).
     prisma.issue.groupBy({ by: ['projectId'], _count: { _all: true }, where: { projectId: { not: null }, status: { not: 'CANCELED' } } }),
@@ -128,9 +133,10 @@ export async function getProject(id: string, now: Date = new Date()): Promise<Pr
 }
 
 // Narrow companion (§4.7): the issue pages and the global composer need only
-// { id, name } — one option-list source, no review-screen joins.
+// { id, name } — one option-list source, no review-screen joins. Same arrangement
+// order as listProjects, so a dropdown never contradicts the grid.
 export async function listProjectOptions(): Promise<{ id: string; name: string }[]> {
-  return prisma.project.findMany({ orderBy: { createdAt: 'desc' }, select: { id: true, name: true } })
+  return prisma.project.findMany({ orderBy: { rank: 'asc' }, select: { id: true, name: true } })
 }
 
 function validateName(name: string): string {
@@ -164,10 +170,19 @@ export async function createProject(args: {
   const name = validateName(args.name)
   validateDateOrder(args.startDate ?? null, args.targetDate ?? null)
   if (args.leadId != null) await assertLeadExists(args.leadId) // '' is falsy but IS stored — guard on null, not truthiness
+  // A new project lands at the FRONT of the arrangement (an empty table yields a
+  // null bound, which rankBetween reads as "no neighbour" on that side).
+  // No REBALANCE_THRESHOLD guard here, unlike moveProject — deliberate. Repeated
+  // front-mints lengthen the key slowly (~1 character per 5 creates) and nothing
+  // breaks when they do; the first move of any card self-heals the whole table via
+  // rebalanceProjectsAndPlace. Guarding here would cost a whole-table read on every
+  // create to defend against a cost that only a move ever pays.
+  const front = await prisma.project.findFirst({ orderBy: { rank: 'asc' }, select: { rank: true } })
   const p = await prisma.project.create({
     data: {
       name, description: (args.description ?? '').slice(0, 4000),
       leadId: args.leadId ?? null, startDate: args.startDate ?? null, targetDate: args.targetDate ?? null, status: args.status ?? 'ACTIVE',
+      rank: rankBetween(null, front?.rank ?? null),
     },
     include: { lead: LEAD_SELECT },
   })
@@ -228,6 +243,59 @@ export async function updateProject(args: {
   const dto = await getProject(args.id)
   if (!dto) throw new PolicyError('not_found', 'Project not found.')
   return dto
+}
+
+// ── arrangement move (v0.12 §6.1) ─────────────────────────────────────────────
+// The client sends only the neighbours the project sits between AFTER the move;
+// the server mints the key. The moveIssue shape minus status/activity/SSE — and
+// deliberately silent: rearranging the shelf is not lab news, so no announce.
+// `actorId` is carried for signature symmetry with every other mutation (nothing
+// records an actor for a move).
+export async function moveProject(args: {
+  actorId: string; role: Role; projectId: string
+  prevId: string | null; nextId: string | null
+}): Promise<ProjectDto> {
+  assertCanMutate(args.role)
+  const existing = await prisma.project.findUnique({ where: { id: args.projectId }, select: { id: true } })
+  if (!existing) throw new PolicyError('not_found', 'Project not found.')
+  // A neighbour id that no longer resolves degrades to null = boundary, exactly
+  // like the board: a stale client places its card, it does not error.
+  const [prev, next] = await Promise.all([
+    args.prevId ? prisma.project.findUnique({ where: { id: args.prevId }, select: { rank: true } }) : null,
+    args.nextId ? prisma.project.findUnique({ where: { id: args.nextId }, select: { rank: true } }) : null,
+  ])
+  let rank: string
+  try {
+    rank = rankBetween(prev?.rank ?? null, next?.rank ?? null)
+  } catch {
+    rank = await rebalanceProjectsAndPlace(args.projectId, args.prevId, args.nextId)
+  }
+  if (rank.length > REBALANCE_THRESHOLD) {
+    rank = await rebalanceProjectsAndPlace(args.projectId, args.prevId, args.nextId)
+  }
+  await prisma.project.update({ where: { id: args.projectId }, data: { rank } })
+  // One read path for the full DTO (the §4.7 extras), as updateProject does.
+  // Null only if a concurrent admin delete slipped in — a genuine 404.
+  const dto = await getProject(args.projectId)
+  if (!dto) throw new PolicyError('not_found', 'Project not found.')
+  return dto
+}
+
+// Reseat the WHOLE table with evenly-spaced keys, placing the moved project at
+// its target slot; returns its fresh key. Rare, self-healing. Whole-table scope
+// is the deliberate analogue of the board's per-column scope — one arrangement
+// sequence across all statuses, tens of rows. With inverted bounds "between the
+// two" does not exist, so prevId wins; when neither bound resolves the project
+// lands at the FRONT (the grid's entry point, §5.3, where the board appends).
+async function rebalanceProjectsAndPlace(movedId: string, prevId: string | null, nextId: string | null): Promise<string> {
+  const all = await prisma.project.findMany({ orderBy: { rank: 'asc' }, select: { id: true } })
+  const ordered = all.map((p) => p.id).filter((id) => id !== movedId)
+  const prevIdx = prevId ? ordered.indexOf(prevId) : -1
+  const insertAt = prevId ? prevIdx + 1 : nextId ? Math.max(0, ordered.indexOf(nextId)) : 0
+  ordered.splice(insertAt, 0, movedId)
+  const keys = rebalance(ordered.length)
+  await prisma.$transaction(ordered.map((id, i) => prisma.project.update({ where: { id }, data: { rank: keys[i] } })))
+  return keys[ordered.indexOf(movedId)]
 }
 
 // Admin-only. Cascades issues to projectId = null (the Issue.projectId FK is
