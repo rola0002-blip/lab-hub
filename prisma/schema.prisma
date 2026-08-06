@@ -49,6 +49,8 @@ model User {
   documents       Document[]
   documentFolders DocumentFolder[]
 
+  feedback Feedback[]
+
   @@map("user")
 }
 
@@ -585,4 +587,44 @@ model Document {
   createdAt  DateTime                 @default(now())
 
   @@index([folderId])
+}
+
+// ---------- Feedback: in-app bug reports and ideas (v0.13) ----------
+enum FeedbackType {
+  BUG
+  IDEA
+}
+
+enum FeedbackStatus {
+  NEW
+  REVIEWED
+  PLANNED
+  DONE
+  DECLINED
+}
+
+model Feedback {
+  id             String         @id @default(cuid())
+  type           FeedbackType
+  status         FeedbackStatus @default(NEW)
+  body           String
+  screenshotPath String?
+  // Stamped server-side at submit so a report always carries the build and the
+  // page it came from; the client never supplies appVersion/userAgent.
+  appVersion     String
+  pagePath       String
+  userAgent      String
+  authorId       String
+  // Restrict, like Issue.creatorId / ProjectUpdate.authorId: a report is part of
+  // the record and must fail loudly rather than be silently erased. (Users are
+  // banned, never deleted, so this FK never fires today.)
+  author         User           @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  createdAt      DateTime       @default(now())
+  // Doubles as "when the status last changed" — no separate decidedAt column.
+  updatedAt      DateTime       @updatedAt
+
+  // No tsvector `search` column, unlike Issue/Document: the queue is filtered by
+  // status, not searched.
+  @@index([status, createdAt])
+  @@index([authorId, createdAt])
 }

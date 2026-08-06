@@ -16,7 +16,8 @@ export async function resetDb() {
   for (let attempt = 0; ; attempt++) {
     try {
       await prisma.$executeRawUnsafe(`
-        TRUNCATE TABLE "Document","DocumentFolder",
+        TRUNCATE TABLE "Feedback",
+          "Document","DocumentFolder",
           "ProjectUpdate",
           "IssueActivity","IssueAttachment","IssueComment","IssueLabel",
           "Label","Issue","Project",
@@ -130,6 +131,26 @@ export async function makeDocument(uploaderId: string, over: Record<string, unkn
   const uuid = randomUUID().slice(0, 12)
   return prisma.document.create({
     data: { name: `doc-${uuid}.pdf`, path: `/uploads/documents/${uuid}.pdf`, mime: 'application/pdf', size: 1024, uploaderId, ...over },
+  })
+}
+
+// authorId is required (the FK column is NOT NULL) but rides inside `over` rather than
+// a positional argument, unlike makeDocument/makeProjectUpdate — the v0.13 task
+// interfaces are written against that one-object shape. appVersion/userAgent are
+// server-stamped in production, so the fixtures carry obvious test values.
+export async function makeFeedback(
+  over: { authorId: string } & Partial<{
+    type: 'BUG' | 'IDEA'
+    status: 'NEW' | 'REVIEWED' | 'PLANNED' | 'DONE' | 'DECLINED'
+    body: string
+    pagePath: string
+    screenshotPath: string | null
+    appVersion: string
+    userAgent: string
+  }>,
+) {
+  return prisma.feedback.create({
+    data: { type: 'BUG', body: 'Test feedback', pagePath: '/dashboard', appVersion: '0.0.0-test', userAgent: 'test-agent', ...over },
   })
 }
 
