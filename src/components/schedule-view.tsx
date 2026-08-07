@@ -5,7 +5,9 @@ import { TZDate } from '@date-fns/tz'
 import { addDays, format } from 'date-fns'
 import BookingDialog from './booking-dialog'
 import DraftBlock from '@/components/booking/draft-block'
+import SlotDetailsModal from '@/components/booking/slot-details-modal'
 import { useMediaQuery } from '@/components/hooks/use-media-query'
+import { formatRange } from '@/lib/time'
 import {
   END_HOUR, ROWS, ROW_PX_DAY, ROW_PX_WEEK, START_HOUR,
   type Draft, moveDraft, resizeDraft, rowToDate, rowsToRange, seedDraft, slotRect,
@@ -31,7 +33,16 @@ const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6]
 // week-crossing (link) rendering wear it so the control never moves or resizes.
 const DAY_NAV = 'flex h-11 w-11 items-center justify-center rounded-md text-lg text-default transition-colors hover:bg-hover'
 
-export default function ScheduleView({ equipmentId, timezone, weekStartISO, slots, allowRecurring, retired, equipmentName, equipmentLocation, initialDay }: Props) {
+// A block offers Cancel only when the signed-in user could actually carry it out:
+// `cancelBooking` re-checks every clause server-side, so this is the affordance,
+// not the rule. `own` is server-derived (page.tsx), which is why `selfId` stays
+// unread here — comparing ids in the client would only duplicate it.
+function canCancelSlot(s: CalSlot, canManage: boolean): boolean {
+  return s.kind === 'booking' && (s.own || canManage) && new Date(s.startsAt) > new Date()
+    && (s.status === 'PENDING' || s.status === 'CONFIRMED')
+}
+
+export default function ScheduleView({ equipmentId, timezone, weekStartISO, slots, canManage, allowRecurring, retired, equipmentName, equipmentLocation, initialDay }: Props) {
   const weekStart = useMemo(() => new TZDate(new Date(weekStartISO), timezone), [weekStartISO, timezone])
   // md=768 is the ONLY layout breakpoint and (pointer: coarse) the ONLY gesture
   // predicate: width never gates the gesture (an iPad keeps the week grid AND the
@@ -45,6 +56,9 @@ export default function ScheduleView({ equipmentId, timezone, weekStartISO, slot
   // Under a fine pointer nothing ever sets it and no DraftBlock is mounted.
   const [draft, setDraft] = useState<Draft | null>(null)
   const [dialog, setDialog] = useState<{ start: Date; end: Date } | null>(null)
+  // The tapped/clicked block, if its details modal is open. Disjoint from both
+  // create machines above — a block press never seeds a draft or a drag.
+  const [details, setDetails] = useState<CalSlot | null>(null)
 
   const todayKey = format(new TZDate(new Date(), timezone), 'yyyy-MM-dd')
   const dayKeys = useMemo(() => ALL_DAYS.map((d) => format(addDays(weekStart, d), 'yyyy-MM-dd')), [weekStart])
@@ -179,11 +193,25 @@ export default function ScheduleView({ equipmentId, timezone, weekStartISO, slot
                   : s.status === 'PENDING' ? 'bg-[var(--color-warning)]/15 text-default border border-[var(--color-warning)]/40'
                   : s.own ? 'bg-accent text-accent-on border border-[var(--accent)]'
                   : 'bg-accent-subtle text-[var(--text-accent)] border border-[var(--accent)]/30'
+                // Real buttons on every pointer and every viewport: a booking is
+                // content, not décor. CLICK ONLY — no pointer handlers, so the
+                // document-level pointerup stays the single drag-completion path
+                // (§6). The deliberate consequence: a fine-pointer drag swept over
+                // a block stops extending at its edge, because the cells beneath
+                // no longer see `pointerenter`. You could never book across it.
+                //
+                // Hover/active are expressed as OPACITY rather than a fill swap:
+                // the four `style` arms are four different fills (accent, subtle,
+                // warning, active) and one token-free transform reads on all of
+                // them in both themes. globals.css §5 flattens the transition
+                // under reduced motion.
                 return (
-                  <div key={`${s.id}-${day}`} className={`pointer-events-none absolute inset-x-0.5 overflow-hidden rounded-md px-1 text-[11px] ${style}`}
+                  <button key={`${s.id}-${day}`} type="button" onClick={() => setDetails(s)}
+                    aria-label={`${s.label}, ${formatRange(new Date(s.startsAt), new Date(s.endsAt), timezone)}${s.status === 'PENDING' ? ', pending' : ''}`}
+                    className={`absolute inset-x-0.5 overflow-hidden rounded-md px-1 text-left text-[11px] transition-opacity hover:opacity-85 active:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] ${style}`}
                     style={{ top: r.top, height: r.height }}>
                     {s.label}{s.status === 'PENDING' ? ' (pending)' : ''}
-                  </div>
+                  </button>
                 )
               })}
               {/* Last in the column so it stacks above the cells and the blocks. The
@@ -209,6 +237,10 @@ export default function ScheduleView({ equipmentId, timezone, weekStartISO, slot
           // Success retires the draft; CANCEL deliberately keeps it, so the user can
           // adjust the handles and try again. (A drag-opened dialog has none to clear.)
           onBooked={() => setDraft(null)} />
+      )}
+      {details && (
+        <SlotDetailsModal slot={details} timezone={timezone}
+          canCancel={canCancelSlot(details, canManage)} onClose={() => setDetails(null)} />
       )}
     </div>
   )

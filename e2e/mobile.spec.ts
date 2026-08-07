@@ -308,3 +308,91 @@ test('draft lifecycle: re-seed, cancel keeps, day switch discards, success clear
   await dlg.getByRole('button', { name: 'Done' }).click()
   await expect(draftBlock(page)).toHaveCount(0)
 })
+
+// ── T5: blocks are buttons — details modal + single-occurrence cancel ─────────
+// Both tests seed their slot straight into the DB (a11y.spec.ts:180's shape):
+// what is under test is the BLOCK, not another round of creating one. Rows 6→8
+// put it at 10:00–11:00 org time, inside the 07:00–23:00 band and comfortably in
+// the future, so `canCancel`'s future clause holds.
+
+// The org-zone weekday of an instant as the day bar's own index (Monday = 0).
+// Passed as `?day=`, so neither test depends on which weekday the +8d anchor
+// happens to land on — the phone view opens on the seeded slot's day either way.
+const orgDayIndex = (d: Date, timezone: string) => (new TZDate(d, timezone).getDay() + 6) % 7
+
+// A future day resolved in ORG time (mobile.spec.ts:147's idiom), plus the rows
+// that day's slot occupies. Returned together because the `?week=` anchor and the
+// seeded instants must describe the same calendar day.
+async function futureSlot(rowStart = 6, rowEnd = 8) {
+  const org = await db.organization.findFirstOrThrow()
+  const dateStr = format(new TZDate(new Date(Date.now() + 8 * 86_400_000), org.timezone), 'yyyy-MM-dd')
+  const { start, end } = rowsToRange(dateStr, rowStart, rowEnd, org.timezone)
+  return { dateStr, start, end, day: orgDayIndex(start, org.timezone) }
+}
+
+test('tapping a booking shows details and cancels it', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await phonePage(browser)
+  await runWizard(page)
+  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE' } })
+  await signIn(page, ADMIN.email, ADMIN.password)
+
+  const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  const { dateStr, start, end, day } = await futureSlot()
+  await db.booking.create({ data: { userId: me.id, equipmentId: eq.id, status: 'CONFIRMED', purpose: 'e2e block tap', startsAt: start, endsAt: end } })
+
+  await page.goto(`/booking/${eq.id}?week=${dateStr}&day=${day}`)
+  await expect(dayColumn(page)).toHaveCount(1)      // polls past the SSR week paint
+
+  // The block is a real button now (it was `pointer-events-none` décor), and its
+  // accessible name leads with the booker — ADMIN.name is 'Roland'.
+  const block = main(page).getByRole('button', { name: /Roland/ })
+  await expect(block).toHaveCount(1)
+  await block.click()
+
+  const details = page.getByRole('dialog', { name: 'Booking details' })
+  await expect(details).toBeVisible()
+  await expect(details.getByText('10:00–11:00')).toBeVisible()
+  // Status is the WORD inside the Badge — never colour alone (§6).
+  await expect(details.getByText('confirmed')).toBeVisible()
+
+  // §4.3's 44px bar on the destructive primary — the one control on this phone
+  // surface that must not be a mis-tap.
+  const cancelBtn = details.getByRole('button', { name: 'Cancel booking' })
+  expect((await cancelBtn.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+
+  // Registered BEFORE the click: Playwright auto-DISMISSES an unhandled dialog,
+  // so window.confirm would silently refuse and this test would assert nothing.
+  page.on('dialog', (d) => d.accept())
+  await cancelBtn.click()
+
+  // The modal closes and the refreshed schedule no longer carries the block —
+  // cancelMyBookingAction revalidates /bookings only, so this is the modal's own
+  // router.refresh() landing.
+  await expect(details).toHaveCount(0)
+  await expect(main(page).getByRole('button', { name: /Roland/ })).toHaveCount(0)
+  expect((await db.booking.findFirstOrThrow({ where: { equipmentId: eq.id } })).status).toBe('CANCELLED')
+})
+
+test('maintenance blocks are read-only', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await phonePage(browser)
+  await runWizard(page)
+  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE' } })
+  await signIn(page, ADMIN.email, ADMIN.password)
+
+  const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  const { dateStr, start, end, day } = await futureSlot()
+  await db.maintenanceWindow.create({ data: { equipmentId: eq.id, startsAt: start, endsAt: end, reason: 'Laser service', createdById: me.id } })
+
+  await page.goto(`/booking/${eq.id}?week=${dateStr}&day=${day}`)
+  await expect(dayColumn(page)).toHaveCount(1)
+
+  await main(page).getByRole('button', { name: /Laser service/ }).click()
+  const details = page.getByRole('dialog', { name: 'Maintenance' })
+  await expect(details).toBeVisible()
+  await expect(details.getByText('Maintenance: Laser service')).toBeVisible()
+  await expect(details.getByText('10:00–11:00')).toBeVisible()
+  // A maintenance window is not a booking: no status chip, and no cancel path.
+  await expect(details.getByRole('button', { name: 'Cancel booking' })).toHaveCount(0)
+})
