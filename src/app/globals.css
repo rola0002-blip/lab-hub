@@ -280,4 +280,11 @@ body { background: var(--bg-canvas); color: var(--text-default); font-size: var(
    Unlayered element selector deliberately outranks Tailwind text-* utilities. */
 @media (pointer: coarse) {
   input, select, textarea { font-size: 16px; }
+  /* 16px is iOS's zoom THRESHOLD, not a cap: a control the type scale already sets
+     LARGER must keep its size, or the rule above silently SHRINKS it. One carve-out
+     per §1 step above 16px — today only the text-2xl issue-title input, which would
+     otherwise read at body size for admins/members while guests get the 28px <h1>. */
+  :is(input, select, textarea).text-lg  { font-size: var(--text-lg); }
+  :is(input, select, textarea).text-xl  { font-size: var(--text-xl); }
+  :is(input, select, textarea).text-2xl { font-size: var(--text-2xl); }
 }

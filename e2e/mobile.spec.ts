@@ -418,6 +418,10 @@ test('mobile systemics: 16px inputs, viewport meta, chat composer above keyboard
   const page = await phonePage(browser)
   await runWizard(page)                                   // lands on /sign-in
   const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE' } })
+  // Seeded straight into the DB (a11y.spec.ts:180's shape): what is under test is
+  // the title INPUT's computed size, not another round of creating an issue.
+  const admin = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  const issue = await db.issue.create({ data: { title: 'Systemics title', creatorId: admin.id, status: 'TODO', rank: 'a0' } })
 
   // The viewport tag is a root-layout export, so it is the same on every route.
   // `viewport-fit=cover` is what makes each env(safe-area-inset-*) term non-zero
@@ -460,6 +464,16 @@ test('mobile systemics: 16px inputs, viewport meta, chat composer above keyboard
   expect(await fontSize(dlg.locator('input[placeholder*="growth"]'))).toBe('16px')
   await page.keyboard.press('Escape')
   await expect(dlg).toHaveCount(0)
+
+  // …and the carve-out. 16px is iOS's zoom THRESHOLD, not a cap: a control the
+  // type scale already sets LARGER keeps its size. The issue-title <input> is the
+  // only such control in src today (text-2xl = 28px) and it is NOT an edit-mode
+  // toggle — canEdit renders it by default, so capping it would have every admin
+  // and member read the title at body size while guests get the 28px <h1>.
+  await page.goto(`/issues/LAB-${issue.number}`)
+  const titleInput = page.getByRole('textbox', { name: 'Issue title' })
+  await expect(titleInput).toHaveValue('Systemics title')
+  expect(await fontSize(titleInput)).toBe('28px')
 
   // The chat pane's height: viewport minus the REAL chrome — the h-12 header plus
   // <main>'s p-4 = 80px below md — plus safe-area insets that are 0 in Chromium.
