@@ -22,7 +22,10 @@ export function BoardCard({ issue, disabled, today, timezone }: { issue: IssueDt
       className={`rounded-lg border border-border bg-surface p-2 shadow-xs ${isDragging ? 'opacity-60' : ''}`}>
       <div className="flex items-start gap-1.5">
         {!disabled && (
-          <button {...attributes} {...listeners} aria-label={`Reorder ${issue.identifier}`} className="mt-0.5 cursor-grab text-subtle hover:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
+          // p-1.5 around a 14px icon ≈ 26px pointer target (≥24 required); `-ml-1`
+          // keeps the card's left alignment. `touch-none` is what lets a TOUCH drag
+          // reach dnd-kit at all — never put it on a container, that kills scrolling.
+          <button {...attributes} {...listeners} aria-label={`Reorder ${issue.identifier}`} className="mt-0.5 -ml-1 cursor-grab touch-none rounded-md p-1.5 text-subtle hover:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
             <GripVertical size={14} aria-hidden />
           </button>
         )}

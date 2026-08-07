@@ -135,8 +135,9 @@ function SortableProjectCard({ project, index, ids, timezone, today, commit }: {
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={isDragging ? 'opacity-60' : ''}>
       <ProjectCard project={project} timezone={timezone} today={today} controls={
         <div className="flex items-center gap-0.5">
-          {/* p-1.5 around a 14px icon ≈ 26px pointer target (≥24 required). */}
-          <button {...attributes} {...listeners} aria-label={`Reorder ${project.name}`} className="-ml-1 rounded-md p-1.5 cursor-grab text-subtle hover:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
+          {/* p-1.5 around a 14px icon ≈ 26px pointer target (≥24 required). `touch-none`
+              (the grip ONLY, never a container) is what lets a touch drag reach dnd-kit. */}
+          <button {...attributes} {...listeners} aria-label={`Reorder ${project.name}`} className="-ml-1 rounded-md p-1.5 cursor-grab touch-none text-subtle hover:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
             <GripVertical size={14} aria-hidden />
           </button>
           {/* Pointer-free fallback for the same four moves. */}

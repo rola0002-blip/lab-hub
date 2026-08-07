@@ -491,3 +491,50 @@ test('mobile systemics: 16px inputs, viewport meta, chat composer above keyboard
   await expect(composer).toBeInViewport()
   expect(await fontSize(composer)).toBe('16px')
 })
+
+// ── T8: the two dnd grips — touch-action + the board grip's hit target ────────
+// Without `touch-action: none` the browser claims a touch drag as a pan before
+// dnd-kit's PointerSensor ever sees it, so neither arrangement surface can be
+// rearranged by finger. That is invisible to a synthetic pointer stream (as it
+// is for the T4 draft handles), so it is asserted on COMPUTED STYLE — and the
+// rule is grip-ONLY: the same declaration on a container would kill page
+// scrolling, so <main> is asserted the other way on both surfaces.
+
+test('dnd grips carry touch-action:none and meet the 24px target bar', async ({ browser }) => {
+  test.setTimeout(120_000)
+  const page = await phonePage(browser)
+  await runWizard(page)
+  await signIn(page, ADMIN.email, ADMIN.password)
+  const admin = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+
+  const touchAction = (l: Locator) => l.evaluate((el) => getComputedStyle(el).touchAction)
+  const smallestSide = async (l: Locator) => { const b = (await l.boundingBox())!; return Math.min(b.width, b.height) }
+
+  // /projects. Two cards, because a grid of one still renders the grip but says
+  // nothing about ordering. `Project.rank` is NOT NULL with no default, so each
+  // raw create supplies an explicit literal ('B' < 'C' byte-wise = the COLLATE
+  // "C" order). Admin + no filter ⇒ the arrangement affordances render.
+  await db.project.create({ data: { name: 'Grip alpha', rank: 'B' } })
+  await db.project.create({ data: { name: 'Grip bravo', rank: 'C' } })
+  await page.goto('/projects')
+  const projectGrip = page.getByRole('button', { name: 'Reorder Grip alpha' })
+  await expect(projectGrip).toBeVisible()
+  expect(await touchAction(projectGrip)).toBe('none')
+  expect(await smallestSide(projectGrip)).toBeGreaterThanOrEqual(24)
+  expect(await touchAction(main(page))).not.toBe('none')
+
+  // /issues board view, reached the way a11y.spec.ts:208-209 does — click the
+  // View toggle's Board segment, then gate on the grip's own accessible name.
+  // The identifier is DERIVED from the row rather than hardcoded (issues.spec.ts:58's
+  // idiom): `wipe()` does restart `issue_number_seq`, so this is LAB-1 today, but the
+  // gate then cannot drift if seeding ever changes. BACKLOG puts the card in the
+  // leftmost column of the horizontally scrolling board, inside a 375px viewport.
+  const issue = await db.issue.create({ data: { title: 'Grip issue', creatorId: admin.id, status: 'BACKLOG', rank: 'a0' } })
+  await page.goto('/issues')
+  await main(page).getByRole('button', { name: 'Board' }).click()
+  const boardGrip = page.getByRole('button', { name: `Reorder LAB-${issue.number}` })
+  await expect(boardGrip).toBeVisible()
+  expect(await touchAction(boardGrip)).toBe('none')
+  expect(await smallestSide(boardGrip)).toBeGreaterThanOrEqual(24)
+  expect(await touchAction(main(page))).not.toBe('none')
+})
