@@ -579,7 +579,11 @@ test('no horizontal overflow on core routes at 375px', async ({ browser }) => {
     ['/issues', (p) => main(p).getByRole('link', { name: /LAB-\d+/ }).first()],
     ['/people', (p) => main(p).getByRole('heading', { name: 'Pending invitations' })],
     ['/certifications', (p) => main(p).locator('table input[type=checkbox]').first()],
-    ['/dashboard', (p) => main(p).getByRole('heading', { name: /Welcome/ }).first()],
+    // The seeded project's own name, NOT the "Welcome" title: /dashboard is the route
+    // whose blowout this wave fixed (the attention row's `truncate` cell gave the grid
+    // item a ~490px min-content), and the long name reaches this page only through the
+    // no_lead attention bucket — so gating on it proves the offending row is rendered.
+    ['/dashboard', (p) => main(p).getByText(LONG_PROJECT)],
     ['/files', (p) => main(p).getByRole('link', { name: 'graphene transfer SOP.pdf' })],
   ]
   for (const [path, ready] of routes) {

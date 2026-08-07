@@ -238,9 +238,16 @@ test('due dates: overdue reads "Overdue", due-today reads "Today", on list rows 
   await expect(page.getByRole('listitem').filter({ hasText: 'Furnace calibration' })).toContainText('Overdue')
   await expect(page.getByRole('listitem').filter({ hasText: 'Sample annealing' })).toContainText('Today')
 
-  // Mobile layout: the same responsive row still carries the word at a narrow viewport.
+  // Mobile layout: below md the due cell is DELIBERATELY hidden (v0.14 responsive
+  // sweep, spec S1 — the two-line phone row keeps priority/status/identifier/title and
+  // assignee, and drops labels/project/due). It stays in the DOM, so this asserts
+  // HIDDEN-NESS, not absence: `toContainText` reads textContent and would pass on a
+  // display:none cell, which is exactly the vacuous assertion this replaces. A phone
+  // user gets overdue context from the board card instead — covered immediately below.
   await page.setViewportSize({ width: 375, height: 800 })
-  await expect(page.getByRole('listitem').filter({ hasText: 'Furnace calibration' })).toContainText('Overdue')
+  const dueCell = page.getByRole('listitem').filter({ hasText: 'Furnace calibration' }).getByText('Overdue')
+  await expect(dueCell).toHaveCount(1)
+  await expect(dueCell).toBeHidden()
   await page.setViewportSize({ width: 1280, height: 800 })
 
   // Board cards — previously hid due dates entirely; now surfaced + colour-coded.
