@@ -1,4 +1,4 @@
-import { test, expect, type Browser, type Page } from '@playwright/test'
+import { test, expect, type Browser, type Locator, type Page } from '@playwright/test'
 import { TZDate } from '@date-fns/tz'
 import { format } from 'date-fns'
 import { db, wipe, runWizard, signIn, ADMIN, createMemberViaInvite, acceptInvite } from './helpers'
@@ -395,4 +395,85 @@ test('maintenance blocks are read-only', async ({ browser }) => {
   await expect(details.getByText('10:00–11:00')).toBeVisible()
   // A maintenance window is not a booking: no status chip, and no cancel path.
   await expect(details.getByRole('button', { name: 'Cancel booking' })).toHaveCount(0)
+})
+
+// ── T6: the global mobile systemics ───────────────────────────────────────────
+// One test for the four app-wide changes that have no page of their own: the
+// coarse-pointer 16px control rule, the viewport/safe-area meta, the auth shell's
+// dvh, and the chat pane's corrected height calc.
+
+// The a11y/redesign spec's channel flow, verbatim — a channel is just the fixture
+// that puts the composer on screen.
+async function createChannel(page: Page, name: string): Promise<void> {
+  await page.goto('/chat')
+  await page.getByRole('button', { name: 'Browse or create channels' }).click()
+  await page.getByRole('button', { name: 'New channel' }).click()
+  await page.getByPlaceholder('e.g. cvd-lab').fill(name)
+  await page.getByRole('button', { name: 'Create channel', exact: true }).click()
+  await page.waitForURL(/\/chat\/[^/]+$/)
+}
+
+test('mobile systemics: 16px inputs, viewport meta, chat composer above keyboard math', async ({ browser }) => {
+  test.setTimeout(120_000)
+  const page = await phonePage(browser)
+  await runWizard(page)                                   // lands on /sign-in
+  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE' } })
+
+  // The viewport tag is a root-layout export, so it is the same on every route.
+  // `viewport-fit=cover` is what makes each env(safe-area-inset-*) term non-zero
+  // on a notched device — the chat calc below subtracts two of them.
+  const meta = await page.evaluate(() => document.querySelector('meta[name="viewport"]')?.getAttribute('content') ?? '')
+  expect(meta).toContain('viewport-fit=cover')
+  // Pinch zoom is never locked out (WCAG 1.4.4): no scale cap ships in that tag.
+  expect(meta).not.toContain('maximum-scale')
+  expect(meta).not.toContain('user-scalable')
+
+  // The auth shell is exactly one viewport tall. Headless Chromium has no
+  // collapsing browser chrome, so 100vh and 100dvh measure identically here —
+  // what this gates is that the arbitrary value COMPILES (Tailwind emits nothing
+  // for a malformed one and min-height falls back to 0). The vh→dvh swap itself
+  // is a real-device fix (100vh = the LARGEST viewport, so min-h-screen leaves
+  // the sign-in card under the mobile browser chrome) that no emulated viewport
+  // can observe.
+  const authFit = await main(page).evaluate((el) => ({
+    minHeight: getComputedStyle(el).minHeight,
+    inner: `${window.innerHeight}px`,
+  }))
+  expect(authFit.minHeight).toBe(authFit.inner)
+
+  await signIn(page, ADMIN.email, ADMIN.password)
+
+  // Guard (test 1's): the 16px rule is `(pointer: coarse)`-gated, so a Playwright
+  // drift that stops matching would make the assertions below vacuous.
+  expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true)
+
+  // Any control under 16px triggers iOS Safari's zoom-on-focus. The rule is an
+  // UNLAYERED element selector, which outranks Tailwind's layered text-* utilities
+  // despite the lower specificity — assert on a <select> (13px by inheritance from
+  // its text-sm label) and an <input>, the two shapes in the booking dialog.
+  await page.goto(`/booking/${eq.id}?week=${futureWeek()}`)
+  await main(page).getByRole('button', { name: 'New booking' }).click()
+  const dlg = dialog(page)
+  await expect(dlg).toBeVisible()
+  const fontSize = (l: Locator) => l.evaluate((el) => getComputedStyle(el).fontSize)
+  expect(await fontSize(dlg.getByRole('combobox', { name: 'From', exact: true }))).toBe('16px')
+  expect(await fontSize(dlg.locator('input[placeholder*="growth"]'))).toBe('16px')
+  await page.keyboard.press('Escape')
+  await expect(dlg).toHaveCount(0)
+
+  // The chat pane's height: viewport minus the REAL chrome — the h-12 header plus
+  // <main>'s p-4 = 80px below md — plus safe-area insets that are 0 in Chromium.
+  // The retired flat 7rem over-subtracted 32px. Asserted on the measured box, so a
+  // malformed arbitrary value (Tailwind silently emits nothing) fails here rather
+  // than shipping a content-sized pane.
+  await createChannel(page, 'systemics')
+  const shell = main(page).locator('> div').first()
+  const geom = await shell.evaluate((el) => ({ h: el.getBoundingClientRect().height, inner: window.innerHeight }))
+  expect(Math.abs(geom.h - (geom.inner - 80))).toBeLessThanOrEqual(2)
+
+  // …and the composer that height exists to keep on screen at 375×812.
+  const composer = page.getByRole('textbox', { name: 'Write a message' })
+  await expect(composer).toBeVisible()
+  await expect(composer).toBeInViewport()
+  expect(await fontSize(composer)).toBe('16px')
 })

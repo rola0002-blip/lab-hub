@@ -96,7 +96,10 @@ export function MobileNavDrawer({ children }: { children: React.ReactNode }) {
           />
           <div
             ref={ref} id={DRAWER_ID} role="dialog" aria-modal="true" aria-label="Navigation"
-            className="absolute inset-y-0 left-0 flex max-w-[85vw] shadow-modal"
+            // Safe-area padding: the drawer is `fixed inset-0`, so with
+            // viewportFit:'cover' it spans under the notch and the left rounded
+            // corner in landscape. Both env() terms are 0 elsewhere.
+            className="absolute inset-y-0 left-0 flex max-w-[85vw] pl-[env(safe-area-inset-left)] pt-[env(safe-area-inset-top)] shadow-modal"
             // Close on any nav-link tap. The pathname effect already covers route changes;
             // this also dismisses when the tapped item is the CURRENT route (no pathname
             // change to react to). Scoped to <a> so the workspace menu / sign-out buttons

@@ -275,3 +275,9 @@ body { background: var(--bg-canvas); color: var(--text-default); font-size: var(
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }
+
+/* Touch ergonomics: any form control under 16px triggers iOS Safari's zoom-on-focus.
+   Unlayered element selector deliberately outranks Tailwind text-* utilities. */
+@media (pointer: coarse) {
+  input, select, textarea { font-size: 16px; }
+}
