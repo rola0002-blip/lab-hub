@@ -100,6 +100,12 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
   }
 
   const link = 'flex h-8 items-center gap-2 rounded-md px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]'
+  // The <lg chip form of the same navigation: 36px tall, never shrinking, in one
+  // horizontal scroller. It carries NO per-folder Menu — an `overflow-x-auto` ancestor
+  // is a hard clip bound for menu.tsx's popover (the listing's own comment below), so
+  // folder rename/delete stay on the lg+ rail.
+  const chip = 'flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]'
+  const chipState = (selected: boolean) => selected ? 'bg-selected font-medium text-[var(--text-accent)]' : 'text-default hover:bg-hover'
   const rows: DocVM[] = hits
     ? hits.map((h) => ({ id: h.id, name: h.name, path: h.path, mime: h.mime, size: 0, uploaderId: '', uploaderName: '', created: '', folderId: null, folderName: null }))
     : documents
@@ -108,7 +114,7 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
     <div className="mt-4 grid gap-4 lg:grid-cols-[13rem_1fr]">
       {/* Folder rail. The per-folder Menu is a SIBLING of the navigation Link (never
           nested inside it) so there is no interactive-inside-interactive a11y violation. */}
-      <aside className="space-y-1">
+      <aside className="hidden space-y-1 lg:block">
         <Link href="/files" aria-current={currentFolderId === null ? 'page' : undefined}
           className={`${link} ${currentFolderId === null ? 'bg-selected font-medium text-[var(--text-accent)]' : 'text-default hover:bg-hover'}`}>
           <Folder size={15} aria-hidden /> All files
@@ -134,6 +140,26 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
           </button>
         )}
       </aside>
+
+      {/* The rail's <lg replacement: the single column stacks it above the listing. */}
+      <div className="flex gap-1 overflow-x-auto pb-1 lg:hidden">
+        <Link href="/files" aria-current={currentFolderId === null ? 'page' : undefined}
+          className={`${chip} ${chipState(currentFolderId === null)}`}>
+          <Folder size={15} aria-hidden /> All files
+        </Link>
+        {folders.map((f) => (
+          <Link key={f.id} href={`/files?folder=${f.id}`} aria-current={currentFolderId === f.id ? 'page' : undefined}
+            className={`${chip} ${chipState(currentFolderId === f.id)}`}>
+            <Folder size={15} aria-hidden /> {f.name}
+          </Link>
+        ))}
+        {mayUpload && (
+          <button type="button" onClick={() => openDialog({ kind: 'newfolder' })}
+            className={`${chip} text-muted hover:bg-hover hover:text-default`}>
+            <FolderPlus size={15} aria-hidden /> New folder
+          </button>
+        )}
+      </div>
 
       {/* Main: search + upload + table */}
       <section className="min-w-0">
@@ -193,8 +219,10 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
                 <TypeIcon mime={d.mime} />
                 {/* pdf/image open inline in a new tab; office files download — the serving
                     route sets Content-Disposition, so a single anchor handles both. */}
+                {/* `py-1` lifts the row's primary link to a ~26px tap target (the row's
+                    action Menu trigger is already 28px, ICON_TRIGGER's h-7). */}
                 <a href={d.path} target="_blank" rel="noreferrer"
-                  className="min-w-0 flex-1 truncate text-default hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">{d.name}</a>
+                  className="min-w-0 flex-1 truncate py-1 text-default hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">{d.name}</a>
                 {/* SP8 §3.1: the unscoped listing mixes folders, so the row names its folder ('—' at root). */}
                 {!hits && <span className="hidden w-32 shrink-0 truncate text-subtle sm:block">{d.folderName ?? '—'}</span>}
                 {!hits && <span className="hidden w-16 shrink-0 text-right tabular-nums text-subtle sm:block">{fmtSize(d.size)}</span>}

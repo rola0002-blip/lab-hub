@@ -13,6 +13,10 @@ type Item = {
   startsAt: string; endsAt: string; purpose: string; location: string
 }
 
+// The destructive text actions were unpadded (~20px) and ringless. `whitespace-nowrap`
+// keeps "Cancel series" from breaking mid-label once the row wraps on a phone.
+const CANCEL_BTN = 'rounded px-1 py-1.5 whitespace-nowrap text-[var(--text-danger)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]'
+
 function Row({ b, upcoming, onErr }: { b: Item; upcoming: boolean; onErr: (m: string) => void }) {
   const [pending, start] = useTransition()
   function cancel(scope: 'one' | 'future') {
@@ -26,15 +30,15 @@ function Row({ b, upcoming, onErr }: { b: Item; upcoming: boolean; onErr: (m: st
         <strong>{b.equipmentName}</strong> · {b.when}{b.recurring && ' · recurring'}
         {b.reason && <span className="block text-xs text-muted">Reason: {b.reason}</span>}
       </span>
-      <span className="flex items-center gap-2">
+      <span className="flex flex-wrap items-center justify-end gap-2">
         {upcoming && ['CONFIRMED', 'PENDING'].includes(b.status) && (
           <AddToCalendar bookingId={b.id} summary={b.equipmentName} startsAt={b.startsAt} endsAt={b.endsAt} purpose={b.purpose} location={b.location} />
         )}
         <Badge variant={BOOKING_VARIANT[b.status as keyof typeof BOOKING_VARIANT]}>{b.status.toLowerCase()}</Badge>
         {b.cancellable && (
           <>
-            <button disabled={pending} onClick={() => cancel('one')} className="text-[var(--text-danger)] hover:underline">Cancel</button>
-            {b.recurring && <button disabled={pending} onClick={() => cancel('future')} className="text-[var(--text-danger)] hover:underline">Cancel series</button>}
+            <button type="button" disabled={pending} onClick={() => cancel('one')} className={CANCEL_BTN}>Cancel</button>
+            {b.recurring && <button type="button" disabled={pending} onClick={() => cancel('future')} className={CANCEL_BTN}>Cancel series</button>}
           </>
         )}
       </span>

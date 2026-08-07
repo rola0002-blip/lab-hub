@@ -538,3 +538,83 @@ test('dnd grips carry touch-action:none and meet the 24px target bar', async ({ 
   expect(await smallestSide(boardGrip)).toBeGreaterThanOrEqual(24)
   expect(await touchAction(main(page))).not.toBe('none')
 })
+
+// ── T7: rows & tables at 375px ────────────────────────────────────────────────
+// The sweep's contract is negative — nothing on these surfaces may push the
+// DOCUMENT wider than the viewport. Deliberately excluded: /booking/day, whose
+// `min-w-[900px]` schedule is an intentional scroller (only its gutter freezes),
+// and the cert matrix's own bounded `overflow-auto` box, which is why
+// /certifications can carry a wide table and still pass.
+
+// Long enough that the untruncated string cannot fit a 375px row: the issue title
+// must truncate inside the row's `min-w-0`, and the project name must be ABSENT
+// below md rather than merely clipped.
+const LONG_PROJECT = 'Wafer-scale hBN uniformity programme'
+const LONG_ISSUE = 'Chamber base pressure drifts above 5e-6 mbar after the turbo service, blocking every growth run'
+
+// Everything the five audited routes need to render POPULATED (an EmptyState
+// proves nothing about row overflow). Straight into the DB — the a11y.spec.ts:168
+// seeding precedent — since what is under test is the layout, not the create paths.
+async function seedRows() {
+  const admin = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  const project = await db.project.create({ data: { name: LONG_PROJECT, rank: 'B' } })
+  await db.issue.create({ data: { title: LONG_ISSUE, creatorId: admin.id, status: 'TODO', rank: 'a0', projectId: project.id } })
+  await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE' } })
+  await db.documentFolder.create({ data: { name: 'Standard operating procedures', createdById: admin.id } })
+  await db.document.create({ data: { name: 'graphene transfer SOP.pdf', path: '/uploads/documents/t7.pdf', mime: 'application/pdf', size: 2048, uploaderId: admin.id, folderId: null } })
+  await db.invitation.create({ data: { email: 'pending@lab.test', role: 'member', token: 't7-invite-token', invitedById: admin.id, expiresAt: new Date(Date.now() + 86_400_000) } })
+  return admin
+}
+
+test('no horizontal overflow on core routes at 375px', async ({ browser }) => {
+  test.setTimeout(120_000)
+  const page = await phonePage(browser)
+  await runWizard(page)
+  await seedRows()
+  await signIn(page, ADMIN.email, ADMIN.password)
+
+  // Each route is gated on a LOAD-BEARING element (the seeded row, not the heading):
+  // measuring scrollWidth against a skeleton would pass vacuously.
+  const routes: [string, (p: Page) => Locator][] = [
+    ['/issues', (p) => main(p).getByRole('link', { name: /LAB-\d+/ }).first()],
+    ['/people', (p) => main(p).getByRole('heading', { name: 'Pending invitations' })],
+    ['/certifications', (p) => main(p).locator('table input[type=checkbox]').first()],
+    ['/dashboard', (p) => main(p).getByRole('heading', { name: /Welcome/ }).first()],
+    ['/files', (p) => main(p).getByRole('link', { name: 'graphene transfer SOP.pdf' })],
+  ]
+  for (const [path, ready] of routes) {
+    await page.goto(path)
+    await expect(ready(page)).toBeVisible()
+    const width = await page.evaluate(() => document.documentElement.scrollWidth)
+    expect(width, `${path} scrolls horizontally at ${PHONE.width}px`).toBeLessThanOrEqual(PHONE.width)
+  }
+})
+
+test('issues list collapses to two lines below md', async ({ browser }) => {
+  test.setTimeout(120_000)
+  const phone = await phonePage(browser)
+  await runWizard(phone)
+  await seedRows()
+  await signIn(phone, ADMIN.email, ADMIN.password)
+
+  // The row is the focus target itself (issue-list-view.tsx:47 roving focus), so it
+  // is located as `[role=listitem]` — the same handle the keyboard uses.
+  await phone.goto('/issues')
+  const row = main(phone).locator('[role=listitem]')
+  await expect(row).toHaveCount(1)
+  // Line 1 survives; the three md+ cells (labels, project, due) are display:none, so
+  // the project name is absent rather than clipped — this is the collapse, not a
+  // truncation. The title link is still on screen.
+  await expect(row.getByRole('link', { name: /LAB-\d+/ })).toBeVisible()
+  await expect(row.getByText(LONG_PROJECT)).toBeHidden()
+  // …and the assignee, the one control the second line carries, stays reachable.
+  await expect(row.getByRole('button', { name: 'Unassigned' })).toBeVisible()
+
+  // The same row at desktop width is the historical 8-track grid: the project cell
+  // is back. A second context (not a resize) so the SSR'd `md:` branch is what the
+  // server rendered, exactly as a desktop user gets it.
+  const desk = await desktopPage(browser)
+  await signIn(desk, ADMIN.email, ADMIN.password)
+  await desk.goto('/issues')
+  await expect(main(desk).locator('[role=listitem]').getByText(LONG_PROJECT)).toBeVisible()
+})
