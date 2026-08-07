@@ -60,6 +60,14 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, e
   // or before it — the end select never offers a row the start has passed.
   const moveStart = (v: number) => setRange((r) => ({ ...r, startRow: v, endRow: Math.max(r.endRow, v + 1) }))
 
+  // `<input type="date">` reports '' for a cleared or half-entered value (Backspace
+  // on a segment, an Android picker's Clear). An empty dateStr would reach
+  // rowsToRange as an Invalid Date and throw RangeError out of `format` below
+  // DURING RENDER — and the app has no error.tsx, so Next would replace the whole
+  // route and the half-filled dialog with it. Keep the last valid date instead;
+  // React restores the input's displayed value to it.
+  const setDate = (v: string) => { if (v) setRange((r) => ({ ...r, dateStr: v })) }
+
   useEffect(() => {
     const t = setTimeout(async () => {
       try {
@@ -124,7 +132,7 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, e
         {/* The range is editable from every entry path, so the dialog is one form:
             a drag lands here pre-filled and a cold open starts from a default. */}
         <label className="mt-1 block text-sm text-default">Date
-          <input type="date" value={dateStr} onChange={(e) => setRange((r) => ({ ...r, dateStr: e.target.value }))}
+          <input type="date" value={dateStr} onChange={(e) => setDate(e.target.value)}
             className={`${FIELD} w-full`} />
         </label>
         <div className="mt-3 flex flex-wrap items-end gap-x-3 gap-y-2">
