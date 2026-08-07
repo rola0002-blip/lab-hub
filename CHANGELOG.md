@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-08-07
+
 ### Added
 - Booking equipment from a phone, end to end. Below tablet width the equipment schedule becomes one full-width day column with touch-sized half-hour rows and its own day bar — ‹ Tue 12 Aug › — which steps through the week a day at a time and carries on into the next or previous week when you step off either end. Tap an empty slot and a one-hour draft block appears; drag the handle at its top or bottom edge to set the start or end time, drag the block itself to move it, then press Book. The usual booking dialog opens with that range already filled in. Closing the dialog keeps the draft, so you can adjust it and try again; a booking that goes through clears it. On a desktop the seven-day week grid and its mouse drag are exactly as they were.
 - A **New booking** button on every equipment page, at every width. It opens the booking dialog on the next free half hour, so making a reservation no longer requires a drag at all: it is the first way to book with only a keyboard or a screen reader, and the dependable fallback on touch.
