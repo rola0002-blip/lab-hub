@@ -2,7 +2,7 @@ import { test, expect, type Browser, type Page } from '@playwright/test'
 import { TZDate } from '@date-fns/tz'
 import { format } from 'date-fns'
 import { db, wipe, runWizard, signIn, ADMIN, createMemberViaInvite, acceptInvite } from './helpers'
-import { rowsToRange } from '@/features/booking/grid'
+import { ROW_PX_DAY, rangeToRows, rowsToRange } from '@/features/booking/grid'
 
 // v0.14 "mobile UX": the booking schedule becomes one responsive component — the
 // 7-column week grid at md+, a single touch-sized day column below it — plus a
@@ -29,6 +29,14 @@ const dialog = (page: Page) => page.getByRole('dialog', { name: 'Book this slot'
 // The day bar's current-day label; the arrows are found by their aria-labels, which
 // are identical across the button (interior) and link (week-crossing) renderings.
 const dayLabel = (page: Page) => main(page).getByRole('group', { name: 'Day' }).locator('span')
+// The coarse-pointer create gesture's overlay and the one day column it lives in.
+const dayColumn = (page: Page) => main(page).locator('div.relative.border-l')
+const draftBlock = (page: Page) => main(page).locator('[data-draft-block]')
+// Tap the centre of a grid row in the (single) day column. The cells are absolutely
+// positioned children of the column, so a positioned click on the column lands on
+// exactly one of them — no per-row locator needed.
+const tapRow = (page: Page, row: number) =>
+  dayColumn(page).click({ position: { x: 40, y: row * ROW_PX_DAY + ROW_PX_DAY / 2 } })
 
 let ipSeq = 0
 async function phonePage(browser: Browser): Promise<Page> {
@@ -186,4 +194,117 @@ test('clearing the dialog date keeps the last valid date instead of crashing the
   await expect(dialog(page)).toBeVisible()          // the route survived
   expect(await date.inputValue()).toBe(before)      // React restored the last valid date
   expect(pageErrors).toEqual([])
+})
+
+// ── T4: the coarse-pointer tap → draft → drag-handles create gesture ──────────
+// The handles are driven with `page.mouse` INSIDE a hasTouch context on purpose:
+// the gesture is gated by `(pointer: coarse)`, never by an event's `pointerType`,
+// precisely so a synthetic pointer stream can exercise it (spec §4.3).
+
+test('phone books via tap → draft → handle drag → Book', async ({ browser }) => {
+  test.setTimeout(120_000)
+  const page = await phonePage(browser)
+  await runWizard(page)
+  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE' } })
+  await signIn(page, ADMIN.email, ADMIN.password)
+  await page.goto(`/booking/${eq.id}?week=${futureWeek()}`)
+  await expect(dayColumn(page)).toHaveCount(1)      // polls past the SSR week paint
+
+  // Tap an empty slot → a one-hour draft anchored there (row 6 = 10:00).
+  await tapRow(page, 6)
+  await expect(main(page).getByRole('button', { name: 'Adjust end time' })).toBeVisible()
+  await expect(draftBlock(page)).toContainText('10:00–11:00')
+
+  // touch-action gate. The regression this catches — `touch-none` leaking onto a
+  // container and killing page scrolling — is invisible to a programmatic
+  // `scrollBy`, because touch-action only constrains BROWSER pan gestures. So it
+  // is asserted on computed style, and asserted while the draft is mounted.
+  const touchAction = (l: ReturnType<typeof main>) => l.evaluate((el) => getComputedStyle(el).touchAction)
+  expect(await touchAction(draftBlock(page))).toBe('none')
+  expect(await touchAction(main(page).getByRole('button', { name: 'Adjust start time' }))).toBe('none')
+  expect(await touchAction(main(page).getByRole('button', { name: 'Adjust end time' }))).toBe('none')
+  expect(await touchAction(main(page).locator('[data-day-col]'))).not.toBe('none')
+  expect(await touchAction(main(page))).not.toBe('none')
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).touchAction)).not.toBe('none')
+  expect(await page.evaluate(() => getComputedStyle(document.body).touchAction)).not.toBe('none')
+
+  // Drag the END handle down two rows. The landing point is the MIDDLE of the
+  // target row, not its top edge: the handle's centre sits exactly on a row
+  // boundary, where a subpixel column offset could round the drop into the
+  // neighbouring row and make this assertion flaky.
+  const endHandle = main(page).getByRole('button', { name: 'Adjust end time' })
+  const box = (await endHandle.boundingBox())!
+  const x = box.x + box.width / 2
+  const y = box.y + box.height / 2
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.mouse.move(x, y + 2 * ROW_PX_DAY + ROW_PX_DAY / 2, { steps: 8 })
+  await page.mouse.up()
+  await expect(draftBlock(page)).toContainText('10:00–12:00')
+
+  // The draft's own primary is `Book this draft`, not `Book`: the dialog it opens
+  // has a `Book` submit of its own and both are on screen at once.
+  const dayText = (await dayLabel(page).textContent())!.trim()
+  await main(page).getByRole('button', { name: 'Book this draft' }).click()
+  const dlg = dialog(page)
+  await expect(dlg).toBeVisible()
+  await expect(dlg.getByText('confirm instantly')).toBeVisible()
+  await dlg.getByLabel('Purpose', { exact: true }).fill('e2e touch draft')
+  await dlg.getByRole('button', { name: 'Book', exact: true }).click()
+  await expect(dlg.getByRole('button', { name: 'Add to calendar' })).toBeVisible()
+  await dlg.getByRole('button', { name: 'Done' }).click()
+
+  // The gate this test exists for: what persisted is the RESIZED draft — start at
+  // the tapped row 6, end at 6 + the seed's 2 rows + the 2 dragged rows — on the
+  // day the day bar was showing. Read back through `rangeToRows` so the assertion
+  // uses the same TZDate math the app does rather than a re-derivation.
+  const org = await db.organization.findFirstOrThrow()
+  const b = await db.booking.findFirstOrThrow({ where: { equipmentId: eq.id } })
+  const rows = rangeToRows(b.startsAt, b.endsAt, org.timezone)
+  expect(rows.startRow).toBe(6)
+  expect(rows.endRow).toBe(10)
+  expect(format(new TZDate(b.startsAt, org.timezone), 'EEE d MMM')).toBe(dayText)
+})
+
+test('draft lifecycle: re-seed, cancel keeps, day switch discards, success clears', async ({ browser }) => {
+  test.setTimeout(120_000)
+  const page = await phonePage(browser)
+  await runWizard(page)
+  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE' } })
+  await signIn(page, ADMIN.email, ADMIN.password)
+  await page.goto(`/booking/${eq.id}?week=${futureWeek()}`)
+  await expect(dayColumn(page)).toHaveCount(1)
+
+  await tapRow(page, 6)
+  await expect(draftBlock(page)).toContainText('10:00–11:00')
+
+  // Re-seed: tapping a DIFFERENT empty slot moves the draft there at the default
+  // one hour — it never leaves a second draft behind.
+  await tapRow(page, 2)
+  await expect(draftBlock(page)).toHaveCount(1)
+  await expect(draftBlock(page)).toContainText('08:00–09:00')
+
+  // Cancelling the dialog KEEPS the draft (adjust the handles and retry).
+  await main(page).getByRole('button', { name: 'Book this draft' }).click()
+  await expect(dialog(page)).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(dialog(page)).toHaveCount(0)
+  await expect(draftBlock(page)).toContainText('08:00–09:00')
+
+  // Switching the visible day discards it — a draft belongs to one day, and this
+  // interior step does NOT remount the component the way a week link does.
+  await main(page).getByLabel('Next day').click()
+  await expect(draftBlock(page)).toHaveCount(0)
+
+  // A successful submit clears it, so the booked slot is not left under a draft.
+  await tapRow(page, 6)
+  await expect(draftBlock(page)).toContainText('10:00–11:00')
+  await main(page).getByRole('button', { name: 'Book this draft' }).click()
+  const dlg = dialog(page)
+  await expect(dlg).toBeVisible()
+  await dlg.getByLabel('Purpose', { exact: true }).fill('e2e draft lifecycle')
+  await dlg.getByRole('button', { name: 'Book', exact: true }).click()
+  await expect(dlg.getByRole('button', { name: 'Add to calendar' })).toBeVisible()
+  await dlg.getByRole('button', { name: 'Done' }).click()
+  await expect(draftBlock(page)).toHaveCount(0)
 })

@@ -4,8 +4,12 @@ import Link from 'next/link'
 import { TZDate } from '@date-fns/tz'
 import { addDays, format } from 'date-fns'
 import BookingDialog from './booking-dialog'
+import DraftBlock from '@/components/booking/draft-block'
 import { useMediaQuery } from '@/components/hooks/use-media-query'
-import { END_HOUR, ROWS, ROW_PX_DAY, ROW_PX_WEEK, START_HOUR, rowToDate, slotRect } from '@/features/booking/grid'
+import {
+  END_HOUR, ROWS, ROW_PX_DAY, ROW_PX_WEEK, START_HOUR,
+  type Draft, moveDraft, resizeDraft, rowToDate, rowsToRange, seedDraft, slotRect,
+} from '@/features/booking/grid'
 
 export type CalSlot = {
   id: string; kind: 'booking' | 'maintenance'
@@ -36,6 +40,10 @@ export default function ScheduleView({ equipmentId, timezone, weekStartISO, slot
   const narrow = useMediaQuery('(max-width: 767px)')
   const coarse = useMediaQuery('(pointer: coarse)')
   const [drag, setDrag] = useState<{ day: number; from: number; to: number } | null>(null)
+  // The coarse-pointer create gesture's whole state, DISJOINT from `drag` above:
+  // a tap seeds it, the handles reshape it, Book turns it into a dialog range.
+  // Under a fine pointer nothing ever sets it and no DraftBlock is mounted.
+  const [draft, setDraft] = useState<Draft | null>(null)
   const [dialog, setDialog] = useState<{ start: Date; end: Date } | null>(null)
 
   const todayKey = format(new TZDate(new Date(), timezone), 'yyyy-MM-dd')
@@ -89,15 +97,23 @@ export default function ScheduleView({ equipmentId, timezone, weekStartISO, slot
   const prevWeek = format(addDays(weekStart, -7), 'yyyy-MM-dd')
   const nextWeek = format(addDays(weekStart, 7), 'yyyy-MM-dd')
 
+  // Interior day steps keep this component mounted, so the draft — which belongs to
+  // the day it was seeded on — must be dropped by hand. The week-crossing links do
+  // it for free: the page's key remounts us.
+  function stepDay(delta: number) {
+    setDraft(null)
+    setDayIndex((d) => Math.min(6, Math.max(0, d + delta)))
+  }
+
   return (
     <div className="select-none overflow-x-auto rounded-xl border border-border bg-surface">
       {narrow && (
         <div role="group" aria-label="Day" className="flex items-center justify-between gap-1 border-b border-border px-1 py-1">
-          {/* Functional updates, not `dayIndex ± 1`: two taps landing inside one render
-              would otherwise both compute from the same closed-over index and the
-              second would be swallowed. The clamps make each step total. */}
+          {/* `stepDay` updates functionally, not from `dayIndex ± 1`: two taps landing
+              inside one render would otherwise both compute from the same closed-over
+              index and the second would be swallowed. The clamps make each step total. */}
           {dayIndex > 0 ? (
-            <button type="button" aria-label="Previous day" className={DAY_NAV} onClick={() => setDayIndex((d) => Math.max(0, d - 1))}>‹</button>
+            <button type="button" aria-label="Previous day" className={DAY_NAV} onClick={() => stepDay(-1)}>‹</button>
           ) : (
             <Link href={`?week=${prevWeek}&day=6`} aria-label="Previous day" className={DAY_NAV}>‹</Link>
           )}
@@ -105,7 +121,7 @@ export default function ScheduleView({ equipmentId, timezone, weekStartISO, slot
             {format(addDays(weekStart, dayIndex), 'EEE d MMM')}
           </span>
           {dayIndex < 6 ? (
-            <button type="button" aria-label="Next day" className={DAY_NAV} onClick={() => setDayIndex((d) => Math.min(6, d + 1))}>›</button>
+            <button type="button" aria-label="Next day" className={DAY_NAV} onClick={() => stepDay(1)}>›</button>
           ) : (
             <Link href={`?week=${nextWeek}&day=0`} aria-label="Next day" className={DAY_NAV}>›</Link>
           )}
@@ -142,12 +158,16 @@ export default function ScheduleView({ equipmentId, timezone, weekStartISO, slot
                 const inDrag = drag?.day === day && row >= Math.min(drag.from, drag.to) && row <= Math.max(drag.from, drag.to)
                 return (
                   <div key={row}
-                    className={`absolute inset-x-0 transition-colors ${row % 2 ? '' : 'border-t border-border'} ${inDrag ? 'bg-accent/20' : retired ? '' : 'cursor-crosshair hover:bg-hover'}`}
+                    className={`absolute inset-x-0 transition-colors ${row % 2 ? '' : 'border-t border-border'} ${
+                      inDrag ? 'bg-accent/20' : retired ? '' : coarse ? 'active:bg-hover' : 'cursor-crosshair hover:bg-hover'}`}
                     style={{ top: row * rowPx, height: rowPx }}
-                    // Fine-pointer drag machine only. Under a coarse pointer the cells
-                    // stay handler-free so the touch create gesture owns the tap.
+                    // Two disjoint machines, one per pointer class. Fine: the drag
+                    // handlers below. Coarse: a tap seeds a draft (and tapping another
+                    // empty slot re-seeds there), never the drag — so `drag` stays null
+                    // and the document backstop stays unarmed.
                     onPointerDown={coarse ? undefined : () => !retired && setDrag({ day, from: row, to: row })}
                     onPointerEnter={coarse ? undefined : () => drag?.day === day && setDrag({ ...drag, to: row })}
+                    onClick={coarse ? () => !retired && setDraft(seedDraft(day, row)) : undefined}
                   />
                 )
               })}
@@ -166,6 +186,17 @@ export default function ScheduleView({ equipmentId, timezone, weekStartISO, slot
                   </div>
                 )
               })}
+              {/* Last in the column so it stacks above the cells and the blocks. The
+                  parent owns the Draft and applies grid.ts's pure transitions; the
+                  block only reports rows. Nothing here completes on pointer release —
+                  Book is an explicit press. */}
+              {coarse && draft?.day === day && (
+                <DraftBlock draft={draft} rowPx={rowPx}
+                  onResize={(edge, row) => setDraft((d) => (d ? resizeDraft(d, edge, row) : d))}
+                  onMove={(deltaRows) => setDraft((d) => (d ? moveDraft(d, deltaRows) : d))}
+                  onBook={() => setDialog(rowsToRange(dayKeys[draft.day], draft.startRow, draft.endRow, timezone))}
+                  onDiscard={() => setDraft(null)} />
+              )}
             </div>
           )
         })}
@@ -174,7 +205,10 @@ export default function ScheduleView({ equipmentId, timezone, weekStartISO, slot
       {dialog && (
         <BookingDialog equipmentId={equipmentId} timezone={timezone} allowRecurring={allowRecurring}
           equipmentName={equipmentName} equipmentLocation={equipmentLocation}
-          initialStart={dialog.start} initialEnd={dialog.end} onClose={() => setDialog(null)} />
+          initialStart={dialog.start} initialEnd={dialog.end} onClose={() => setDialog(null)}
+          // Success retires the draft; CANCEL deliberately keeps it, so the user can
+          // adjust the handles and try again. (A drag-opened dialog has none to clear.)
+          onBooked={() => setDraft(null)} />
       )}
     </div>
   )
