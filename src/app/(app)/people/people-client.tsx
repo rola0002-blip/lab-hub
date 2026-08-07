@@ -7,6 +7,11 @@ import { toast } from '@/components/ui/toast'
 type U = { id: string; name: string; email: string; role: string; banned: boolean; title: string | null; timezone: string | null }
 type I = { id: string; email: string; role: string; url: string }
 
+// The row's text actions were bare links-as-buttons: ~20px tall (no padding), and only
+// Copy link carried a focus ring. One shared class gives all five the ≥24px target
+// (20px line + py-1.5) and the same :focus-visible treatment; the colour is per-button.
+const ACTION_BTN = 'rounded px-1 py-1.5 whitespace-nowrap hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]'
+
 export default function PeopleClient({ users, invitations, isAdmin, selfId }: { users: U[]; invitations: I[]; isAdmin: boolean; selfId: string }) {
   const [msg, setMsg] = useState<string | null>(null)
   const [pending, start] = useTransition()
@@ -48,7 +53,7 @@ export default function PeopleClient({ users, invitations, isAdmin, selfId }: { 
                 onFocus={(e) => e.currentTarget.select()}
                 className="min-w-0 flex-1 rounded border border-border bg-surface px-2 py-1 text-xs text-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
               <button type="button" onClick={() => copyLink(lastUrl)} aria-label="Copy invite link"
-                className="rounded whitespace-nowrap text-sm text-[var(--text-accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
+                className={ACTION_BTN + ' text-sm text-[var(--text-accent)]'}>
                 Copy link
               </button>
             </span>
@@ -62,15 +67,21 @@ export default function PeopleClient({ users, invitations, isAdmin, selfId }: { 
           <p className="mt-1 text-xs text-muted">Copy a link to share it directly (works without email). Resending an invite makes a new link and invalidates the old one.</p>
           <ul className="mt-2 divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface shadow-xs">
             {invitations.map((i) => (
-              <li key={i.id} className="flex items-center justify-between p-3 text-sm text-default transition-colors hover:bg-hover">
+              <li key={i.id} className="flex flex-wrap items-center justify-between gap-y-2 p-3 text-sm text-default transition-colors hover:bg-hover">
                 <span className="min-w-0 truncate">{i.email} · {i.role}</span>
-                <span className="flex min-w-0 flex-1 items-center justify-end gap-2">
+                {/* `basis-full sm:basis-0` is the wrap, not `flex-1`: `flex-1` is
+                    `flex: 1 1 0%`, so the actions block's hypothetical main size is ZERO
+                    and it can never be the item that wraps — it just squeezes the URL
+                    field to nothing beside the email. A 100% basis below sm drops the
+                    whole URL+actions block onto its own line; at sm+ basis returns to 0
+                    and the historical one-line row is byte-identical. */}
+                <span className="flex min-w-0 flex-1 basis-full flex-wrap items-center justify-end gap-2 sm:basis-0">
                   <input readOnly value={i.url} aria-label="Invite link"
                     onFocus={(e) => e.currentTarget.select()}
                     className="min-w-0 flex-1 rounded border border-border bg-surface px-2 py-1 text-xs text-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
-                  <button type="button" onClick={() => copyLink(i.url)} aria-label="Copy invite link" className="rounded whitespace-nowrap text-[var(--text-accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">Copy link</button>
-                  <button onClick={() => start(() => resendInviteAction(i.id))} className="whitespace-nowrap text-[var(--text-accent)] hover:underline">Resend</button>
-                  <button onClick={() => start(() => revokeInviteAction(i.id))} className="whitespace-nowrap text-[var(--text-danger)] hover:underline">Revoke</button>
+                  <button type="button" onClick={() => copyLink(i.url)} aria-label="Copy invite link" className={ACTION_BTN + ' text-[var(--text-accent)]'}>Copy link</button>
+                  <button type="button" onClick={() => start(() => resendInviteAction(i.id))} className={ACTION_BTN + ' text-[var(--text-accent)]'}>Resend</button>
+                  <button type="button" onClick={() => start(() => revokeInviteAction(i.id))} className={ACTION_BTN + ' text-[var(--text-danger)]'}>Revoke</button>
                 </span>
               </li>
             ))}
@@ -82,7 +93,7 @@ export default function PeopleClient({ users, invitations, isAdmin, selfId }: { 
         <h2 className="font-medium text-default">Members</h2>
         <ul className="mt-2 divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface shadow-xs">
           {users.map((u) => (
-            <li key={u.id} className={`flex items-center justify-between p-3 text-sm text-default transition-colors hover:bg-hover ${u.banned ? 'opacity-50' : ''}`}>
+            <li key={u.id} className={`flex flex-wrap items-center justify-between gap-y-2 p-3 text-sm text-default transition-colors hover:bg-hover ${u.banned ? 'opacity-50' : ''}`}>
               <span className="min-w-0">
                 <span className="block truncate">{u.name} <span className="text-muted">· {u.email}</span>{u.banned && ' · deactivated'}</span>
                 <span className="flex items-center gap-2">
@@ -96,8 +107,8 @@ export default function PeopleClient({ users, invitations, isAdmin, selfId }: { 
                     <option value="guest">Guest</option><option value="member">Member</option><option value="admin">Admin</option>
                   </select>
                   {u.banned
-                    ? <button onClick={() => start(() => reactivateAction(u.id))} className="text-[var(--text-accent)] hover:underline">Reactivate</button>
-                    : <button onClick={() => { if (confirm(`Deactivate ${u.name}? Their sessions end and future bookings are cancelled.`)) start(() => deactivateAction(u.id)) }} className="text-[var(--text-danger)] hover:underline">Deactivate</button>}
+                    ? <button type="button" onClick={() => start(() => reactivateAction(u.id))} className={ACTION_BTN + ' text-[var(--text-accent)]'}>Reactivate</button>
+                    : <button type="button" onClick={() => { if (confirm(`Deactivate ${u.name}? Their sessions end and future bookings are cancelled.`)) start(() => deactivateAction(u.id)) }} className={ACTION_BTN + ' text-[var(--text-danger)]'}>Deactivate</button>}
                 </span>
               ) : (
                 <span className="rounded-full bg-active px-2 py-0.5 text-xs uppercase tracking-wide text-muted">{u.role}</span>

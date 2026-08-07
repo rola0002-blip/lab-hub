@@ -55,7 +55,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             version={APP_VERSION}
           />
         </MobileNavDrawer>
-        <div id="app-content" className="flex min-w-0 flex-1 flex-col">
+        {/* Safe areas (viewportFit:'cover' in the root viewport export): the top
+            inset clears the notch/status bar for the header, and <main>'s bottom
+            padding clears the home indicator. Every env() term is 0 on a device
+            without insets, so nothing about the desktop shell moves. */}
+        <div id="app-content" className="flex min-w-0 flex-1 flex-col pt-[env(safe-area-inset-top)]">
           <header className="flex h-12 items-center justify-between gap-2 border-b border-border px-3 md:px-6">
             <BackButton />
             <MobileNavToggle />
@@ -68,7 +72,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <UserMenu user={{ id: user.id, name: user.name, image: pref?.image ?? null }} />
             </div>
           </header>
-          <main data-region-root tabIndex={-1} className="flex-1 p-4 outline-none md:p-6">{children}</main>
+          <main data-region-root tabIndex={-1} className="flex-1 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] outline-none md:p-6 md:pb-[calc(1.5rem+env(safe-area-inset-bottom))]">{children}</main>
         </div>
       </div>
       {/* Global create-issue composer + `c` shortcut — mounted once so any page

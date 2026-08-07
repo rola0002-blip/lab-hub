@@ -115,7 +115,13 @@ export default async function DashboardPage() {
     ? (await prisma.user.findMany({ where: { id: { in: mentionIds } }, select: { id: true, name: true } })).map((u) => [u.id, u.name] as const)
     : [])
 
-  const card = 'rounded-xl border border-border bg-surface p-4 shadow-xs'
+  // `min-w-0` is load-bearing, not decoration: these sections are GRID ITEMS, whose
+  // automatic minimum size is min-content. The attention row below is a flex row with a
+  // `truncate` (white-space: nowrap) project-name cell, so a long project name gives the
+  // row a min-content of ~490px — which the single `<md` column then GROWS to, scrolling
+  // the whole document sideways at 375px. Capping the item's minimum at 0 lets the
+  // truncation do its job. (Gated by the 375px overflow test in e2e/mobile.spec.ts.)
+  const card = 'min-w-0 rounded-xl border border-border bg-surface p-4 shadow-xs'
   const footerLink = 'mt-3 block text-sm text-[var(--text-accent)] hover:underline'
 
   return (

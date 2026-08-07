@@ -1,6 +1,9 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
+import { TZDate } from '@date-fns/tz'
+import { format } from 'date-fns'
 import { wipe, runWizard, signIn, ADMIN, createIssueViaUI, createMemberViaInvite, acceptInvite, db } from './helpers'
+import { ROW_PX_DAY, rowsToRange } from '@/features/booking/grid'
 
 // axe-core accessibility floor. For each core surface — the sign-in page, the
 // dashboard, a channel view, an open modal (the ⌘K command palette), and the
@@ -22,6 +25,39 @@ async function newPage(browser: Browser): Promise<Page> {
     reducedMotion: 'reduce',
   })
   return ctx.newPage()
+}
+
+// v0.14 — the same context at phone size with a COARSE pointer. `hasTouch`/`isMobile`
+// are not cosmetic here: the whole touch half of this wave (tap → draft → handles) is
+// gated on `(pointer: coarse)`, so without them the draft never mounts and the wave's
+// flagship surface would go unaudited behind a passing test. Shares `ipSeq` with
+// `newPage`, so every context in this file still draws a distinct 10.30.x address.
+const PHONE = { width: 375, height: 812 }
+async function phonePageA11y(browser: Browser): Promise<Page> {
+  ipSeq += 1
+  const ctx = await browser.newContext({
+    extraHTTPHeaders: { 'x-forwarded-for': `10.30.${ipSeq}.7` },
+    reducedMotion: 'reduce',
+    viewport: PHONE,
+    hasTouch: true,
+    isMobile: true,
+  })
+  return ctx.newPage()
+}
+
+// A single-day, in-band booking slot eight days out, resolved in ORG time
+// (e2e/mobile.spec.ts:326's `futureSlot`). Rows 6→8 = 10:00–11:00, comfortably inside
+// the schedule's 07:00–23:00 band, so the slot always paints exactly ONE block on
+// exactly one day. Both properties are load-bearing for the schedule audits: a slot
+// outside the band paints no block at all (a vacuous audit), and one that crosses
+// midnight paints a block PER DAY at md+ — two buttons with identical accessible
+// names. `day` is the phone day bar's own index (Monday = 0), for `?day=`.
+const SLOT_ROWS = [6, 8] as const // 10:00–11:00
+async function futureSlot() {
+  const org = await db.organization.findFirstOrThrow()
+  const dateStr = format(new TZDate(new Date(Date.now() + 8 * 86_400_000), org.timezone), 'yyyy-MM-dd')
+  const { start, end } = rowsToRange(dateStr, SLOT_ROWS[0], SLOT_ROWS[1], org.timezone)
+  return { dateStr, start, end, day: (new TZDate(start, org.timezone).getDay() + 6) % 7 }
 }
 
 test.describe.configure({ mode: 'serial' })
@@ -174,13 +210,30 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
 
   // /bookings carrying the add-to-calendar control (spec §4.5). Instant-confirm a
   // booking on a NONE-policy instrument for the signed-in admin so the control renders.
+  //
+  // v0.14: this same row now has to render as a schedule BLOCK for the audit below, so
+  // its instants are pinned to grid rows rather than a bare "now + 24 h" offset — see
+  // `futureSlot` for why an off-band or midnight-crossing slot silently degrades the
+  // schedule audit. /bookings lists every future booking regardless of week, so moving
+  // the slot from +1 d to +8 d leaves this audit's shape untouched.
   const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
   const eqA11y = await db.equipment.create({ data: { name: 'a11y furnace', approvalPolicy: 'NONE' } })
-  const startsA11y = new Date(Date.now() + 24 * 3_600_000)
-  await db.booking.create({ data: { userId: me.id, equipmentId: eqA11y.id, status: 'CONFIRMED', purpose: 'a11y run', startsAt: startsA11y, endsAt: new Date(+startsA11y + 2 * 3_600_000) } })
+  const slotA11y = await futureSlot()
+  await db.booking.create({ data: { userId: me.id, equipmentId: eqA11y.id, status: 'CONFIRMED', purpose: 'a11y run', startsAt: slotA11y.start, endsAt: slotA11y.end } })
   await page.goto('/bookings')
   await expect(page.getByRole('button', { name: 'Add to calendar' }).first()).toBeVisible()
   await auditBothThemes(page, 'bookings')
+
+  // v0.14 — the equipment schedule at DESKTOP width: the seven-column week grid, the
+  // header's new `New booking` trigger, and the booking block, which is a real
+  // focusable button now rather than the `pointer-events-none` décor axe used to skip.
+  // Anchored on the seeded slot's own week (the page only fetches the week it renders)
+  // and gated on the BLOCK as well as the trigger, so this can never pass over an
+  // empty grid. Rooted at <main>: the top bar's avatar menu is also named 'Roland'.
+  await page.goto(`/booking/${eqA11y.id}?week=${slotA11y.dateStr}`)
+  await expect(page.getByRole('button', { name: 'New booking' })).toBeVisible()
+  await expect(page.getByRole('main').getByRole('button', { name: /Roland/ })).toBeVisible()
+  await auditBothThemes(page, 'booking-equipment')
 
   // /admin/settings — About block + (SMTP-unset) no-SMTP indicator + sidebar version.
   await page.goto('/admin/settings')
@@ -328,5 +381,80 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
   await page.keyboard.press('Escape')
 
   await mp.context().close()
+  await page.context().close()
+})
+
+// v0.14 — the phone pass. Everything above audits a 1280px fine-pointer context, which
+// by construction never renders the day view, the touch draft or their 44px controls:
+// the layout swaps at md and the gesture at `(pointer: coarse)`. This third test is the
+// same axe floor applied to the surfaces only a 375px touch device can reach.
+test('phone surfaces: no serious/critical axe violations, both themes', async ({ browser }) => {
+  test.setTimeout(300_000) // five audits × two themes, each on its own navigation
+  const page = await phonePageA11y(browser)
+  await runWizard(page)
+  await signIn(page, ADMIN.email, ADMIN.password)
+  const main = page.getByRole('main')
+
+  // Guard (e2e/mobile.spec.ts:72): a Playwright/Chromium drift that stopped producing
+  // a coarse pointer would leave this test quietly auditing the DESKTOP code paths at a
+  // narrow viewport — a green run that proves nothing about the surfaces it names.
+  expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true)
+
+  // Everything the four surfaces need, seeded straight into the DB (the /files
+  // precedent at :168) — what is under audit is the rendering, not the create paths.
+  // The booker is ADMIN.name = 'Roland', a SINGLE-WORD display name: the avatar
+  // determinism note above makes that load-bearing for every account in this file.
+  const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  const eq = await db.equipment.create({ data: { name: 'a11y furnace', approvalPolicy: 'NONE' } })
+  const slot = await futureSlot()
+  await db.booking.create({ data: { userId: me.id, equipmentId: eq.id, status: 'CONFIRMED', purpose: 'a11y phone run', startsAt: slot.start, endsAt: slot.end } })
+  await db.issue.create({ data: { title: 'A11y phone issue', creatorId: me.id, status: 'TODO', rank: 'a0' } })
+
+  await page.goto('/dashboard')
+  await expect(page.getByRole('heading', { name: 'Welcome, Roland' }).first()).toBeVisible()
+  await auditBothThemes(page, 'phone-dashboard')
+
+  // The day view. Both hooks are SSR-false, so the server paints the seven-column week
+  // and the phone swaps at hydration — the count assertion polls past that first paint.
+  await page.goto(`/booking/${eq.id}?week=${slot.dateStr}&day=${slot.day}`)
+  const dayCol = main.locator('[data-day-col]')
+  await expect(dayCol).toHaveCount(1)
+  const block = main.getByRole('button', { name: /Roland/ })
+  await expect(block).toBeVisible()
+  await auditBothThemes(page, 'phone-booking')
+
+  // Tap an EMPTY row — row 2 is 08:00, and the seeded block owns SLOT_ROWS — so the
+  // draft, both drag handles and the action bar are all on screen (the house
+  // every-new-dialog-gets-audited pattern). The cells are absolutely positioned
+  // children of the column, so one positioned click on the column lands on exactly one
+  // of them; no per-row locator is needed (e2e/mobile.spec.ts:38).
+  await dayCol.click({ position: { x: 40, y: 2 * ROW_PX_DAY + ROW_PX_DAY / 2 } })
+  await expect(main.locator('[data-draft-block]')).toContainText('08:00–09:00')
+  await expect(main.getByRole('button', { name: 'Adjust start time' })).toBeVisible()
+  await expect(main.getByRole('button', { name: 'Adjust end time' })).toBeVisible()
+  await expect(main.getByRole('button', { name: 'Book this draft' })).toBeVisible()
+  await auditBothThemes(page, 'phone-booking-draft')
+
+  // Discarded before the modal audit so `phone-booking-details` is the dialog over a
+  // clean schedule rather than the draft's contrast re-measured through a scrim.
+  await main.getByRole('button', { name: 'Discard draft' }).click()
+  await expect(main.locator('[data-draft-block]')).toHaveCount(0)
+
+  // The block's own modal (role=dialog), reached the way a finger reaches it.
+  await block.click()
+  const details = page.getByRole('dialog', { name: 'Booking details' })
+  await expect(details).toBeVisible()
+  await expect(details.getByText('confirmed')).toBeVisible()
+  await expect(details.getByRole('button', { name: 'Cancel booking' })).toBeVisible()
+  await auditBothThemes(page, 'phone-booking-details')
+  await page.keyboard.press('Escape')
+  await expect(details).toHaveCount(0)
+
+  // /issues below md is the collapsed two-line row (T7), a different DOM from the
+  // eight-track grid the `issues-list` audit above sees.
+  await page.goto('/issues')
+  await expect(main.getByRole('link', { name: /LAB-\d+/ }).first()).toBeVisible()
+  await auditBothThemes(page, 'phone-issues')
+
   await page.context().close()
 })

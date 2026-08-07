@@ -25,8 +25,13 @@ export const metadata: Metadata = {
   icons: { apple: "/apple-touch-icon.png" },
 };
 
+// NO maximumScale / userScalable: pinch zoom is never locked out (WCAG 1.4.4).
 export const viewport: Viewport = {
   themeColor: "#0d9488",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",              // unlocks env(safe-area-inset-*) on iOS
+  interactiveWidget: "resizes-content", // Android keyboard resizes the layout; iOS ignores it (the chat hook covers iOS)
 };
 
 export default function RootLayout({

@@ -46,11 +46,15 @@ export default async function DayViewPage({ searchParams }: { searchParams: Prom
       </div>
       <div className="mt-4 overflow-x-auto rounded-xl border border-border bg-surface">
         <div className="grid min-w-[900px]" style={{ gridTemplateColumns: `48px repeat(${equipment.length}, minmax(140px, 1fr))` }}>
-          <div />
+          {/* Header corner + time gutter freeze against the horizontal scroller, so the
+              hours stay readable while the instrument columns pan under them. The gutter
+              drops `relative` for `sticky`: both are position values (same declaration),
+              and a sticky box is just as valid a containing block for its absolute hours. */}
+          <div className="sticky left-0 z-20 bg-surface" />
           {equipment.map((eq) => (
             <Link key={eq.id} href={`/booking/${eq.id}`} className="border-b border-l border-border p-2 text-center text-sm font-medium text-default transition-colors hover:text-[var(--text-accent)]">{eq.name}</Link>
           ))}
-          <div className="relative" style={{ height }}>
+          <div className="sticky left-0 z-10 bg-surface" style={{ height }}>
             {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => (
               <span key={i} className="absolute right-1 text-[10px] text-subtle" style={{ top: i * PX_PER_HOUR - 6 }}>{String(START_HOUR + i).padStart(2, '0')}:00</span>
             ))}

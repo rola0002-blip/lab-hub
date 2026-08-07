@@ -68,7 +68,11 @@ test('member books instantly via API-backed dialog flow', async ({ page }) => {
   await expect(page.getByText('Book this slot')).toBeVisible()
   await expect(page.getByText('confirm instantly')).toBeVisible()
   await page.fill('input[placeholder*="growth"]', 'e2e run')
-  await page.click('button:has-text("Book")')
+  // Dialog-scoped + exact: `:has-text()` is a case-insensitive SUBSTRING match and
+  // `page.click(css)` is non-strict (first DOM match), so once the header grew a
+  // `New booking` button — which precedes the non-portaled dialog in DOM order —
+  // the old locator clicked the backdrop-covered header button and timed out.
+  await page.getByRole('dialog', { name: 'Book this slot' }).getByRole('button', { name: 'Book', exact: true }).click()
   // SP5 Task 7: an instant confirm no longer closes the dialog — it swaps to a
   // "Booked — …" success state carrying the Add-to-calendar affordance. Assert that
   // confirmed-booking success state in-browser, then close it via Done.

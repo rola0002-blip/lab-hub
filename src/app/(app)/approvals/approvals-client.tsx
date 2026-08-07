@@ -57,7 +57,7 @@ export default function ApprovalsClient({ items, recurring }: { items: ApprovalI
               <p className="text-sm text-muted">First: {r.first.when} — requested by {r.first.requester}</p>
               <p className="text-xs text-subtle">One decision covers all {r.count} occurrences.</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button disabled={pending} onClick={() => approveRule(r.ruleId)}
                 className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-on transition-colors hover:bg-accent-hover disabled:opacity-50">Approve all</button>
               <button disabled={pending} onClick={() => setRejecting(rejecting === r.ruleId ? null : r.ruleId)}
@@ -65,9 +65,11 @@ export default function ApprovalsClient({ items, recurring }: { items: ApprovalI
             </div>
           </div>
           {rejecting === r.ruleId && (
-            <div className="mt-3 flex gap-2">
-              <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (required)"
-                className="flex-1 rounded-md border border-border bg-surface px-3 py-1.5 text-sm" />
+            <div className="mt-3 flex flex-wrap gap-2">
+              {/* placeholder-only was the whole accessible name; `min-w-40` keeps the field
+                  usable once the Confirm button wraps beside it on a narrow row. */}
+              <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (required)" aria-label="Rejection reason"
+                className="min-w-40 flex-1 rounded-md border border-border bg-surface px-3 py-1.5 text-sm" />
               <button disabled={pending || !reason.trim()} onClick={() => rejectRule(r.ruleId, reason)}
                 className="rounded-md bg-[var(--color-danger)] px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50">Confirm reject</button>
             </div>
@@ -85,7 +87,7 @@ export default function ApprovalsClient({ items, recurring }: { items: ApprovalI
               </p>
               {i.purpose && <p className="mt-1 text-sm text-muted">“{i.purpose}”</p>}
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button disabled={pending} onClick={() => approve(i.id)}
                 className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-on transition-colors hover:bg-accent-hover disabled:opacity-50">Approve</button>
               <button disabled={pending} onClick={() => setRejecting(rejecting === i.id ? null : i.id)}
@@ -93,9 +95,9 @@ export default function ApprovalsClient({ items, recurring }: { items: ApprovalI
             </div>
           </div>
           {rejecting === i.id && (
-            <div className="mt-3 flex gap-2">
-              <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (required, shown to requester)"
-                className="flex-1 rounded-md border border-border bg-surface px-3 py-1.5 text-sm" />
+            <div className="mt-3 flex flex-wrap gap-2">
+              <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (required, shown to requester)" aria-label="Rejection reason"
+                className="min-w-40 flex-1 rounded-md border border-border bg-surface px-3 py-1.5 text-sm" />
               <button disabled={pending || !reason.trim()} onClick={() => reject(i.id, reason)}
                 className="rounded-md bg-[var(--color-danger)] px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50">Confirm reject</button>
             </div>
