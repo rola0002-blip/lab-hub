@@ -101,7 +101,7 @@ export default function DraftBlock({ draft, rowPx, onResize, onMove, onBook, onD
       onPointerMove={move} onPointerUp={end} onPointerCancel={end}>
       {/* Body drag surface, doubling as the range label. Rendered FIRST so the
           handles and the action bar stack above it — no z-index anywhere. */}
-      <div className="absolute inset-0 px-1 py-0.5 text-[11px] font-medium text-[var(--text-accent)]"
+      <div className="absolute inset-0 px-1 py-0.5 text-[11px] font-medium text-default"
         onPointerDown={(e) => begin('move', e)}>
         {draftLabel(draft)}
       </div>
