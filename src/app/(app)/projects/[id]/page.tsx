@@ -71,7 +71,9 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       <ProjectHeader project={project} role={user.role} users={users} folders={folders} timezone={timezone} today={today} />
       {/* Omitted entirely with no linked folder — the composer's select is the affordance. */}
       {project.documentFolder && <ProjectFiles folder={project.documentFolder} docs={folderDocs} timezone={timezone} />}
-      <ProjectUpdates updates={updates} users={users} issueRefs={issueRefs} origins={origins} role={user.role} projectId={project.id} timezone={timezone} />
+      {/* selfId (v0.15 §6.4): the row edit/delete affordances are author-scoped,
+          so the feed needs the viewer's identity as well as their role. */}
+      <ProjectUpdates updates={updates} users={users} issueRefs={issueRefs} origins={origins} role={user.role} selfId={user.id} projectId={project.id} timezone={timezone} />
       <IssuesSurface initial={issues} role={user.role} users={users} timezone={timezone} today={today} empty={empty} />
     </div>
   )

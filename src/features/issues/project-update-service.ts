@@ -93,7 +93,7 @@ export async function postProjectUpdate(args: {
 //
 // NOT filtered on deletedAt (v0.15 §6.2), unlike every "latest" pick: a retraction
 // is part of the record, so the feed returns the tombstone (deleted:true, body '')
-// and the UI renders "Update removed" in place. Filtering here would make a delete
+// and the UI renders "update deleted" in place. Filtering here would make a delete
 // look like the update was never written.
 export async function listProjectUpdates(projectId: string): Promise<ProjectUpdateDto[]> {
   const rows = await prisma.projectUpdate.findMany({
