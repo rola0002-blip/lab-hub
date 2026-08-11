@@ -389,7 +389,7 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
 // the layout swaps at md and the gesture at `(pointer: coarse)`. This third test is the
 // same axe floor applied to the surfaces only a 375px touch device can reach.
 test('phone surfaces: no serious/critical axe violations, both themes', async ({ browser }) => {
-  test.setTimeout(300_000) // five audits × two themes, each on its own navigation
+  test.setTimeout(420_000) // seven audits × two themes, each on its own navigation
   const page = await phonePageA11y(browser)
   await runWizard(page)
   await signIn(page, ADMIN.email, ADMIN.password)
@@ -409,6 +409,13 @@ test('phone surfaces: no serious/critical axe violations, both themes', async ({
   const slot = await futureSlot()
   await db.booking.create({ data: { userId: me.id, equipmentId: eq.id, status: 'CONFIRMED', purpose: 'a11y phone run', startsAt: slot.start, endsAt: slot.end } })
   await db.issue.create({ data: { title: 'A11y phone issue', creatorId: me.id, status: 'TODO', rank: 'a0' } })
+  // v0.14.1 — a channel the admin is a member of, carrying one sent message. The
+  // desktop `channel` audit never sees the message toolbar (it is display:none until
+  // hover, and nothing hovers), and the phone pass never visited /chat at all, so the
+  // touch-revealed toolbar had no axe coverage on either side.
+  const chat = await db.conversation.create({ data: { type: 'CHANNEL', name: 'a11y-phone', isPrivate: false, createdById: me.id } })
+  await db.conversationMember.create({ data: { conversationId: chat.id, userId: me.id } })
+  await db.message.create({ data: { conversationId: chat.id, userId: me.id, body: 'Phone chat audit message' } })
 
   await page.goto('/dashboard')
   await expect(page.getByRole('heading', { name: 'Welcome, Roland' }).first()).toBeVisible()
@@ -455,6 +462,22 @@ test('phone surfaces: no serious/critical axe violations, both themes', async ({
   await page.goto('/issues')
   await expect(main.getByRole('link', { name: /LAB-\d+/ }).first()).toBeVisible()
   await auditBothThemes(page, 'phone-issues')
+
+  // A channel on a phone. Reloaded first so markRead has landed and the pane is the
+  // settled, caught-up read state rather than one carrying its own "New messages"
+  // divider (the desktop `channel` audit's idiom at :178).
+  await page.goto(`/chat/${chat.id}`)
+  await expect(main.getByText('Phone chat audit message')).toBeVisible()
+  await page.reload()
+  await expect(main.getByText('Phone chat audit message')).toBeVisible()
+  await auditBothThemes(page, 'phone-chat')
+
+  // …and again with the message toolbar up. On touch it is revealed by FOCUS — a tap
+  // focuses the row (tabIndex) and `group-focus-within` shows that row's toolbar — so
+  // this is the only way the controls reach the accessibility tree on a phone.
+  await main.getByText('Phone chat audit message').tap()
+  await expect(main.getByRole('button', { name: 'Reply in thread' })).toBeVisible()
+  await auditBothThemes(page, 'phone-chat-toolbar')
 
   await page.context().close()
 })

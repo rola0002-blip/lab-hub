@@ -7,6 +7,7 @@ import { dayLabel } from '@/lib/humanize'
 import { Avatar } from '@/components/ui/avatar'
 import { EmptyState } from '@/components/ui/empty-state'
 import { useGlobalHotkey } from '@/components/hooks/use-global-hotkey'
+import { useMediaQuery } from '@/components/hooks/use-media-query'
 import { useChat, dmName } from './chat-store'
 import MessageItem, { type Msg } from './message-item'
 import { IssueRefProvider } from './issue-ref-store'
@@ -63,6 +64,7 @@ function NewMessagesDivider() {
 
 export default function MessagePane({ conversationId, conversationType, channelName, topic, archived, selfRole, manage, memberIds, deepLinkMsgId = null }: Props) {
   const { users, online, selfId, registerConversationHandler } = useChat()
+  const coarse = useMediaQuery('(pointer: coarse)')
   const [messages, setMessages] = useState<Msg[]>([])
   const [hasMore, setHasMore] = useState(false)
   // Initial-load flag so the pane shows skeleton rows (not a blank intro) until
@@ -119,6 +121,26 @@ export default function MessagePane({ conversationId, conversationType, channelN
 
   // Reset the first-load flag when the conversation changes so the next load opens at newest.
   useEffect(() => { firstLoad.current = true }, [conversationId])
+
+  // Touch dismissal for the focus-revealed message toolbar. A tap focuses the row
+  // (tabIndex), which is what reveals its toolbar via group-focus-within — but
+  // WebKit/iOS does not blur the focused element when you tap a non-focusable area,
+  // so the toolbar would stay open until another row is tapped. Coarse-pointer only
+  // (the app's single gesture predicate); on Chromium this merely duplicates the
+  // native blur. `[data-msg-id]` marks a message row in BOTH this pane and the
+  // thread panel, and the emoji picker's fixed catcher is a DOM descendant of its
+  // row — so this never fights an open picker.
+  useEffect(() => {
+    if (!coarse) return
+    const onDoc = (e: PointerEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t?.closest?.('[data-msg-id]')) return
+      const a = document.activeElement as HTMLElement | null
+      if (a?.closest?.('[data-msg-id]')) a.blur()
+    }
+    document.addEventListener('pointerdown', onDoc)
+    return () => document.removeEventListener('pointerdown', onDoc)
+  }, [coarse])
 
   const remove = useCallback((id: string) => {
     setMessages((prev) => prev.filter((m) => m.id !== id))
