@@ -6,6 +6,7 @@ import * as bot from '@/features/bot'
 import { assertCanMutate, canDeleteProject, PolicyError } from './issue-policy'
 import { rankBetween, rebalance, REBALANCE_THRESHOLD } from './rank'
 import { assertAssigneeExists } from './issue-service'
+import { assertFolderExists } from '@/features/documents/document-service'
 import { isEffectiveLead } from './project-health'
 import { PROJECT_UPDATE_ORDER } from './project-update-service'
 import { startOfOrgDay } from './due'
@@ -25,6 +26,10 @@ export type ProjectDto = {
   // v0.12: the grid's manual arrangement key (lowest = front). Every DTO producer
   // fills it, so a card can be reordered straight from a list or a detail read.
   rank: string
+  // v0.15 §5.2: the linked Files folder, or null. REQUIRED like `rank` — every
+  // producer fills it, so the detail page's Files section and the composer's
+  // select read one field, never a second lookup.
+  documentFolder: { id: string; name: string } | null
   createdAt: string; updatedAt: string
 }
 
@@ -33,9 +38,14 @@ export type ProjectDto = {
 // user state leaks into a client component.
 const LEAD_SELECT = { select: { id: true, name: true, image: true, banned: true, isSystem: true, role: true } } as const
 
+// v0.15: the DTO exposes only { id, name } of the folder, so the include is that
+// narrow too — one shape shared by all three producers.
+const FOLDER_SELECT = { select: { id: true, name: true } } as const
+
 type LoadedProject = {
   id: string; name: string; description: string
   lead: { id: string; name: string; image: string | null; banned: boolean; isSystem: boolean; role: string } | null
+  documentFolder: { id: string; name: string } | null
   startDate: Date | null; targetDate: Date | null; status: ProjectStatus; rank: string; createdAt: Date; updatedAt: Date
 }
 
@@ -50,6 +60,7 @@ function toDto(p: LoadedProject, done: number, total: number, extras: Extras): P
     startDate: p.startDate?.toISOString() ?? null, targetDate: p.targetDate?.toISOString() ?? null, status: p.status,
     progress: { done, total, percent: total === 0 ? 0 : Math.round((done / total) * 100) },
     rank: p.rank,
+    documentFolder: p.documentFolder,
     createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString(),
   }
 }
@@ -83,7 +94,7 @@ async function progressFor(projectId: string): Promise<{ done: number; total: nu
 export async function listProjects(now: Date = new Date()): Promise<ProjectDto[]> {
   const tz = await orgTimezone()
   const [projects, totals, dones, overdues, latests] = await Promise.all([
-    prisma.project.findMany({ orderBy: { rank: 'asc' }, include: { lead: LEAD_SELECT } }),
+    prisma.project.findMany({ orderBy: { rank: 'asc' }, include: { lead: LEAD_SELECT, documentFolder: FOLDER_SELECT } }),
     // Two grouped counts instead of N per-project queries. CANCELED issues are
     // excluded from the denominator (same Linear semantics as progressFor).
     prisma.issue.groupBy({ by: ['projectId'], _count: { _all: true }, where: { projectId: { not: null }, status: { not: 'CANCELED' } } }),
@@ -94,16 +105,20 @@ export async function listProjects(now: Date = new Date()): Promise<ProjectDto[]
       by: ['projectId'], _count: { _all: true },
       where: { projectId: { not: null }, status: { in: OPEN_STATUSES }, dueDate: { lt: startOfOrgDay(now, tz) } },
     }),
-    prisma.projectUpdate.groupBy({ by: ['projectId'], _max: { createdAt: true } }),
+    // v0.15 §6.2: a retracted update is not the latest one. BOTH terms of this pair
+    // filter — the group (so a deleted newest row cannot set the max instant and
+    // strand the card with no latest at all) and the follow-up read below (so a
+    // same-instant tie whose winner was retracted falls to its surviving twin).
+    prisma.projectUpdate.groupBy({ by: ['projectId'], _max: { createdAt: true }, where: { deletedAt: null } }),
   ])
   // The newest update per project in ONE follow-up read: group for the max instant,
   // then fetch exactly those (projectId, createdAt) rows for the author name. A
   // same-millisecond tie returns MORE than one row for a project, so the read is
   // ordered by the shared tuple and the first row per project wins below — the same
-  // row getProject and listProjectUpdates call latest.
+  // row getProject calls latest.
   const latestRows = latests.length
     ? await prisma.projectUpdate.findMany({
-        where: { OR: latests.map((l) => ({ projectId: l.projectId, createdAt: l._max.createdAt! })) },
+        where: { deletedAt: null, OR: latests.map((l) => ({ projectId: l.projectId, createdAt: l._max.createdAt! })) },
         orderBy: PROJECT_UPDATE_ORDER,
         include: { author: { select: { name: true } } },
       })
@@ -121,13 +136,15 @@ export async function listProjects(now: Date = new Date()): Promise<ProjectDto[]
 // The same three reads as listProjects, scoped to one id — one DTO shape, one
 // definition of each field, whichever page you land on.
 export async function getProject(id: string, now: Date = new Date()): Promise<ProjectDto | null> {
-  const p = await prisma.project.findUnique({ where: { id }, include: { lead: LEAD_SELECT } })
+  const p = await prisma.project.findUnique({ where: { id }, include: { lead: LEAD_SELECT, documentFolder: FOLDER_SELECT } })
   if (!p) return null
   const tz = await orgTimezone()
   const [progress, openOverdue, latest] = await Promise.all([
     progressFor(id),
     prisma.issue.count({ where: { projectId: id, status: { in: OPEN_STATUSES }, dueDate: { lt: startOfOrgDay(now, tz) } } }),
-    prisma.projectUpdate.findFirst({ where: { projectId: id }, orderBy: PROJECT_UPDATE_ORDER, include: { author: { select: { name: true } } } }),
+    // deletedAt: null — same latest-pick rule as listProjects (v0.15 §6.2); the
+    // detail page and the card must never disagree about which row is latest.
+    prisma.projectUpdate.findFirst({ where: { projectId: id, deletedAt: null }, orderBy: PROJECT_UPDATE_ORDER, include: { author: { select: { name: true } } } }),
   ])
   return toDto(p, progress.done, progress.total, { latestUpdate: toLatestUpdate(latest), openOverdue })
 }
@@ -165,11 +182,15 @@ async function assertLeadExists(id: string): Promise<void> {
 export async function createProject(args: {
   actorId: string; role: Role; name: string; description?: string
   leadId?: string | null; startDate?: Date | null; targetDate?: Date | null; status?: ProjectStatus
+  documentFolderId?: string | null
 }): Promise<ProjectDto> {
   assertCanMutate(args.role)
   const name = validateName(args.name)
   validateDateOrder(args.startDate ?? null, args.targetDate ?? null)
   if (args.leadId != null) await assertLeadExists(args.leadId) // '' is falsy but IS stored — guard on null, not truthiness
+  // v0.15: a folder that no longer exists is a PolicyError('invalid') → 400, never a
+  // raw FK violation. Same `!= null` guard as the lead (undefined and null both skip).
+  if (args.documentFolderId != null) await assertFolderExists(args.documentFolderId)
   // A new project lands at the FRONT of the arrangement (an empty table yields a
   // null bound, which rankBetween reads as "no neighbour" on that side).
   // No REBALANCE_THRESHOLD guard here, unlike moveProject — deliberate. Repeated
@@ -182,9 +203,10 @@ export async function createProject(args: {
     data: {
       name, description: (args.description ?? '').slice(0, 4000),
       leadId: args.leadId ?? null, startDate: args.startDate ?? null, targetDate: args.targetDate ?? null, status: args.status ?? 'ACTIVE',
+      documentFolderId: args.documentFolderId ?? null,
       rank: rankBetween(null, front?.rank ?? null),
     },
-    include: { lead: LEAD_SELECT },
+    include: { lead: LEAD_SELECT, documentFolder: FOLDER_SELECT },
   })
   void bot.announceToChannel(`New project: ${p.name} — /projects/${p.id}`, args.actorId)
   // A just-created project provably has no issues and no updates, so the extras are
@@ -195,6 +217,7 @@ export async function createProject(args: {
 export async function updateProject(args: {
   actorId: string; role: Role; id: string; name?: string; description?: string
   leadId?: string | null; startDate?: Date | null; targetDate?: Date | null; status?: ProjectStatus
+  documentFolderId?: string | null
 }): Promise<ProjectDto> {
   assertCanMutate(args.role)
   const existing = await prisma.project.findUnique({ where: { id: args.id } })
@@ -209,6 +232,8 @@ export async function updateProject(args: {
   // `!= null` skips undefined (untouched) and null (clear) only; the update spread is
   // keyed on `!== undefined`, so a falsy-but-present '' would otherwise be written.
   if (args.leadId != null) await assertLeadExists(args.leadId)
+  // v0.15: null unlinks, undefined leaves the link alone, a string must resolve.
+  if (args.documentFolderId != null) await assertFolderExists(args.documentFolderId)
   // No lead include here: the DTO is re-read through getProject below (it fills the
   // §4.7 extras), so this write only needs the fields the announce reads.
   const p = await prisma.project.update({
@@ -220,6 +245,7 @@ export async function updateProject(args: {
       ...(args.startDate !== undefined ? { startDate: args.startDate } : {}),
       ...(args.targetDate !== undefined ? { targetDate: args.targetDate } : {}),
       ...(args.status !== undefined ? { status: args.status } : {}),
+      ...(args.documentFolderId !== undefined ? { documentFolderId: args.documentFolderId } : {}),
     },
   })
   // Announce lead / startDate / targetDate changes (not name/description/status).

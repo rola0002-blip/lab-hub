@@ -160,7 +160,7 @@ test('sign-in: no serious/critical axe violations, both themes', async ({ browse
 })
 
 test('app surfaces: no serious/critical axe violations, both themes', async ({ browser }) => {
-  test.setTimeout(540_000) // core + SP4 + SP5 (files/bookings) + SP6 (settings/people) + SP8 (health projects + update modal) + v0.11 (back button + delete confirm) + v0.13 (feedback admin/member/composer, which also provisions a member via invite), each audited in both themes
+  test.setTimeout(570_000) // 21 audits: core + SP4 + SP5 (files/bookings) + SP6 (settings/people) + SP8 (health projects + update modal) + v0.11 (back button + delete confirm) + v0.13 (feedback admin/member/composer, which also provisions a member via invite) + v0.15 (booking catalogue), each audited in both themes
   const page = await newPage(browser)
   await runWizard(page)
   await signIn(page, ADMIN.email, ADMIN.password)
@@ -234,6 +234,19 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
   await expect(page.getByRole('button', { name: 'New booking' })).toBeVisible()
   await expect(page.getByRole('main').getByRole('button', { name: /Roland/ })).toBeVisible()
   await auditBothThemes(page, 'booking-equipment')
+
+  // v0.15 — the /booking CATALOGUE, audited here for the first time: the segmented
+  // sections and the manager rows the certification band now carries. A second,
+  // cert-required instrument WITH a manager is seeded so both bands render (the open
+  // `eqA11y` above supplies "Available to you") — an unmanaged lab would audit a page
+  // shape that is missing the very rows this pass exists for. The admin is NOT exempt
+  // from certification (policy.ts:37), so this account lands in the band itself.
+  const eqCert = await db.equipment.create({ data: { name: 'a11y AFM', certificationRequired: true, approvalPolicy: 'NONE' } })
+  await db.equipmentManager.create({ data: { userId: me.id, equipmentId: eqCert.id } })
+  await page.goto('/booking')
+  await expect(page.getByRole('heading', { name: 'Available to you' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Needs certification' })).toBeVisible()
+  await auditBothThemes(page, 'booking-catalogue')
 
   // /admin/settings — About block + (SMTP-unset) no-SMTP indicator + sidebar version.
   await page.goto('/admin/settings')

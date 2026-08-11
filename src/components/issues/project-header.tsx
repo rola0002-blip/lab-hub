@@ -21,7 +21,7 @@ import type { Role } from '@/lib/session'
 
 const STATUS_VARIANT = { ACTIVE: 'success', PAUSED: 'warning', COMPLETED: 'neutral', CANCELED: 'danger' } as const
 type Opt = { id: string; name: string }
-export function ProjectHeader({ project, role, users, timezone, today }: { project: ProjectDto; role: Role; users: Opt[]; timezone: string; today: string }) {
+export function ProjectHeader({ project, role, users, folders, timezone, today }: { project: ProjectDto; role: Role; users: Opt[]; folders: Opt[]; timezone: string; today: string }) {
   const router = useRouter()
   const [editing, setEditing] = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
@@ -92,7 +92,7 @@ export function ProjectHeader({ project, role, users, timezone, today }: { proje
       </div>
       <div className="max-w-xs"><ProgressBar {...project.progress} /></div>
 
-      {editing && <ProjectComposer users={users} existing={project} onClose={() => setEditing(false)} />}
+      {editing && <ProjectComposer users={users} folders={folders} existing={project} onClose={() => setEditing(false)} />}
       {confirmDel && (
         <Modal title="Delete project?" onClose={() => setConfirmDel(false)}>
           <p className="text-sm text-muted">

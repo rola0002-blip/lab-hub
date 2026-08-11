@@ -408,14 +408,14 @@ enum IssuePriority {
 }
 
 model Project {
-  id                       String        @id @default(cuid())
+  id                       String          @id @default(cuid())
   name                     String
-  description              String        @default("")
+  description              String          @default("")
   leadId                   String?
-  lead                     User?         @relation("ProjectLead", fields: [leadId], references: [id], onDelete: SetNull)
+  lead                     User?           @relation("ProjectLead", fields: [leadId], references: [id], onDelete: SetNull)
   startDate                DateTime?
   targetDate               DateTime?
-  status                   ProjectStatus @default(ACTIVE)
+  status                   ProjectStatus   @default(ACTIVE)
   // Fractional-index arrangement key for the /projects grid. COLLATE "C" (set in
   // the migration) so Postgres orders it by byte = base-62 order (rank.ts).
   // Lowest key = front. One sequence across all statuses; the closed grid ignores it.
@@ -428,8 +428,12 @@ model Project {
   // SP8: snooze — anchored to a prompt instant + 1ms (update-prompt.ts nthPromptAfter),
   // never a rolling 7 days. null = not paused.
   updatePromptsPausedUntil DateTime?
-  createdAt                DateTime      @default(now())
-  updatedAt                DateTime      @updatedAt
+  // v0.15: the Files folder backing this project. Nullable, NOT unique — one shared
+  // folder may back several projects; deleting it detaches them (SetNull).
+  documentFolderId         String?
+  documentFolder           DocumentFolder? @relation(fields: [documentFolderId], references: [id], onDelete: SetNull)
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
 
   issues         Issue[]
   projectUpdates ProjectUpdate[]
@@ -437,6 +441,7 @@ model Project {
   @@index([status])
   @@index([leadId])
   @@index([rank])
+  @@index([documentFolderId])
 }
 
 model ProjectUpdate {
@@ -453,6 +458,11 @@ model ProjectUpdate {
   body            String // ≤ 4000, enforced in project-update-service
   originMessageId String?
   originMessage   Message?      @relation("ProjectUpdateOrigin", fields: [originMessageId], references: [id], onDelete: SetNull)
+  // v0.15 §6.1: author edit + soft delete, the Message/IssueComment shape. The
+  // tombstone keeps the row (feed history is never erased) and blanks the body;
+  // every "latest update" read filters deletedAt: null.
+  editedAt        DateTime?
+  deletedAt       DateTime?
   createdAt       DateTime      @default(now())
 
   @@index([projectId, createdAt])
@@ -569,6 +579,7 @@ model DocumentFolder {
   createdAt   DateTime @default(now())
 
   documents Document[]
+  projects  Project[] // v0.15: back-relation for Project.documentFolderId (no unique — a folder may back several)
 }
 
 model Document {

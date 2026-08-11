@@ -352,3 +352,81 @@ test('6: the org update-prompt cadence controls are Monday-first over getDay() v
   await expect(firstDay).toHaveAttribute('value', '1')
   await expect(page.locator('select[name=updatePromptHour] option')).toHaveCount(24)
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v0.15 §6.4 — the author corrects, then retracts, the newest update on the project
+// tests 1 and 2 built. LAST in the serial file BY DESIGN: it rewrites and then
+// tombstones that project's latest update, which tests 3–5 read (test 5 places
+// Graphene growth in the no_lead bucket off its fresh ON_TRACK update).
+test('7: an author edits then retracts an update; the header falls back to the previous one', async ({ browser }) => {
+  test.setTimeout(120_000)
+  const page = await newPage(browser)
+  await signIn(page, ADMIN.email, ADMIN.password) // the admin authored BOTH updates
+  await page.goto(`/projects/${projectId}`)
+
+  // Test 2's captured update is the newest row (ON_TRACK); test 1's AT_RISK update
+  // sits under it and is what the header must fall back to after the retraction.
+  // The row is pinned by its ORIGIN CHIP, the one thing that survives both the body
+  // rewrite and the health change — a body-text filter would stop matching the moment
+  // the correction lands, and the tombstone drops the chip anyway.
+  const row = main(page).getByRole('listitem').filter({ hasText: 'From a message in #growth' })
+  await expect(row.getByText('Growth 14 looks textured')).toBeVisible()
+  await expect(main(page).getByText('(edited)')).toHaveCount(0)
+
+  // ── Correct it: new words AND a new health call ────────────────────────────
+  await row.getByRole('button', { name: 'Update actions' }).click()
+  await row.getByRole('menuitem', { name: 'Edit', exact: true }).click()
+  const editor = row.getByRole('textbox', { name: 'Update' })
+  await expect(editor).toHaveValue(/Growth 14 looks textured/) // prefilled with the stored body
+  await editor.fill('Correction: the texture was substrate roughness, not growth.')
+  // A label-wrapped <select> is located by ROLE, never getByLabel (which matches
+  // the option text) — the v0.14 harness rule.
+  await row.getByRole('combobox', { name: 'Health' }).selectOption('OFF_TRACK')
+  await row.getByRole('button', { name: 'Save' }).click()
+
+  await expect(row.getByText('Correction: the texture was substrate roughness')).toBeVisible()
+  await expect(main(page).getByText('Growth 14 looks textured')).toHaveCount(0)
+  await expect(row.getByText('Off track', { exact: true })).toBeVisible() // the row's own chip
+  await expect(row.getByText('(edited)')).toBeVisible()
+  // An edit is silent but not invisible: the header health chip reads the latest
+  // update, so the whole page agrees on the new call (row + header = 2).
+  await expect(main(page).getByText('Off track', { exact: true })).toHaveCount(2)
+
+  // ── Retract it: a tombstone, not a hole ────────────────────────────────────
+  await row.getByRole('button', { name: 'Update actions' }).click()
+  await row.getByRole('menuitem', { name: 'Delete', exact: true }).click()
+  const confirm = page.getByRole('dialog', { name: 'Delete this update?' })
+  await expect(confirm).toBeVisible()
+  await confirm.getByRole('button', { name: 'Delete update' }).click()
+  await expect(confirm).toBeHidden()
+
+  const tomb = main(page).getByRole('listitem').filter({ hasText: 'update deleted' })
+  await expect(tomb).toBeVisible()
+  await expect(main(page).getByText('Correction: the texture was substrate roughness')).toHaveCount(0)
+  // The retracted health call goes with the words — chip, origin chip and the row
+  // menu are all gone, so nothing on the tombstone is actionable or judgemental.
+  await expect(tomb.getByText('Off track', { exact: true })).toHaveCount(0)
+  await expect(tomb.getByRole('link', { name: /From a message in #growth/ })).toHaveCount(0)
+  await expect(tomb.getByRole('button', { name: 'Update actions' })).toHaveCount(0)
+  // The header (and every "latest update" read behind it) falls back to test 1's
+  // surviving AT_RISK update — the retracted OFF_TRACK is gone from the page.
+  await expect(main(page).getByText('Off track', { exact: true })).toHaveCount(0)
+  await expect(main(page).getByText('At risk', { exact: true })).toHaveCount(2) // header + the surviving row
+
+  // ── The demoted-author hole ────────────────────────────────────────────────
+  // canDeleteProjectUpdate keeps the comment-predicate shape (author-or-admin, no
+  // guest term) because assertCanMutate refuses guests upstream — so a guest DOES
+  // satisfy it on a row they authored. Seed exactly that row for the guest test 5
+  // invited and prove the menu is gated on `role` too: the affordance must not
+  // appear where it could only ever 403. Deliberately LAST — this update is newer
+  // than the two above and would have moved the header chip.
+  const guestId = (await db.user.findFirstOrThrow({ where: { email: 'guest@lab.test' } })).id
+  await db.projectUpdate.create({ data: { projectId, authorId: guestId, health: 'ON_TRACK', body: 'Guest-authored line from before the demotion.' } })
+  const gp = await newPage(browser)
+  await signIn(gp, 'guest@lab.test', PASS)
+  await gp.goto(`/projects/${projectId}`)
+  const ownRow = main(gp).getByRole('listitem').filter({ hasText: 'Guest-authored line' })
+  await expect(ownRow).toBeVisible()
+  await expect(ownRow.getByRole('button', { name: 'Update actions' })).toHaveCount(0)
+  await gp.context().close()
+})

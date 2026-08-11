@@ -15,13 +15,17 @@ const statusLabel = (s: ProjectStatus) => s.charAt(0) + s.slice(1).toLowerCase()
 const FIELD = 'mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-default focus-visible:border-[var(--border-focus)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]'
 const SELECT = 'mt-1 w-full rounded-md border border-border bg-surface px-2 py-2 text-sm text-default focus-visible:border-[var(--border-focus)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]'
 
-export function ProjectComposer({ users, existing, onClose }: {
-  users: Opt[]; existing?: ProjectDto; onClose: () => void
+export function ProjectComposer({ users, folders, existing, onClose }: {
+  users: Opt[]; folders: Opt[]; existing?: ProjectDto; onClose: () => void
 }) {
   const router = useRouter()
   const [name, setName] = useState(existing?.name ?? '')
   const [description, setDescription] = useState(existing?.description ?? '')
   const [leadId, setLeadId] = useState<string | null>(existing?.lead?.id ?? null)
+  // v0.15 §5.3 — null (never '') is the unlink value: the service validates any
+  // non-null id, so an empty string reaches assertFolderExists and 400s instead of
+  // clearing the link. Normalised at the boundary, exactly like leadId below.
+  const [documentFolderId, setDocumentFolderId] = useState<string | null>(existing?.documentFolder?.id ?? null)
   const [startDate, setStartDate] = useState(existing?.startDate ? existing.startDate.slice(0, 10) : '')
   const [targetDate, setTargetDate] = useState(existing?.targetDate ? existing.targetDate.slice(0, 10) : '')
   const [status, setStatus] = useState<ProjectStatus>(existing?.status ?? 'ACTIVE')
@@ -30,9 +34,16 @@ export function ProjectComposer({ users, existing, onClose }: {
   function submit() {
     const n = name.trim(); if (!n) { toast('Enter a project name.'); return }
     start(async () => {
-      const input = { name: n, description, leadId, startDate: startDate || null, targetDate: targetDate || null, status }
+      const input = { name: n, description, leadId, documentFolderId, startDate: startDate || null, targetDate: targetDate || null, status }
       const r = existing ? await updateProjectAction(existing.id, input) : await createProjectAction(input)
-      if (r.ok) { onClose(); if (!existing) router.push(`/projects/${r.data.id}`) }
+      if (r.ok) {
+        onClose()
+        // Create navigates; edit stays put. run() revalidates the LIST routes only —
+        // never `/projects/[id]`, the route an edit is usually made from — so the
+        // detail page asks for its own repaint rather than leaning on Next's
+        // post-action router-cache invalidation (which happens to cover it today).
+        if (existing) router.refresh(); else router.push(`/projects/${r.data.id}`)
+      }
       else toast(r.message)
     })
   }
@@ -63,6 +74,18 @@ export function ProjectComposer({ users, existing, onClose }: {
           <label className="block text-sm text-default">Target date
             <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} className={SELECT} />
           </label>
+          {/* The hint is a SIBLING of the label, not inside it: everything a label wraps
+              joins the control's accessible name, and this cell is the field's own grid
+              slot so the line still reads directly under the select. */}
+          <div>
+            <label className="block text-sm text-default">Files folder
+              <select value={documentFolderId ?? ''} onChange={(e) => setDocumentFolderId(e.target.value || null)} className={SELECT}>
+                <option value="">No folder</option>
+                {folders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+            </label>
+            <p className="mt-1 text-xs text-subtle">Folders are shared workspace-wide — linking does not restrict access.</p>
+          </div>
         </div>
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} className="rounded-md border border-border px-3 py-1.5 text-sm text-default hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">Cancel</button>
@@ -75,14 +98,14 @@ export function ProjectComposer({ users, existing, onClose }: {
   )
 }
 
-export function NewProjectButton({ users }: { users: Opt[] }) {
+export function NewProjectButton({ users, folders }: { users: Opt[]; folders: Opt[] }) {
   const [open, setOpen] = useState(false)
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-on hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
         <Plus size={15} aria-hidden />New project
       </button>
-      {open && <ProjectComposer users={users} onClose={() => setOpen(false)} />}
+      {open && <ProjectComposer users={users} folders={folders} onClose={() => setOpen(false)} />}
     </>
   )
 }

@@ -23,6 +23,9 @@ const createProjectSchema = z.object({
   name: z.string().trim().min(1, 'Enter a project name.').max(120, 'Project name must be 1–120 characters.'),
   description: z.string().max(4000).optional(),
   leadId: z.string().nullish(),
+  // v0.15 §5.3 — same tri-state as leadId: an id links, null unlinks, undefined
+  // (omitted on update) leaves the link alone. The service validates the id.
+  documentFolderId: z.string().nullish(),
   startDate: projectDate,
   targetDate: projectDate,
   status: projectStatus.optional(),
@@ -84,17 +87,17 @@ export async function updateDescriptionAction(issueId: string, description: stri
 export async function createLabelAction(name: string, color: string) {
   return run((u) => issues.createLabel({ actorId: u.id, role: u.role, name, color }))
 }
-export async function createProjectAction(input: { name: string; description?: string; leadId?: string | null; startDate?: string | null; targetDate?: string | null; status?: ProjectStatus }) {
+export async function createProjectAction(input: { name: string; description?: string; leadId?: string | null; documentFolderId?: string | null; startDate?: string | null; targetDate?: string | null; status?: ProjectStatus }) {
   const parsed = createProjectSchema.safeParse(input)
   if (!parsed.success) return { ok: false as const, message: firstIssue(parsed.error) }
   const v = parsed.data
-  return run((u) => projects.createProject({ actorId: u.id, role: u.role, name: v.name, description: v.description, leadId: v.leadId ?? null, startDate: toDate(v.startDate) ?? null, targetDate: toDate(v.targetDate) ?? null, status: v.status }))
+  return run((u) => projects.createProject({ actorId: u.id, role: u.role, name: v.name, description: v.description, leadId: v.leadId ?? null, documentFolderId: v.documentFolderId ?? null, startDate: toDate(v.startDate) ?? null, targetDate: toDate(v.targetDate) ?? null, status: v.status }))
 }
-export async function updateProjectAction(id: string, input: { name?: string; description?: string; leadId?: string | null; startDate?: string | null; targetDate?: string | null; status?: ProjectStatus }) {
+export async function updateProjectAction(id: string, input: { name?: string; description?: string; leadId?: string | null; documentFolderId?: string | null; startDate?: string | null; targetDate?: string | null; status?: ProjectStatus }) {
   const parsed = updateProjectSchema.safeParse(input)
   if (!parsed.success) return { ok: false as const, message: firstIssue(parsed.error) }
   const v = parsed.data
-  return run((u) => projects.updateProject({ actorId: u.id, role: u.role, id, name: v.name, description: v.description, leadId: v.leadId, startDate: toDate(v.startDate), targetDate: toDate(v.targetDate), status: v.status }))
+  return run((u) => projects.updateProject({ actorId: u.id, role: u.role, id, name: v.name, description: v.description, leadId: v.leadId, documentFolderId: v.documentFolderId, startDate: toDate(v.startDate), targetDate: toDate(v.targetDate), status: v.status }))
 }
 export async function deleteProjectAction(id: string) {
   return run((u) => projects.deleteProject({ role: u.role, id }))
@@ -145,6 +148,30 @@ export async function postProjectUpdateAction(input: { projectId: string; health
   if (!parsed.success) return { ok: false as const, message: parsed.error.issues[0]?.message ?? 'Invalid update.' }
   const v = parsed.data
   return run((u) => updates.postProjectUpdate({ projectId: v.projectId, actorId: u.id, role: u.role, health: v.health, body: v.body, originMessageId: v.originMessageId ?? null }))
+}
+// v0.15 §6.3 — correction and retraction. The body/health shapes are postUpdateSchema's
+// exactly (one contract whether the composer is writing or rewriting); there is no
+// projectId term, because the update id names the row and the service re-derives both
+// the project and the author from it — a forged projectId could never widen access.
+const editUpdateSchema = postUpdateSchema.pick({ health: true, body: true })
+// The id is an RPC argument like any other (the `weeks: 1 | 4` lesson below): the
+// `string` type is a compile-time claim only, and a forged non-string reaches Prisma
+// as-is — a PrismaClientValidationError, i.e. a 500, instead of the { ok:false, message }
+// contract every other arm honours. A malformed id can never name a row, so it reads
+// back as the service's own miss message rather than inventing a second phrasing.
+const updateIdSchema = z.string().min(1)
+export async function editProjectUpdateAction(updateId: string, input: { body: string; health: ProjectHealth }) {
+  const id = updateIdSchema.safeParse(updateId)
+  if (!id.success) return { ok: false as const, message: 'Update not found.' }
+  const parsed = editUpdateSchema.safeParse(input)
+  if (!parsed.success) return { ok: false as const, message: parsed.error.issues[0]?.message ?? 'Invalid update.' }
+  const v = parsed.data
+  return run((u) => updates.editProjectUpdate({ updateId: id.data, actorId: u.id, role: u.role, health: v.health, body: v.body }))
+}
+export async function deleteProjectUpdateAction(updateId: string) {
+  const id = updateIdSchema.safeParse(updateId)
+  if (!id.success) return { ok: false as const, message: 'Update not found.' }
+  return run((u) => updates.deleteProjectUpdate({ updateId: id.data, actorId: u.id, role: u.role }))
 }
 // `weeks: 1 | 4` is a compile-time claim only — a Server Action is an RPC endpoint,
 // so the value must be re-checked at runtime. Unvalidated, a forged `1e9` hands

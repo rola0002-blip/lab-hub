@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { db, wipe, runWizard, signIn, signOut, ADMIN, latestInviteToken } from './helpers'
+import { db, wipe, runWizard, signIn, signOut, ADMIN, latestInviteToken, createMemberViaInvite, acceptInvite } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -149,4 +149,48 @@ test('certification gate blocks, then unlocks after granting', async ({ page }) 
     data: { equipmentId: eq.id, startsAt: starts, endsAt: new Date(+starts + 3_600_000), purpose: 'x' },
   })
   expect(ok.status()).toBe(201)
+})
+
+test('catalogue segments by certification and names the managers', async ({ page }) => {
+  await runWizard(page)
+  const admin = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  const afm = await db.equipment.create({ data: { name: 'Atomic force microscope', certificationRequired: true, approvalPolicy: 'NONE' } })
+  await db.equipment.create({ data: { name: 'Optical bench', approvalPolicy: 'NONE' } })
+  // Roland manages the AFM — the name the "Needs certification" band has to surface,
+  // turning "Ask an equipment manager" into someone the member can actually ask.
+  await db.equipmentManager.create({ data: { userId: admin.id, equipmentId: afm.id } })
+
+  // Run as a MEMBER. Certification is the one policy an admin does NOT bypass
+  // (policy.ts:37), but the catalogue's job is the ordinary user's view of it.
+  await signIn(page, ADMIN.email, ADMIN.password)
+  const token = await createMemberViaInvite(page, 'catalogue@lab.test', 'member')
+  await signOut(page)
+  await acceptInvite(page, token, 'Mira', 'MemberPass!1234')
+
+  await page.goto('/booking')
+  // The sections carry no accessible name of their own, so each is scoped by the
+  // heading it owns. Rooted at <main>: Next's dev SSR leaves a hidden duplicate of
+  // the streamed tree in `div#S:0`, which a bare CSS locator would also match.
+  const main = page.getByRole('main')
+  const certification = main.locator('section', { has: page.getByRole('heading', { name: 'Needs certification' }) })
+  const available = main.locator('section', { has: page.getByRole('heading', { name: 'Available to you' }) })
+  await expect(certification.getByText('Atomic force microscope')).toBeVisible()
+  await expect(certification.getByText('Ask an equipment manager to certify you.')).toBeVisible()
+  await expect(certification.getByText('Roland')).toBeVisible() // the manager, named on the card
+  await expect(available.getByText('Optical bench')).toBeVisible()
+
+  // Granting the certification moves the instrument between bands — the segmentation
+  // tracks what this viewer may actually book, not a static property of the machine.
+  const member = await db.user.findFirstOrThrow({ where: { email: 'catalogue@lab.test' } })
+  await db.certification.create({ data: { userId: member.id, equipmentId: afm.id, grantedById: admin.id } })
+  await page.reload()
+  await expect(available.getByText('Atomic force microscope')).toBeVisible()
+  await expect(main.getByRole('heading', { name: 'Needs certification' })).toHaveCount(0)
+
+  // The second naming site: the instrument's own Policy aside, which names the
+  // managers whenever the instrument requires certification (granted or not).
+  await page.goto(`/booking/${afm.id}`)
+  const aside = main.locator('aside')
+  await expect(aside.getByRole('heading', { name: 'Managers' })).toBeVisible()
+  await expect(aside.getByText('Roland')).toBeVisible()
 })

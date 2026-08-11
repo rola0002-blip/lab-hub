@@ -20,6 +20,11 @@ test.beforeAll(async () => { await wipe(); await seedSystem() })
 
 const PDF = Buffer.from('%PDF-1.4\n%COLOSSUS e2e\n', 'utf8')
 
+// v0.15 §5.3 — the project↔folder tests below share the project the linking test
+// creates (serial file, one database).
+const PROJECT = 'Graphene growth'
+let projectId = ''
+
 test('admin uploads a file on /files; it appears and posts to #lab-updates', async ({ browser }) => {
   const page = await newPage(browser)
   await runWizard(page)
@@ -107,4 +112,85 @@ test('a guest sees the Files nav + table but no upload or row-menu affordances',
   await expect(gp.getByRole('button', { name: /actions/ })).toHaveCount(0)           // no row/folder menu
   await expect(gp.getByRole('button', { name: 'New folder' })).toHaveCount(0)        // no folder creation
   await guestCtx.close()
+})
+
+// ── v0.15 §5.3 — project ↔ Files folder ──────────────────────────────────────
+test('a project links a Files folder and shows that folder on its page', async ({ browser }) => {
+  const page = await newPage(browser)
+  await signIn(page, ADMIN.email, ADMIN.password)
+
+  // A folder with one file of its own. The root file uploaded by test 1 stays where
+  // it is — it is the control that proves the card lists the FOLDER, not every file.
+  await page.goto('/files')
+  await page.getByRole('button', { name: 'New folder' }).click()
+  await page.getByLabel('Name').fill('Protocols')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await page.getByRole('link', { name: 'Protocols' }).click()
+  await expect(page).toHaveURL(/\/files\?folder=/)
+  await page.locator('input[type=file]').setInputFiles({ name: 'CVD recipe.pdf', mimeType: 'application/pdf', buffer: PDF })
+  await expect(page.getByRole('link', { name: 'CVD recipe.pdf' })).toBeVisible()
+
+  await page.goto('/projects')
+  await page.getByRole('button', { name: 'New project' }).click()
+  await page.getByLabel('Name').fill(PROJECT)
+  await page.getByRole('button', { name: 'Create project' }).click()
+  await page.waitForURL(/\/projects\/[^/]+$/)
+  projectId = new URL(page.url()).pathname.split('/').pop()!
+  // No folder linked yet ⇒ no card at all (the select is the affordance, §5.3).
+  await expect(page.getByRole('heading', { name: /^Files in / })).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Project actions' }).click()
+  await page.getByRole('menuitem', { name: 'Edit project' }).click()
+  await expect(page.getByRole('dialog', { name: 'Edit project' })).toBeVisible()
+  // A label-wrapped <select> is located by role — getByLabel would match option text.
+  await page.getByRole('combobox', { name: 'Files folder' }).selectOption({ label: 'Protocols' })
+  await page.getByRole('button', { name: 'Save project' }).click()
+
+  // Repainted in place — no reload between the Save and these assertions.
+  await expect(page.getByRole('heading', { name: 'Files in Protocols' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'CVD recipe.pdf' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'graphene SOP.pdf' })).toHaveCount(0) // root file, other folder
+
+  await page.getByRole('link', { name: 'Open in Files' }).click()
+  await expect(page).toHaveURL(/\/files\?folder=/)
+  await expect(page.getByRole('link', { name: 'Protocols' })).toHaveAttribute('aria-current', 'page') // scoped, not "All files"
+  await expect(page.getByRole('link', { name: 'CVD recipe.pdf' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'graphene SOP.pdf' })).toHaveCount(0)
+})
+
+test('a guest sees the linked-folder card read-only, with no way to change the link', async ({ browser }) => {
+  const gp = await newPage(browser)
+  await signIn(gp, 'guest@lab.test', 'Str0ngPass!123') // invited + accepted by the guest test above
+  await gp.goto(`/projects/${projectId}`)
+  await expect(gp.getByRole('heading', { name: PROJECT })).toBeVisible()
+  // Browse + download are open to guests by documents-policy, so the card is identical…
+  await expect(gp.getByRole('heading', { name: 'Files in Protocols' })).toBeVisible()
+  await expect(gp.getByRole('link', { name: 'CVD recipe.pdf' })).toBeVisible()
+  await expect(gp.getByRole('link', { name: 'Open in Files' })).toBeVisible()
+  // …but nothing on this page can re-link it: guests get no project-actions menu at
+  // all, so the composer — and its "Files folder" select — is unreachable.
+  await expect(gp.getByRole('button', { name: 'Project actions' })).toHaveCount(0)
+  await expect(gp.getByRole('combobox', { name: 'Files folder' })).toHaveCount(0)
+})
+
+test('"No folder" unlinks the folder (it submits null, never an empty string)', async ({ browser }) => {
+  const page = await newPage(browser)
+  await signIn(page, ADMIN.email, ADMIN.password)
+  await page.goto(`/projects/${projectId}`)
+  await page.getByRole('button', { name: 'Project actions' }).click()
+  await page.getByRole('menuitem', { name: 'Edit project' }).click()
+  await page.getByRole('combobox', { name: 'Files folder' }).selectOption({ label: 'No folder' })
+  await page.getByRole('button', { name: 'Save project' }).click()
+  // An empty-string id would reach assertFolderExists and be REFUSED — the dialog
+  // would stay open under a "That folder no longer exists." toast, and the card
+  // would survive. Both halves are asserted: the write went through…
+  await expect(page.getByRole('dialog', { name: 'Edit project' })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'Files in Protocols' })).toHaveCount(0)
+  // …and it was the LINK that was cleared, not just the paint (the folder itself is
+  // untouched — it and its file are still on /files).
+  await page.reload()
+  await expect(page.getByRole('heading', { name: /^Files in / })).toHaveCount(0)
+  await page.goto('/files')
+  await expect(page.getByRole('link', { name: 'Protocols' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'CVD recipe.pdf' })).toBeVisible()
 })
