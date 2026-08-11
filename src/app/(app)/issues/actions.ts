@@ -149,6 +149,20 @@ export async function postProjectUpdateAction(input: { projectId: string; health
   const v = parsed.data
   return run((u) => updates.postProjectUpdate({ projectId: v.projectId, actorId: u.id, role: u.role, health: v.health, body: v.body, originMessageId: v.originMessageId ?? null }))
 }
+// v0.15 §6.3 — correction and retraction. The body/health shapes are postUpdateSchema's
+// exactly (one contract whether the composer is writing or rewriting); there is no
+// projectId term, because the update id names the row and the service re-derives both
+// the project and the author from it — a forged projectId could never widen access.
+const editUpdateSchema = postUpdateSchema.pick({ health: true, body: true })
+export async function editProjectUpdateAction(updateId: string, input: { body: string; health: ProjectHealth }) {
+  const parsed = editUpdateSchema.safeParse(input)
+  if (!parsed.success) return { ok: false as const, message: parsed.error.issues[0]?.message ?? 'Invalid update.' }
+  const v = parsed.data
+  return run((u) => updates.editProjectUpdate({ updateId, actorId: u.id, role: u.role, health: v.health, body: v.body }))
+}
+export async function deleteProjectUpdateAction(updateId: string) {
+  return run((u) => updates.deleteProjectUpdate({ updateId, actorId: u.id, role: u.role }))
+}
 // `weeks: 1 | 4` is a compile-time claim only — a Server Action is an RPC endpoint,
 // so the value must be re-checked at runtime. Unvalidated, a forged `1e9` hands
 // nthPromptAfter a 7e9-iteration synchronous TZDate loop: an event-loop stall that

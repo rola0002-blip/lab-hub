@@ -122,8 +122,12 @@ export async function promptProjectUpdates(now: Date = new Date()): Promise<numb
   const today = orgToday(now, tz)
   const HUMAN = { banned: false, isSystem: false, role: { not: 'guest' } } as const
   for (const p of dueProjects) {
-    // Digest window = max(latest update, now − 7 days).
-    const latest = await prisma.projectUpdate.findFirst({ where: { projectId: p.id }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } })
+    // Digest window = max(latest update, now − 7 days). deletedAt: null (v0.15 §6.2,
+    // the fourth latest-update site, filtered by hand — this read wants only the
+    // instant, so it needs neither the author join nor PROJECT_UPDATE_ORDER's
+    // tiebreak): a retracted update must not shrink the window, or the work done
+    // since the real last update would vanish from the digest.
+    const latest = await prisma.projectUpdate.findFirst({ where: { projectId: p.id, deletedAt: null }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } })
     const weekAgo = new Date(now.getTime() - 7 * 86_400_000)
     const since = latest && latest.createdAt > weekAgo ? latest.createdAt : weekAgo
     const [closed, overdue, started] = await Promise.all([

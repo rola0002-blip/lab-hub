@@ -8,6 +8,8 @@ import {
   canDeleteComment,
   canDeleteIssue,
   assertCanDeleteIssue,
+  canEditProjectUpdate,
+  canDeleteProjectUpdate,
   policyStatus,
 } from '@/features/issues/issue-policy'
 
@@ -51,6 +53,22 @@ describe('issue-policy', () => {
     expect(() => assertCanDeleteIssue('admin', 'u1', 'u2')).not.toThrow()
     try { assertCanDeleteIssue('member', 'u1', 'u2'); throw new Error('should have thrown') }
     catch (e) { expect(e).toBeInstanceOf(PolicyError); expect((e as PolicyError).code).toBe('forbidden') }
+  })
+  it('project-update edit is author-only; delete is author-or-admin', () => {
+    // Edit: an admin may not rewrite someone else's narrative record — only the
+    // author corrects their own words (the canEditComment shape).
+    expect(canEditProjectUpdate('member', 'u1', 'u1')).toBe(true)
+    expect(canEditProjectUpdate('admin', 'u1', 'u1')).toBe(true)
+    expect(canEditProjectUpdate('admin', 'u1', 'u2')).toBe(false)
+    expect(canEditProjectUpdate('member', 'u1', 'u2')).toBe(false)
+    // Delete: author, or an admin on anyone's row (the canDeleteComment shape).
+    expect(canDeleteProjectUpdate('member', 'u1', 'u1')).toBe(true)
+    expect(canDeleteProjectUpdate('admin', 'u1', 'u2')).toBe(true)
+    expect(canDeleteProjectUpdate('member', 'u1', 'u2')).toBe(false)
+    // No explicit guest term, deliberately unlike canDeleteIssue: this delete is
+    // SOFT and recoverable, and assertCanMutate already bars guests upstream of
+    // both predicates (the service asserts before it loads).
+    expect(canDeleteProjectUpdate('guest', 'u1', 'u1')).toBe(true)
   })
   it('maps codes to HTTP statuses', () => {
     expect(policyStatus('forbidden')).toBe(403)

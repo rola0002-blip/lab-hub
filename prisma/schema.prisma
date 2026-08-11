@@ -458,6 +458,11 @@ model ProjectUpdate {
   body            String // ≤ 4000, enforced in project-update-service
   originMessageId String?
   originMessage   Message?      @relation("ProjectUpdateOrigin", fields: [originMessageId], references: [id], onDelete: SetNull)
+  // v0.15 §6.1: author edit + soft delete, the Message/IssueComment shape. The
+  // tombstone keeps the row (feed history is never erased) and blanks the body;
+  // every "latest update" read filters deletedAt: null.
+  editedAt        DateTime?
+  deletedAt       DateTime?
   createdAt       DateTime      @default(now())
 
   @@index([projectId, createdAt])

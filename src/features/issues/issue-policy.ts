@@ -43,6 +43,18 @@ export function assertCanDeleteIssue(role: Role, creatorId: string, userId: stri
   if (!canDeleteIssue(role, creatorId, userId)) throw new PolicyError('forbidden', 'Only the issue’s creator or an admin can delete it.')
 }
 
+// Project updates (v0.15 §6.2), the comment shapes exactly: edit is author-only —
+// an admin may retract someone else's update but never rewrite their words, since
+// the row is a signed narrative record, not workspace furniture — and delete is
+// author-or-admin. No explicit guest term (unlike canDeleteIssue): this delete is
+// SOFT and recoverable, and assertCanMutate bars guests upstream of both.
+export function canEditProjectUpdate(_role: Role, authorId: string, userId: string): boolean {
+  return authorId === userId
+}
+export function canDeleteProjectUpdate(role: Role, authorId: string, userId: string): boolean {
+  return authorId === userId || role === 'admin'
+}
+
 export function policyStatus(code: PolicyError['code']): number {
   return code === 'forbidden' ? 403 : code === 'not_found' ? 404 : 400
 }

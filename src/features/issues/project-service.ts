@@ -105,16 +105,20 @@ export async function listProjects(now: Date = new Date()): Promise<ProjectDto[]
       by: ['projectId'], _count: { _all: true },
       where: { projectId: { not: null }, status: { in: OPEN_STATUSES }, dueDate: { lt: startOfOrgDay(now, tz) } },
     }),
-    prisma.projectUpdate.groupBy({ by: ['projectId'], _max: { createdAt: true } }),
+    // v0.15 §6.2: a retracted update is not the latest one. BOTH terms of this pair
+    // filter — the group (so a deleted newest row cannot set the max instant and
+    // strand the card with no latest at all) and the follow-up read below (so a
+    // same-instant tie whose winner was retracted falls to its surviving twin).
+    prisma.projectUpdate.groupBy({ by: ['projectId'], _max: { createdAt: true }, where: { deletedAt: null } }),
   ])
   // The newest update per project in ONE follow-up read: group for the max instant,
   // then fetch exactly those (projectId, createdAt) rows for the author name. A
   // same-millisecond tie returns MORE than one row for a project, so the read is
   // ordered by the shared tuple and the first row per project wins below — the same
-  // row getProject and listProjectUpdates call latest.
+  // row getProject calls latest.
   const latestRows = latests.length
     ? await prisma.projectUpdate.findMany({
-        where: { OR: latests.map((l) => ({ projectId: l.projectId, createdAt: l._max.createdAt! })) },
+        where: { deletedAt: null, OR: latests.map((l) => ({ projectId: l.projectId, createdAt: l._max.createdAt! })) },
         orderBy: PROJECT_UPDATE_ORDER,
         include: { author: { select: { name: true } } },
       })
@@ -138,7 +142,9 @@ export async function getProject(id: string, now: Date = new Date()): Promise<Pr
   const [progress, openOverdue, latest] = await Promise.all([
     progressFor(id),
     prisma.issue.count({ where: { projectId: id, status: { in: OPEN_STATUSES }, dueDate: { lt: startOfOrgDay(now, tz) } } }),
-    prisma.projectUpdate.findFirst({ where: { projectId: id }, orderBy: PROJECT_UPDATE_ORDER, include: { author: { select: { name: true } } } }),
+    // deletedAt: null — same latest-pick rule as listProjects (v0.15 §6.2); the
+    // detail page and the card must never disagree about which row is latest.
+    prisma.projectUpdate.findFirst({ where: { projectId: id, deletedAt: null }, orderBy: PROJECT_UPDATE_ORDER, include: { author: { select: { name: true } } } }),
   ])
   return toDto(p, progress.done, progress.total, { latestUpdate: toLatestUpdate(latest), openOverdue })
 }
