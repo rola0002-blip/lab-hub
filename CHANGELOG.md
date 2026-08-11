@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-08-11
+
 ### Fixed
 - Chat messages on a phone or tablet no longer wear their action toolbar permanently. Every message on screen was showing its own row of icons — reply, react, more — stacked over the conversation. The toolbar now appears on the message you tap, one at a time, and goes away when you tap elsewhere; the hover behaviour on a desktop is unchanged, and so is reaching it with the keyboard. The time stamp on a follow-up message in a run is reachable by tap for the same reason.
 - The sidebar and the top bar stay put while a long page scrolls. On the dashboard, a long issue list or a busy channel, the sidebar's footer — your name, "Give feedback" and the version — used to slide off the bottom of the screen, and the search bar off the top. Both are now pinned to the window on desktop and tablet, and the navigation list scrolls within the sidebar when it does not fit. The phone drawer is unaffected.
