@@ -7,6 +7,7 @@ import { isManagerOf } from '@/features/equipment/service'
 import { dayAnchor } from '@/lib/tz'
 import { addDays, format, startOfWeek } from 'date-fns'
 import ScheduleView, { type CalSlot } from '@/components/schedule-view'
+import { Avatar } from '@/components/ui/avatar'
 import NewBookingButton from '@/components/booking/new-booking-button'
 import MaintenanceDialogButton from './maintenance-dialog'
 
@@ -24,7 +25,13 @@ export default async function EquipmentPage({ params, searchParams }: {
   const d = Number(day)
   const initialDay = Number.isInteger(d) && d >= 0 && d <= 6 ? d : undefined
 
-  const eq = await prisma.equipment.findUnique({ where: { id: equipmentId } })
+  // The managers come along so the Policy aside can NAME them beside its
+  // certification rule (spec §4.3) — the second half of closing the
+  // "Ask an equipment manager" dead end.
+  const eq = await prisma.equipment.findUnique({
+    where: { id: equipmentId },
+    include: { managers: { include: { user: { select: { id: true, name: true, image: true } } } } },
+  })
   if (!eq) notFound()
 
   const anchor = dayAnchor(week, org.timezone)
@@ -96,6 +103,20 @@ export default async function EquipmentPage({ params, searchParams }: {
             <li>Approval: <strong className="text-default">{eq.approvalPolicy === 'NONE' ? 'instant for everyone' : eq.approvalPolicy === 'GUESTS' ? 'guests need approval' : 'everyone needs approval'}</strong></li>
             <li>{eq.allowRecurring ? 'Recurring bookings allowed' : 'No recurring bookings'}</li>
           </ul>
+          {/* Only where the rule bites, and only when there is a real person to name
+              (an empty "Managers" heading is worse than none). */}
+          {eq.certificationRequired && eq.managers.length > 0 && (
+            <div className="mt-3">
+              <h3 className="font-medium text-default">Managers</h3>
+              <ul className="mt-1 space-y-1 text-muted">
+                {eq.managers.map((m) => (
+                  <li key={m.id} className="flex items-center gap-1.5">
+                    <Avatar size={20} name={m.user.name} id={m.user.id} image={m.user.image} />{m.user.name}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {eq.description && <p className="mt-3 text-muted">{eq.description}</p>}
           {eq.location && <p className="mt-1 text-subtle">📍 {eq.location}</p>}
         </aside>
