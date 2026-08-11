@@ -2,6 +2,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { MoreHorizontal, Plus, UserX } from 'lucide-react'
+import { renderTokens } from '@/components/chat/render-tokens'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Menu } from '@/components/ui/menu'
@@ -26,6 +27,7 @@ export function ProjectHeader({ project, role, users, timezone, today }: { proje
   const [confirmDel, setConfirmDel] = useState(false)
   const [pending, start] = useTransition()
   const canEdit = role !== 'guest'
+  const names = new Map(users.map((u) => [u.id, u.name]))
 
   function del() {
     start(async () => {
@@ -74,7 +76,13 @@ export function ProjectHeader({ project, role, users, timezone, today }: { proje
           {menuItems.length > 0 && <Menu label="Project actions" button={<MoreHorizontal size={16} aria-hidden />} items={menuItems} />}
         </div>
       </div>
-      {project.description && <p className="max-w-2xl whitespace-pre-wrap text-sm text-muted">{project.description}</p>}
+      {/* Markdown, matching the issue-description peer (issue-detail.tsx) and the
+          SP4 spec's "description (markdown)" — this field alone still rendered
+          literal text. Valid inside the <p>: render-tokens emits block-ish tokens as
+          <span class="block">. text-default (not text-muted) because the `bold` token
+          hardcodes text-default and would otherwise outshine its own paragraph.
+          Rendering-only parity — no mention parsing/notification in project-service. */}
+      {project.description && <p className="max-w-2xl whitespace-pre-wrap text-sm text-default">{renderTokens(project.description, names)}</p>}
       <div className="flex items-center gap-3 text-xs text-muted">
         {project.lead && <span className="flex items-center gap-1.5"><Avatar size={20} name={project.lead.name} id={project.lead.id} image={project.lead.image} />{project.lead.name}</span>}
         {/* Org-timezone rule (src/lib/time.ts): fixed pattern + org zone, never the
