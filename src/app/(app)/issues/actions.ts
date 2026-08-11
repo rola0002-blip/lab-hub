@@ -23,6 +23,9 @@ const createProjectSchema = z.object({
   name: z.string().trim().min(1, 'Enter a project name.').max(120, 'Project name must be 1–120 characters.'),
   description: z.string().max(4000).optional(),
   leadId: z.string().nullish(),
+  // v0.15 §5.3 — same tri-state as leadId: an id links, null unlinks, undefined
+  // (omitted on update) leaves the link alone. The service validates the id.
+  documentFolderId: z.string().nullish(),
   startDate: projectDate,
   targetDate: projectDate,
   status: projectStatus.optional(),
@@ -84,17 +87,17 @@ export async function updateDescriptionAction(issueId: string, description: stri
 export async function createLabelAction(name: string, color: string) {
   return run((u) => issues.createLabel({ actorId: u.id, role: u.role, name, color }))
 }
-export async function createProjectAction(input: { name: string; description?: string; leadId?: string | null; startDate?: string | null; targetDate?: string | null; status?: ProjectStatus }) {
+export async function createProjectAction(input: { name: string; description?: string; leadId?: string | null; documentFolderId?: string | null; startDate?: string | null; targetDate?: string | null; status?: ProjectStatus }) {
   const parsed = createProjectSchema.safeParse(input)
   if (!parsed.success) return { ok: false as const, message: firstIssue(parsed.error) }
   const v = parsed.data
-  return run((u) => projects.createProject({ actorId: u.id, role: u.role, name: v.name, description: v.description, leadId: v.leadId ?? null, startDate: toDate(v.startDate) ?? null, targetDate: toDate(v.targetDate) ?? null, status: v.status }))
+  return run((u) => projects.createProject({ actorId: u.id, role: u.role, name: v.name, description: v.description, leadId: v.leadId ?? null, documentFolderId: v.documentFolderId ?? null, startDate: toDate(v.startDate) ?? null, targetDate: toDate(v.targetDate) ?? null, status: v.status }))
 }
-export async function updateProjectAction(id: string, input: { name?: string; description?: string; leadId?: string | null; startDate?: string | null; targetDate?: string | null; status?: ProjectStatus }) {
+export async function updateProjectAction(id: string, input: { name?: string; description?: string; leadId?: string | null; documentFolderId?: string | null; startDate?: string | null; targetDate?: string | null; status?: ProjectStatus }) {
   const parsed = updateProjectSchema.safeParse(input)
   if (!parsed.success) return { ok: false as const, message: firstIssue(parsed.error) }
   const v = parsed.data
-  return run((u) => projects.updateProject({ actorId: u.id, role: u.role, id, name: v.name, description: v.description, leadId: v.leadId, startDate: toDate(v.startDate), targetDate: toDate(v.targetDate), status: v.status }))
+  return run((u) => projects.updateProject({ actorId: u.id, role: u.role, id, name: v.name, description: v.description, leadId: v.leadId, documentFolderId: v.documentFolderId, startDate: toDate(v.startDate), targetDate: toDate(v.targetDate), status: v.status }))
 }
 export async function deleteProjectAction(id: string) {
   return run((u) => projects.deleteProject({ role: u.role, id }))

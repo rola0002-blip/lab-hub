@@ -9,18 +9,21 @@ import { listIssues } from '@/features/issues/issue-service'
 import { extractIssueRefNumbers } from '@/features/issues/identifier'
 import { resolveIssueRefs } from '@/features/issues/issue-ref-service'
 import { accessibleConversationIds } from '@/features/chat/conversation-service'
+import { listFolders, listDocuments } from '@/features/documents/document-service'
 import { orgToday } from '@/features/issues/due'
 import { IssuesSurface } from '@/components/issues/issues-surface'
 import { ProjectHeader } from '@/components/issues/project-header'
+import { ProjectFiles } from '@/components/issues/project-files'
 import { ProjectUpdates } from '@/components/issues/project-updates'
 import { EmptyState } from '@/components/ui/empty-state'
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser()
   const { id } = await params
-  const [project, issues, updates, users, org] = await Promise.all([
+  const [project, issues, updates, users, folders, org] = await Promise.all([
     getProject(id), listIssues({ projectId: id }), listProjectUpdates(id),
     prisma.user.findMany({ where: { banned: false, isSystem: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
+    listFolders(), // the composer's "Files folder" options (§5.3)
     getOrg(),
   ])
   if (!project) notFound()
@@ -30,7 +33,13 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   // Server-side ref resolution (spec §7.1), the issue-detail idiom: the same
   // LAB-<n> tokens work in every update body. One query resolves them all; the
   // client builds the Map and threads it into renderTokens.
-  const issueRefs = await resolveIssueRefs(updates.flatMap((u) => extractIssueRefNumbers(u.body)))
+  // The linked folder's contents ride the SAME hop (v0.15 §5.3) — both reads need
+  // the first hop's result, neither needs the other, so they must not serialise.
+  // Always `{ folderId }`, never `{}` (which would span every folder).
+  const [issueRefs, folderDocs] = await Promise.all([
+    resolveIssueRefs(updates.flatMap((u) => extractIssueRefNumbers(u.body))),
+    project.documentFolder ? listDocuments({ folderId: project.documentFolder.id }) : Promise.resolve([]),
+  ])
 
   // Membership-gated origin backlink chips (one per update captured from chat).
   // The content was captured by a member who had access, so the chip always shows
@@ -59,7 +68,9 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const empty = <EmptyState icon={ListTodo} title="No issues in this project yet" hint='Use "New issue" above — it pre-fills this project.' />
   return (
     <div className="space-y-5">
-      <ProjectHeader project={project} role={user.role} users={users} timezone={timezone} today={today} />
+      <ProjectHeader project={project} role={user.role} users={users} folders={folders} timezone={timezone} today={today} />
+      {/* Omitted entirely with no linked folder — the composer's select is the affordance. */}
+      {project.documentFolder && <ProjectFiles folder={project.documentFolder} docs={folderDocs} timezone={timezone} />}
       <ProjectUpdates updates={updates} users={users} issueRefs={issueRefs} origins={origins} role={user.role} projectId={project.id} timezone={timezone} />
       <IssuesSurface initial={issues} role={user.role} users={users} timezone={timezone} today={today} empty={empty} />
     </div>

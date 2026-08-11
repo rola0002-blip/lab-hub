@@ -3,6 +3,7 @@ import { requireUser } from '@/lib/session'
 import { prisma } from '@/lib/db'
 import { getOrg } from '@/lib/org'
 import { listProjects } from '@/features/issues/project-service'
+import { listFolders } from '@/features/documents/document-service'
 import { orgToday } from '@/features/issues/due'
 import { healthBucket, needsAttention, parseProjectFilters } from '@/features/issues/project-health'
 import { projectOrderSignature } from '@/features/issues/project-order'
@@ -16,9 +17,10 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   const user = await requireUser()
   const sp = await searchParams
   const f = parseProjectFilters(sp)
-  const [projects, users, org] = await Promise.all([
+  const [projects, users, folders, org] = await Promise.all([
     listProjects(),
     prisma.user.findMany({ where: { banned: false, isSystem: false }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
+    listFolders(), // the composer's "Files folder" options (§5.3)
     getOrg(),
   ])
   const timezone = org?.timezone ?? 'Asia/Singapore'
@@ -39,7 +41,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold text-default">Projects</h1>
-        {user.role !== 'guest' && <NewProjectButton users={users} />}
+        {user.role !== 'guest' && <NewProjectButton users={users} folders={folders} />}
       </div>
       <ProjectFilterBar />
       {/* "No projects yet" is a statement about the WHOLE lab, so it is gated on
