@@ -60,7 +60,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             padding clears the home indicator. Every env() term is 0 on a device
             without insets, so nothing about the desktop shell moves. */}
         <div id="app-content" className="flex min-w-0 flex-1 flex-col pt-[env(safe-area-inset-top)]">
-          <header className="flex h-12 items-center justify-between gap-2 border-b border-border px-3 md:px-6">
+          {/* Pinned at md+ (same reasoning as the rail): search, bell and the user
+              menu stay reachable on a long page. Needs an opaque background — the
+              header painted none and content would scroll under it. z-30 sits below
+              the phone drawer (z-50) and ties the two fixed z-30 scrims, which mount
+              later in the DOM and so paint over it; transient Menu popovers are z-40
+              in the root stacking context and still paint over the header. On phones
+              the header stays in flow — #app-content's pt-[env(safe-area-inset-top)]
+              sits ABOVE it, so a phone-side sticky would need its own env() terms. */}
+          <header className="flex h-12 items-center justify-between gap-2 border-b border-border bg-canvas px-3 md:sticky md:top-0 md:z-30 md:px-6">
             <BackButton />
             <MobileNavToggle />
             <div role="search" aria-label="Search" data-region-root tabIndex={-1} className="min-w-0 flex-1 outline-none">

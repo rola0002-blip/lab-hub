@@ -252,7 +252,7 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
             aria-hidden
             dateTime={msg.createdAt}
             title={msg.createdAt}
-            className="hidden text-right text-2xs leading-[22px] tabular-nums text-subtle group-hover:block"
+            className="hidden text-right text-2xs leading-[22px] tabular-nums text-subtle group-hover:block group-focus-within:block"
           >{clockTime(msg.createdAt)}</time>
         )}
 
@@ -373,7 +373,11 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
           // Lucide icons only (emoji stays content). Reachable on hover OR keyboard
           // focus (group-focus-within); kept `flex` while the emoji picker is open
           // so moving the cursor into the popover doesn't collapse the toolbar.
-          <div className={`absolute -top-3 right-2 z-10 items-center gap-0.5 rounded-md border border-border bg-surface px-1 py-0.5 shadow-sm ${pickerAt === 'toolbar' ? 'flex' : 'hidden group-hover:flex group-focus-within:flex pointer-coarse:flex'}`}>
+          // NEVER re-add `pointer-coarse:flex`: it compiles to an unconditional
+          // @media (pointer: coarse) display:flex, so EVERY row's toolbar is pinned
+          // open on touch. Touch reveal rides `group-focus-within` over the row's
+          // tabIndex (a tap focuses the row) — one row at a time, like the keyboard.
+          <div className={`absolute -top-3 right-2 z-10 items-center gap-0.5 rounded-md border border-border bg-surface px-1 py-0.5 shadow-sm ${pickerAt === 'toolbar' ? 'flex' : 'hidden group-hover:flex group-focus-within:flex'}`}>
             <div className="relative">
               <IconButton label="Add reaction" active={pickerAt === 'toolbar'}
                 onClick={() => setPickerAt((a) => (a === 'toolbar' ? null : 'toolbar'))}>

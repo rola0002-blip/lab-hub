@@ -492,6 +492,62 @@ test('mobile systemics: 16px inputs, viewport meta, chat composer above keyboard
   expect(await fontSize(composer)).toBe('16px')
 })
 
+// ── v0.14.1 F1: the chat message toolbar on touch ─────────────────────────────
+// `pointer-coarse:flex` compiled to an unconditional @media (pointer: coarse)
+// display:flex, so EVERY rendered row wore its toolbar on a phone. Reveal now rides
+// `group-focus-within` over the row's own tabIndex — a tap focuses the row — which is
+// what the keyboard path already used. Role locators are the assertion instrument on
+// purpose: a `display:none` toolbar is out of the accessibility tree, so a hidden
+// toolbar's buttons do not exist for getByRole and the visible count IS the reveal
+// count. 'Reply in thread' (not the title'd 'Add reaction', which collides with the
+// reaction-chip button) is the toolbar action every root message carries.
+test('chat toolbar is revealed by tapping a message, one row at a time', async ({ browser }) => {
+  test.setTimeout(120_000)
+  const page = await phonePage(browser)
+  await runWizard(page)
+  await signIn(page, ADMIN.email, ADMIN.password)
+
+  // Guard (test 1's): the whole regression lived inside `(pointer: coarse)`.
+  expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true)
+
+  await createChannel(page, 'toolbar')
+  const box = page.getByRole('textbox', { name: 'Write a message' })
+  await box.fill('first toolbar message')
+  await box.press('Enter')
+  await expect(box).toHaveValue('')
+  await box.fill('second toolbar message')
+  await box.press('Enter')
+  await expect(box).toHaveValue('')
+
+  const rows = main(page).locator('[data-msg-id]')
+  await expect(rows).toHaveCount(2)
+  const reply = main(page).getByRole('button', { name: 'Reply in thread' })
+
+  // (i) At rest — the bug: two rows, two permanently-visible toolbars.
+  await expect(reply).toHaveCount(0)
+
+  // (ii) Tap the first message body: it focuses its row, which reveals THAT toolbar.
+  await main(page).getByText('first toolbar message').tap()
+  await expect(rows.nth(0)).toBeFocused()
+  await expect(reply).toHaveCount(1)
+  await expect(rows.nth(0).getByRole('button', { name: 'Reply in thread' })).toBeVisible()
+
+  // (iii) Tap the second: the reveal MOVES — never two at once.
+  await main(page).getByText('second toolbar message').tap()
+  await expect(rows.nth(1)).toBeFocused()
+  await expect(reply).toHaveCount(1)
+  await expect(rows.nth(1).getByRole('button', { name: 'Reply in thread' })).toBeVisible()
+  // Same author, same minute → row 2 is GROUPED, so its gutter clock is the other
+  // control the coarse rule used to pin open and hover alone leaves unreachable.
+  await expect(rows.nth(1).locator('time[aria-hidden]')).toBeVisible()
+
+  // (iv) Tap outside every row: the coarse-gated blur helper in message-pane drops
+  // the reveal (WebKit does not blur on an outside tap by itself).
+  await page.getByRole('heading', { name: '#toolbar' }).tap()
+  await expect(reply).toHaveCount(0)
+  expect(await page.evaluate(() => !document.activeElement?.closest('[data-msg-id]'))).toBe(true)
+})
+
 // ── T8: the two dnd grips — touch-action + the board grip's hit target ────────
 // Without `touch-action: none` the browser claims a touch drag as a pan before
 // dnd-kit's PointerSensor ever sees it, so neither arrangement surface can be

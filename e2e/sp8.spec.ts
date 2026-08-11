@@ -24,6 +24,9 @@ test.beforeAll(async () => { await wipe(); await seedSystem() })
 const PASS = 'MemberPass!1234'
 const BOB = { email: 'bob@lab.test', name: 'Bob Member' }
 const PROJECT = 'Graphene growth'
+// Markdown, not decoration: `**` and a `- ` list line are what v0.14.1's rendering
+// parity is asserted on when test 1 lands on the project page.
+const PROJECT_DESC = 'Monolayer on **Cu/Ni foils**.\n- transfer yield ≥ 90%'
 const UPDATE_BODY = 'Films came out polycrystalline — switching to Cu/Ni. See LAB-1'
 
 // Filled by test 1, reused by tests 2 and 5.
@@ -68,10 +71,19 @@ test('1: post a project update from the project page; it announces in #lab-updat
   await page.goto('/projects')
   await page.getByRole('button', { name: 'New project' }).click()
   await page.getByLabel('Name').fill(PROJECT)
+  await page.getByLabel('Description').fill(PROJECT_DESC)
   await page.getByRole('button', { name: 'Create project' }).click()
   await page.waitForURL(/\/projects\/[^/]+$/)
   projectId = new URL(page.url()).pathname.split('/').pop()!
   await expect(page.getByRole('heading', { name: PROJECT })).toBeVisible()
+
+  // v0.14.1 — the SP4 spec declares `description (markdown)`, and every peer long-form
+  // field (chat bodies, issue descriptions, update bodies) already renders through the
+  // shared tokenizer; the project description alone printed its source. Assert the
+  // rendered marks, and that the syntax itself never reaches the page as literal text.
+  await expect(main(page).locator('strong', { hasText: 'Cu/Ni foils' })).toBeVisible()
+  await expect(main(page).getByText('• transfer yield ≥ 90%')).toBeVisible()
+  await expect(main(page).getByText('**')).toHaveCount(0)
 
   // THREE controls on this page are named "Post update" — the header button, the
   // Updates-section button, and (once open) the modal's submit. The Updates section

@@ -97,7 +97,16 @@ export function Sidebar({ org, user, unread, role, version }: {
   }
 
   return (
-    <div className="flex w-56 shrink-0 flex-col bg-sidebar p-2">
+    // Pinned to the viewport at md+ so a long page never scrolls the rail (and its
+    // footer) away; the nav below scrolls internally instead. `md:` is LOAD-BEARING —
+    // the same component renders inside the phone drawer (mobile-nav.tsx), whose
+    // panel is `absolute inset-y-0` and safe-area-aware, so an ungated h-[100dvh]
+    // would overrun it. `dvh` (not svh) must MATCH the shell's min-h-[100dvh] at
+    // (app)/layout.tsx, or a collapsing-toolbar iPad shows a canvas strip under the
+    // rail. position:sticky creates a stacking context: a FUTURE Menu inside the rail
+    // that must overlay the content column needs a portal (today's workspace Menu
+    // never leaves the rail column).
+    <div className="flex w-56 shrink-0 flex-col bg-sidebar p-2 md:sticky md:top-0 md:h-[100dvh]">
       <Menu
         label="Workspace menu"
         buttonClassName="flex w-full items-center gap-2 rounded-md px-1 py-1.5 text-left text-sidebar-fg-strong hover:bg-sidebar-hover"
@@ -115,7 +124,9 @@ export function Sidebar({ org, user, unread, role, version }: {
         }
         items={[{ label: 'Sign out', onSelect: handleSignOut }]}
       />
-      <nav aria-label="Primary" data-region-root tabIndex={-1} className="mt-2 flex-1 overflow-y-auto outline-none">
+      {/* min-h-0 is the codebase's bounded-scroller idiom (chat/layout.tsx,
+          message-pane.tsx, thread-panel.tsx) — intent, not load-bearing here. */}
+      <nav aria-label="Primary" data-region-root tabIndex={-1} className="mt-2 min-h-0 flex-1 overflow-y-auto outline-none">
         {NAV_SECTIONS.map((sec) => {
           const items = sec.items.filter((i) => isNavVisible(i.href, role))
           if (items.length === 0) return null

@@ -1,4 +1,5 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
+import pkg from '../package.json'
 import { wipe, runWizard, signIn, signOut, ADMIN, createMemberViaInvite, acceptInvite } from './helpers'
 
 // Per-context client IP so better-auth's per-IP sign-in/up rate limit never trips
@@ -248,6 +249,37 @@ test('deep-link scrolls the linked message into view', async ({ browser }) => {
   // The ?msg= deep-link consumes the target and scrolls it into view.
   await page.goto(`/chat/${cid}?msg=${targetId}`)
   await expect(target).toBeInViewport()
+  await page.context().close()
+})
+
+// v0.14.1 F2: the shell had the DOCUMENT as its only scrollport and the rail stretched
+// to the page's full height, so a long page carried the rail's footer (avatar, Give
+// feedback, version) — and the top bar — off the bottom/top of the screen. Both are
+// `md:sticky` now, and the rail's nav (whose overflow-y-auto was inert under an
+// unbounded parent) becomes the scroller instead.
+test('shell: the sidebar rail and the top bar stay pinned while a long page scrolls', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  // md+ (1280 ≥ 768, where the pin is gated) but SHORT — so the page AND the rail's
+  // own nav both overflow, which is exactly the reported condition.
+  await page.setViewportSize({ width: 1280, height: 400 })
+  await page.goto('/dashboard')
+  await expect(page.getByRole('heading', { name: 'Welcome, Roland' }).first()).toBeVisible()
+
+  // Fail fast: with nothing to scroll, every assertion below would pass vacuously.
+  expect(await page.evaluate(() => document.documentElement.scrollHeight > window.innerHeight)).toBe(true)
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+
+  // The two rail-footer controls the bug pushed off-screen.
+  await expect(page.getByText(`v${pkg.version}`)).toBeInViewport()
+  await expect(page.getByRole('button', { name: 'Give feedback' })).toBeInViewport()
+  // The rail is one viewport tall now, so its nav is a real bounded scroller.
+  const nav = page.getByRole('navigation', { name: 'Primary' })
+  expect(await nav.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
+  // …and the top bar is pinned too (the same complaint, one report earlier).
+  await expect(page.getByRole('search')).toBeInViewport()
+
   await page.context().close()
 })
 
