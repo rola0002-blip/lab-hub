@@ -35,10 +35,13 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   // client builds the Map and threads it into renderTokens.
   // The linked folder's contents ride the SAME hop (v0.15 §5.3) — both reads need
   // the first hop's result, neither needs the other, so they must not serialise.
-  // Always `{ folderId }`, never `{}` (which would span every folder).
+  // Always `{ folderId }`, never `{}` (which would span every folder). Bounded like
+  // the dashboard's Recent files card (dashboard/page.tsx): the card is a PREVIEW, and
+  // its "Open in Files →" footer link carries the rest — an unbounded read would ship
+  // an entire folder into the RSC payload.
   const [issueRefs, folderDocs] = await Promise.all([
     resolveIssueRefs(updates.flatMap((u) => extractIssueRefNumbers(u.body))),
-    project.documentFolder ? listDocuments({ folderId: project.documentFolder.id }) : Promise.resolve([]),
+    project.documentFolder ? listDocuments({ folderId: project.documentFolder.id, take: 10 }) : Promise.resolve([]),
   ])
 
   // Membership-gated origin backlink chips (one per update captured from chat).

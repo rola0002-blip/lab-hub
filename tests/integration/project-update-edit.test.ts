@@ -184,6 +184,14 @@ describe('project update edit + soft delete (v0.15 §6)', () => {
     const u = await makeUser(); const other = await makeUser(); const p = await makeProject()
     const up = await makeProjectUpdate(p.id, u.id, { body: 'first' })
     mockUser.current = { id: u.id, name: u.name, email: u.email, role: 'member' }
+    // The id is an RPC argument too (final review): a forged non-string used to reach
+    // Prisma and throw a PrismaClientValidationError — a 500 — instead of the
+    // { ok:false, message } contract. Both actions reject it before the service runs.
+    expect(await editProjectUpdateAction('', { body: 'x', health: 'ON_TRACK' })).toEqual({ ok: false, message: 'Update not found.' })
+    expect(await editProjectUpdateAction(42 as never, { body: 'x', health: 'ON_TRACK' })).toEqual({ ok: false, message: 'Update not found.' })
+    expect(await deleteProjectUpdateAction(null as never)).toEqual({ ok: false, message: 'Update not found.' })
+    expect(await deleteProjectUpdateAction({ id: up.id } as never)).toEqual({ ok: false, message: 'Update not found.' })
+    expect((await prisma.projectUpdate.findUniqueOrThrow({ where: { id: up.id } })).body).toBe('first')
     expect(await editProjectUpdateAction(up.id, { body: '', health: 'ON_TRACK' }))
       .toEqual({ ok: false, message: 'An update needs a few words.' })
     expect(await editProjectUpdateAction(up.id, { body: 'x', health: 'SIDEWAYS' as never })).toMatchObject({ ok: false })

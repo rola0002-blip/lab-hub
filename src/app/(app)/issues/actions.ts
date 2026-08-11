@@ -154,14 +154,24 @@ export async function postProjectUpdateAction(input: { projectId: string; health
 // projectId term, because the update id names the row and the service re-derives both
 // the project and the author from it — a forged projectId could never widen access.
 const editUpdateSchema = postUpdateSchema.pick({ health: true, body: true })
+// The id is an RPC argument like any other (the `weeks: 1 | 4` lesson below): the
+// `string` type is a compile-time claim only, and a forged non-string reaches Prisma
+// as-is — a PrismaClientValidationError, i.e. a 500, instead of the { ok:false, message }
+// contract every other arm honours. A malformed id can never name a row, so it reads
+// back as the service's own miss message rather than inventing a second phrasing.
+const updateIdSchema = z.string().min(1)
 export async function editProjectUpdateAction(updateId: string, input: { body: string; health: ProjectHealth }) {
+  const id = updateIdSchema.safeParse(updateId)
+  if (!id.success) return { ok: false as const, message: 'Update not found.' }
   const parsed = editUpdateSchema.safeParse(input)
   if (!parsed.success) return { ok: false as const, message: parsed.error.issues[0]?.message ?? 'Invalid update.' }
   const v = parsed.data
-  return run((u) => updates.editProjectUpdate({ updateId, actorId: u.id, role: u.role, health: v.health, body: v.body }))
+  return run((u) => updates.editProjectUpdate({ updateId: id.data, actorId: u.id, role: u.role, health: v.health, body: v.body }))
 }
 export async function deleteProjectUpdateAction(updateId: string) {
-  return run((u) => updates.deleteProjectUpdate({ updateId, actorId: u.id, role: u.role }))
+  const id = updateIdSchema.safeParse(updateId)
+  if (!id.success) return { ok: false as const, message: 'Update not found.' }
+  return run((u) => updates.deleteProjectUpdate({ updateId: id.data, actorId: u.id, role: u.role }))
 }
 // `weeks: 1 | 4` is a compile-time claim only — a Server Action is an RPC endpoint,
 // so the value must be re-checked at runtime. Unvalidated, a forged `1e9` hands
