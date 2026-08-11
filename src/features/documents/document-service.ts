@@ -23,7 +23,8 @@ function assertDocumentPath(path: string): void {
   }
 }
 
-async function assertFolderExists(folderId: string): Promise<{ id: string; name: string }> {
+// Exported for project-service (v0.15 §5.2) — the first issues→documents edge; both modules are server-only.
+export async function assertFolderExists(folderId: string): Promise<{ id: string; name: string }> {
   const folder = await prisma.documentFolder.findUnique({ where: { id: folderId }, select: { id: true, name: true } })
   if (!folder) throw new PolicyError('invalid', 'That folder no longer exists.')
   return folder

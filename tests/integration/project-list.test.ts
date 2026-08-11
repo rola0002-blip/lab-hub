@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { prisma } from '@/lib/db'
-import { resetDb, makeUser, makeProject, makeIssue, makeProjectUpdate, seedSystem } from '../factories'
+import { resetDb, makeUser, makeProject, makeIssue, makeProjectUpdate, makeDocumentFolder, seedSystem } from '../factories'
 import { listProjects, getProject, listProjectOptions, createProject, updateProject } from '@/features/issues/project-service'
 import { listProjectUpdates } from '@/features/issues/project-update-service'
 import { COLOSSUS_BOT_ID } from '@/features/bot'
@@ -79,12 +79,16 @@ describe('extended project reads (SP8 §4.7)', () => {
   // fresh project is provably empty, while an update must re-read them.
   it('createProject and updateProject fill the new required fields', async () => {
     const admin = await makeUser({ role: 'admin' })
+    const folder = await makeDocumentFolder({ name: 'Wave files', createdById: admin.id })
     const created = await createProject({ actorId: admin.id, role: 'admin', name: 'Wave', leadId: admin.id })
-    expect(created).toMatchObject({ hasEffectiveLead: true, openOverdue: 0, latestUpdate: null })
+    // v0.15: documentFolder is required on the DTO too — null, never undefined,
+    // when nothing is linked.
+    expect(created).toMatchObject({ hasEffectiveLead: true, openOverdue: 0, latestUpdate: null, documentFolder: null })
     await makeIssue(admin.id, { projectId: created.id, status: 'TODO', dueDate: new Date(Date.now() - 3 * 86_400_000) })
     const up = await makeProjectUpdate(created.id, admin.id, { health: 'OFF_TRACK' })
-    const updated = await updateProject({ actorId: admin.id, role: 'admin', id: created.id, status: 'PAUSED' })
+    const updated = await updateProject({ actorId: admin.id, role: 'admin', id: created.id, status: 'PAUSED', documentFolderId: folder.id })
     expect(updated).toMatchObject({ status: 'PAUSED', hasEffectiveLead: true, openOverdue: 1 })
+    expect(updated.documentFolder).toEqual({ id: folder.id, name: 'Wave files' })
     expect(updated.latestUpdate).toMatchObject({ id: up.id, health: 'OFF_TRACK', authorName: admin.name })
     expect(updated.progress).toEqual({ done: 0, total: 1, percent: 0 })
   })
