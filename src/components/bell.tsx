@@ -72,7 +72,12 @@ function playChime() {
       const o = audioCtx.createOscillator(); o.type = 'sine'; o.frequency.value = freq
       o.connect(g); o.start(t + at); o.stop(t + at + 0.22)
     }
-  } catch { /* autoplay-blocked or headless — the visual bell still works */ }
+  } catch {
+    /* Construction failures only (headless/embedded). Under autoplay policy the
+       context is instead created SUSPENDED — oscillators schedule into its
+       frozen currentTime and sound once a gesture resumes it — so that
+       degradation is silent-by-design, not an exception. */
+  }
 }
 
 type Face =
@@ -94,7 +99,10 @@ function groupItems(items: Item[]): { key: string; items: Item[] }[] {
   return groups
 }
 
-export default function Bell() {
+// soundsSeed carries the server-side User.soundsEnabled default into the Bell
+// (same ThemeSync prop route): useSoundsEnabled falls back to it only while
+// this device has no localStorage choice, so the device always wins locally.
+export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
   const { conversations, users, selfId } = useChat()
   const [unread, setUnread] = useState(0)
   const [items, setItems] = useState<Item[]>([])
@@ -102,7 +110,7 @@ export default function Bell() {
   const ref = useRef<HTMLDivElement>(null)
   const now = new Date() // viewer-local reference for humanized notification times
   const push = usePushOptIn() // desktop-push opt-in lives in this tray, not a separate top-bar icon
-  const { enabled: sounds } = useSoundsEnabled() // default false — a device that never opted in stays silent
+  const { enabled: sounds } = useSoundsEnabled(soundsSeed) // server seed until the device opts in/out itself
   // load is memoized (stable across renders), so it would capture a stale
   // `sounds`; mirror the live value into a ref it can read at fetch time.
   const soundsRef = useRef(false)

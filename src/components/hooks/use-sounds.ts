@@ -13,11 +13,18 @@ function subscribe(cb: () => void) {
 export function useSoundsEnabled(initial = false) {
   const enabled = useSyncExternalStore(
     subscribe,
-    () => localStorage.getItem(KEY) === '1' || (localStorage.getItem(KEY) === null && initial),
+    () => {
+      // Safari private mode can throw on storage access — treat that like an
+      // unset key (falls back to `initial`) so the Bell never crashes.
+      try {
+        const v = localStorage.getItem(KEY)
+        return v === '1' || (v === null && initial)
+      } catch { return initial }
+    },
     () => initial,
   )
   const set = useCallback((on: boolean) => {
-    localStorage.setItem(KEY, on ? '1' : '0')
+    try { localStorage.setItem(KEY, on ? '1' : '0') } catch {} // Safari private mode throws; the toggle must not crash
     window.dispatchEvent(new Event('storage'))
     void fetch('/api/me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ soundsEnabled: on }) })
   }, [])

@@ -9,10 +9,11 @@ export function shouldChime(watermark: string | null, items: ChimeItem[]): { chi
   let max = watermark
   let chime = false
   for (const it of items) {
-    if (it.createdAt > (max ?? '')) {
-      max = it.createdAt
-      if (watermark !== null && CHIME_TYPES.has(it.type)) chime = true
-    }
+    // Chime candidates compare against the ORIGINAL watermark (a newer
+    // non-chat row in the same batch must not shadow them); the watermark
+    // itself advances past everything seen.
+    if (watermark !== null && it.createdAt > watermark && CHIME_TYPES.has(it.type)) chime = true
+    if (it.createdAt > (max ?? '')) max = it.createdAt
   }
   return { chime, watermark: max ?? '' }
 }

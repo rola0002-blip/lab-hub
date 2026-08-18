@@ -17,4 +17,13 @@ describe('shouldChime', () => {
     const r = shouldChime('2026-01-01T00:00:00.000Z', [item('2', 'booking_reminder', '2026-01-02T00:00:00.000Z')])
     expect(r).toEqual({ chime: false, watermark: '2026-01-02T00:00:00.000Z' })
   })
+  it('newest-first mixed batch: a newer non-chat row must not shadow an older unseen chat row', () => {
+    // Regression: the old loop compared against the RUNNING max, so the newer
+    // booking_reminder (first in a newest-first batch) silenced the message_dm.
+    const r = shouldChime('2026-01-01T00:00:00.000Z', [
+      item('2', 'booking_reminder', '2026-01-01T00:05:00.000Z'),
+      item('1', 'message_dm', '2026-01-01T00:04:00.000Z'),
+    ])
+    expect(r).toEqual({ chime: true, watermark: '2026-01-01T00:05:00.000Z' })
+  })
 })

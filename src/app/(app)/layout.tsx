@@ -27,7 +27,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Read the saved per-user theme + avatar directly (not part of the session
   // contract); ThemeSync applies the theme on the device only when localStorage
   // has no choice yet.
-  const pref = await prisma.user.findUnique({ where: { id: user.id }, select: { themePreference: true, accentPreference: true, image: true } })
+  const pref = await prisma.user.findUnique({ where: { id: user.id }, select: { themePreference: true, accentPreference: true, soundsEnabled: true, image: true } })
   // Small org-wide option lists for the globally-mounted create-issue composer
   // (raised by the `c` shortcut, the ⌘K "Create issue" command, and any
   // "New issue" button); the modal itself gates opening for guests. The project
@@ -76,7 +76,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </div>
             <div className="flex items-center gap-2">
               <ThemeToggle />
-              <Bell />
+              <Bell soundsSeed={pref?.soundsEnabled ?? false} />
               <UserMenu user={{ id: user.id, name: user.name, image: pref?.image ?? null }} />
             </div>
           </header>
