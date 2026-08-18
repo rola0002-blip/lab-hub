@@ -377,13 +377,13 @@ export async function updateMilestone(args: {
   actorId: string; role: Role; milestoneId: string; name: string; date: string | null
 }): Promise<MilestoneDto> {
   assertCanMutate(args.role)
+  const existing = await prisma.milestone.findUnique({ where: { id: args.milestoneId }, select: { id: true } })
+  if (!existing) throw new PolicyError('not_found', 'Milestone not found.')
   const name = args.name.trim()
   if (name.length < 1 || name.length > 200) throw new PolicyError('invalid', 'Milestone name must be 1–200 characters.')
   if (args.date != null && !DATE_RE.test(args.date)) throw new PolicyError('invalid', 'Milestone date must be a valid date.')
-  try {
-    const m = await prisma.milestone.update({ where: { id: args.milestoneId }, data: { name, date: args.date ?? null } })
-    return toMilestoneDto(m)
-  } catch { throw new PolicyError('not_found', 'Milestone not found.') }
+  const m = await prisma.milestone.update({ where: { id: existing.id }, data: { name, date: args.date ?? null } })
+  return toMilestoneDto(m)
 }
 
 // Toggle both ways — a second click clears completedAt; that IS the undo.
@@ -397,6 +397,7 @@ export async function toggleMilestone(args: { actorId: string; role: Role; miles
 
 export async function deleteMilestone(args: { actorId: string; role: Role; milestoneId: string }): Promise<void> {
   assertCanMutate(args.role)
-  try { await prisma.milestone.delete({ where: { id: args.milestoneId } }) }
-  catch { throw new PolicyError('not_found', 'Milestone not found.') }
+  const existing = await prisma.milestone.findUnique({ where: { id: args.milestoneId }, select: { id: true } })
+  if (!existing) throw new PolicyError('not_found', 'Milestone not found.')
+  await prisma.milestone.delete({ where: { id: existing.id } })
 }

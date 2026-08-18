@@ -117,22 +117,43 @@ export async function moveProjectAction(input: { projectId: string; prevId: stri
   const v = parsed.data
   return run((u) => projects.moveProject({ actorId: u.id, role: u.role, projectId: v.projectId, prevId: v.prevId ?? null, nextId: v.nextId ?? null }))
 }
-// F4 — project milestones (dates + progress only). Simple pass-throughs like the
-// issue setters above: the service owns permission, trim/cap, the DATE_RE gate
-// and the not-found translation, and `date || null` turns an empty date input
-// ('') into a cleared date. No bot announce, no SSE — refresh is revalidatePath
-// (run) + router.refresh() (the strip).
+// F4 — project milestones (dates + progress only). The shapes are checked here
+// (v0.15 lessons: a Server Action is an RPC endpoint, so a forged non-string
+// must degrade to {ok:false,message}, never a PrismaClientValidationError 500);
+// the service still owns permission, existence and the not-found translation.
+// The strip sends `date || null`, so '' never reaches these arms. No bot
+// announce, no SSE — refresh is revalidatePath (run) + router.refresh() (the strip).
+const milestoneNameSchema = z.string().trim().min(1, 'Milestone name must be 1–200 characters.').max(200, 'Milestone name must be 1–200 characters.')
+// z.string().date() = calendar-valid yyyy-MM-dd (rejects 2026-13-45), the shape
+// DATE_RE gates in the service — the belt to its suspenders.
+const milestoneDateSchema = z.string().date('Milestone date must be a valid date.').nullable()
+const createMilestoneSchema = z.object({ projectId: z.string().min(1), name: milestoneNameSchema, date: milestoneDateSchema })
+const editMilestoneSchema = z.object({ milestoneId: z.string().min(1), name: milestoneNameSchema, date: milestoneDateSchema })
+// Same shape as updateIdSchema, its own declaration because a milestone id is
+// not an update id — a malformed id can never name a row, so it reads back as
+// the service's own miss message.
+const milestoneIdSchema = z.string().min(1)
 export async function createMilestoneAction(projectId: string, name: string, date: string | null) {
-  return run((u) => projects.createMilestone({ actorId: u.id, role: u.role, projectId, name, date: date || null }))
+  const parsed = createMilestoneSchema.safeParse({ projectId, name, date: date ?? null })
+  if (!parsed.success) return { ok: false as const, message: parsed.error.issues[0]?.message ?? 'Invalid milestone.' }
+  const v = parsed.data
+  return run((u) => projects.createMilestone({ actorId: u.id, role: u.role, projectId: v.projectId, name: v.name, date: v.date }))
 }
 export async function editMilestoneAction(milestoneId: string, name: string, date: string | null) {
-  return run((u) => projects.updateMilestone({ actorId: u.id, role: u.role, milestoneId, name, date: date || null }))
+  const parsed = editMilestoneSchema.safeParse({ milestoneId, name, date: date ?? null })
+  if (!parsed.success) return { ok: false as const, message: parsed.error.issues[0]?.message ?? 'Invalid milestone.' }
+  const v = parsed.data
+  return run((u) => projects.updateMilestone({ actorId: u.id, role: u.role, milestoneId: v.milestoneId, name: v.name, date: v.date }))
 }
 export async function toggleMilestoneAction(milestoneId: string) {
-  return run((u) => projects.toggleMilestone({ actorId: u.id, role: u.role, milestoneId }))
+  const id = milestoneIdSchema.safeParse(milestoneId)
+  if (!id.success) return { ok: false as const, message: 'Milestone not found.' }
+  return run((u) => projects.toggleMilestone({ actorId: u.id, role: u.role, milestoneId: id.data }))
 }
 export async function deleteMilestoneAction(milestoneId: string) {
-  return run((u) => projects.deleteMilestone({ actorId: u.id, role: u.role, milestoneId }))
+  const id = milestoneIdSchema.safeParse(milestoneId)
+  if (!id.success) return { ok: false as const, message: 'Milestone not found.' }
+  return run((u) => projects.deleteMilestone({ actorId: u.id, role: u.role, milestoneId: id.data }))
 }
 export async function deleteIssueAction(issueId: string) {
   return run((u) => issues.deleteIssue({ issueId, actorId: u.id, role: u.role }))

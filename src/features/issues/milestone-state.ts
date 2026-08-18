@@ -26,5 +26,5 @@ export function milestoneBucket(m: MilestoneLike, today: string): MilestoneBucke
   return 'upcoming'
 }
 
-// yyyy-MM-dd shape gate (the action's zod uses the same regex).
+// yyyy-MM-dd shape gate; the action layer additionally enforces calendar validity via z.string().date().
 export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/

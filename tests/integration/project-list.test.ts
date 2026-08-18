@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { prisma } from '@/lib/db'
 import { resetDb, makeUser, makeProject, makeIssue, makeProjectUpdate, makeDocumentFolder, seedSystem } from '../factories'
-import { listProjects, getProject, listProjectOptions, createProject, updateProject } from '@/features/issues/project-service'
+import { listProjects, getProject, listProjectOptions, createProject, updateProject, createMilestone, toggleMilestone } from '@/features/issues/project-service'
 import { listProjectUpdates } from '@/features/issues/project-update-service'
 import { COLOSSUS_BOT_ID } from '@/features/bot'
 
@@ -77,6 +77,19 @@ describe('extended project reads (SP8 §4.7)', () => {
   })
   // The write paths return a ProjectDto too, so they owe the same three fields: a
   // fresh project is provably empty, while an update must re-read them.
+  // F4: the card's "n/m milestones" readout — the groupBy Maps must wire the
+  // same counts the detail read serves, so the list row is checked against rows
+  // the service itself wrote (not a factory), and getProject must agree.
+  it('listProjects counts milestones through the groupBy Maps, agreeing with getProject', async () => {
+    const u = await makeUser({ role: 'admin' })
+    const p = await createProject({ actorId: u.id, role: 'admin', name: 'P' })
+    const m1 = await createMilestone({ actorId: u.id, role: 'admin', projectId: p.id, name: 'M1', date: '2026-09-01' })
+    await createMilestone({ actorId: u.id, role: 'admin', projectId: p.id, name: 'M2', date: null })
+    await toggleMilestone({ actorId: u.id, role: 'admin', milestoneId: m1.id })
+    const row = (await listProjects()).find((x) => x.id === p.id)!
+    expect(row.milestones).toEqual({ total: 2, complete: 1 })
+    expect((await getProject(p.id))!.milestones).toEqual(row.milestones)
+  })
   it('createProject and updateProject fill the new required fields', async () => {
     const admin = await makeUser({ role: 'admin' })
     const folder = await makeDocumentFolder({ name: 'Wave files', createdById: admin.id })

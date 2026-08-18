@@ -16,6 +16,15 @@ describe('milestone-state', () => {
     expect(milestoneBucket(ms({ date: '2026-01-01' }), '2026-01-01')).toBe('upcoming') // due today is not overdue
     expect(milestoneBucket(ms({}), '2026-01-01')).toBe('upcoming')
   })
+  it('complete beats overdue: a finished past-due milestone reads complete', () => {
+    expect(milestoneBucket(ms({ date: '2025-12-31', completedAt: new Date() }), '2026-01-01')).toBe('complete')
+  })
+  it('sort ties: same-date and undated pairs both fall back to name asc', () => {
+    const dated = sortMilestones([ms({ id: 'b', name: 'B', date: '2026-09-01' }), ms({ id: 'a', name: 'A', date: '2026-09-01' })])
+    expect(dated.map((m) => m.name)).toEqual(['A', 'B'])
+    const undated = sortMilestones([ms({ id: 'b', name: 'B', date: null }), ms({ id: 'a', name: 'A', date: null })])
+    expect(undated.map((m) => m.name)).toEqual(['A', 'B'])
+  })
   it('DTOs completedAt as ISO string or null', () => {
     expect(toMilestoneDto(ms({ completedAt: new Date(0) })).completedAt).toBeTypeOf('string')
     expect(toMilestoneDto(ms({})).completedAt).toBeNull()
