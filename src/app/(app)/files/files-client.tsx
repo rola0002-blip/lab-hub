@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { FileText, FileImage, FileSpreadsheet, FileArchive, File as FileIcon, Folder, FolderPlus, Upload, Search, MoreHorizontal } from 'lucide-react'
+import { FileText, FileImage, FileSpreadsheet, FileArchive, File as FileIcon, Folder, FolderPlus, Upload, Search, MoreHorizontal, ExternalLink } from 'lucide-react'
 import { Menu } from '@/components/ui/menu'
 import { Modal } from '@/components/ui/modal'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -169,6 +169,11 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
             <input value={query} onChange={(e) => { setQuery(e.target.value); if (!e.target.value.trim()) setHits(null) }} placeholder="Search files by name…"
               aria-label="Search files" className="h-9 w-full bg-transparent text-sm text-default outline-none placeholder:text-subtle" />
           </div>
+          {/* F12: pop the current listing (incl. its folder query) into its own window. */}
+          <button type="button" aria-label="Open in new window" onClick={() => window.open(window.location.href, '_blank', 'noopener')}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-muted transition-colors hover:bg-hover hover:text-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
+            <ExternalLink size={15} aria-hidden />
+          </button>
           {mayUpload && (
             <>
               <input ref={fileRef} type="file" multiple hidden onChange={(e) => e.target.files && uploadFiles(e.target.files)} />

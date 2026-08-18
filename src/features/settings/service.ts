@@ -17,6 +17,12 @@ export async function setAccentPreference(userId: string, accent: string) {
   await prisma.user.update({ where: { id: userId }, data: { accentPreference: accent } })
 }
 
+// Persist the user's notification-sounds opt-in (F7). Mirrors the theme/accent
+// posture: the column is the cross-device default; localStorage wins on-device.
+export async function setSoundsPreference(userId: string, enabled: boolean) {
+  await prisma.user.update({ where: { id: userId }, data: { soundsEnabled: enabled } })
+}
+
 export async function setName(userId: string, name: string) {
   await prisma.user.update({ where: { id: userId }, data: { name: name.trim() } })
 }

@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Chat takes files the way the rest of the lab does. Drop attachments anywhere on the message pane, or paste a screenshot straight into the composer — dragged, pasted and picked files all pass through one shared validator, so the limits are the same whichever way a file arrives.
+- The conversation list does more than list. Mute or leave a conversation from its own row, without opening it; chat and Files each offer "Open in new window" for when you want them beside your work; and a file dropped somewhere without a dropzone no longer navigates the tab away.
+- My issues can pin projects. Pin the handful you actually work in — eight at most, remembered per person — and they sit as chips above the list; one tap on a chip filters the list to that project, with the usual `?project=` link to share.
+- A project page carries a milestone strip under its description: dated milestones you complete by hand, with the overdue ones marked as such. Milestones go when the project goes.
+- The first labels. Issues can carry labels picked per project — a picker on the issue with quick-create beside it, a label filter on the list, and per-project management of the vocabulary. Labels belong to their project: move an issue to another project and its project-scoped labels let go rather than clinging where they no longer mean anything, while global labels travel with it.
+- Project updates can carry files — up to five, 25 MB each — served workspace-wide under their original filenames.
+- The landing page remembers the conversation you had open last, checks you still belong to it and that it is not archived, and takes you back there. Notification sounds are opt-in: a soft two-tone chime for mentions and direct messages, remembered per device, with one cross-device default behind it.
+- Thread replies ring the bell for everyone in the thread, not just the named: a mention still wins, a muted conversation stays quiet, and a direct message rings once no matter how many threads it has. When you are away, a digest email gathers unread chat — at most one an hour per person, and never a pile-in from the bot or the senders already flagged for immediate email.
+
+### Changed
+- The e2e harness is driven by its environment: `TEST_DATABASE_URL` overrides the database, and the wizard token, uploads directory and trusted IP header are shielded from local settings for a clean run.
+
 ## [0.15.0] - 2026-08-12
 
 ### Added

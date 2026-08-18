@@ -164,6 +164,24 @@ export function ProjectUpdates({ updates, users, issueRefs = [], origins, role, 
                 ) : (
                   <div className="mt-1.5 whitespace-pre-wrap break-words text-sm text-default">{renderTokens(u.body, names, undefined, refsMap)}</div>
                 )}
+                {/* F6 attachment chips — the row's files open in a new tab through
+                    the session-gated serving route (DB-verified, human filename via
+                    Content-Disposition). Dropped with the body on a retraction, like
+                    the origin chip: the files are content the author withdrew, and the
+                    tombstone keeps no actionable affordances. The rows survive in the
+                    DB — no deletion logic rides the retract. */}
+                {!u.deleted && u.attachments.length > 0 && (
+                  <ul className="mt-1 flex flex-wrap gap-1.5">
+                    {u.attachments.map((a) => (
+                      <li key={a.id}>
+                        <a href={a.path} target="_blank" rel="noreferrer"
+                          className="inline-flex items-center gap-1 rounded-md border border-border bg-surface-sunken px-2 py-1 text-xs text-muted hover:bg-hover hover:text-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
+                          📎 <span className="max-w-[10rem] truncate">{a.name}</span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {/* Dropped with the body on a retraction: the chip would still
                     point at the message this update was captured from, which is
                     exactly the content the author withdrew. */}

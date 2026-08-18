@@ -83,3 +83,12 @@ export function issueDoneEmail(orgName: string, actorName: string, identifier: s
     html: wrap(`<p><strong>${esc(actorName)}</strong> marked <strong>${esc(identifier)}</strong> — ${esc(title)} as done.</p>`),
   }
 }
+export function digestChatEmail(orgName: string, items: { message: string; href: string }[], appUrl: string): Tpl {
+  const shown = items.slice(0, 20)
+  const rows = shown.map((i) => `<li style="margin:4px 0"><a href="${esc(appUrl + i.href)}">${esc(i.message)}</a></li>`).join('')
+  const more = items.length > shown.length ? `<p>…and ${items.length - shown.length} more.</p>` : ''
+  return {
+    subject: `[${orgName}] Unread chat — ${items.length} message${items.length === 1 ? '' : 's'}`,
+    html: wrap(`<p>You have unread chat messages in ${esc(orgName)}:</p><ul>${rows}</ul>${more}<p>Open ${esc(orgName)} to catch up.</p>`),
+  }
+}

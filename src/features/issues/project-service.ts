@@ -5,12 +5,13 @@ import { prisma } from '@/lib/db'
 import * as bot from '@/features/bot'
 import { assertCanMutate, canDeleteProject, PolicyError } from './issue-policy'
 import { rankBetween, rebalance, REBALANCE_THRESHOLD } from './rank'
-import { assertAssigneeExists } from './issue-service'
+import { assertAssigneeExists, assertProjectExists } from './issue-service'
 import { assertFolderExists } from '@/features/documents/document-service'
 import { isEffectiveLead } from './project-health'
 import { PROJECT_UPDATE_ORDER } from './project-update-service'
 import { startOfOrgDay } from './due'
 import { OPEN_STATUSES } from './status'
+import { sortMilestones, toMilestoneDto, DATE_RE, type MilestoneDto } from './milestone-state'
 
 export type ProjectDto = {
   id: string; name: string; description: string
@@ -30,6 +31,9 @@ export type ProjectDto = {
   // producer fills it, so the detail page's Files section and the composer's
   // select read one field, never a second lookup.
   documentFolder: { id: string; name: string } | null
+  // F4: milestone counts for the card readout ("n/m milestones"). Every producer
+  // fills it — one shape off the list, the detail page and the create return.
+  milestones: { total: number; complete: number }
   createdAt: string; updatedAt: string
 }
 
@@ -49,7 +53,7 @@ type LoadedProject = {
   startDate: Date | null; targetDate: Date | null; status: ProjectStatus; rank: string; createdAt: Date; updatedAt: Date
 }
 
-type Extras = { latestUpdate: ProjectDto['latestUpdate']; openOverdue: number }
+type Extras = { latestUpdate: ProjectDto['latestUpdate']; openOverdue: number; milestones: { total: number; complete: number } }
 
 function toDto(p: LoadedProject, done: number, total: number, extras: Extras): ProjectDto {
   return {
@@ -61,6 +65,7 @@ function toDto(p: LoadedProject, done: number, total: number, extras: Extras): P
     progress: { done, total, percent: total === 0 ? 0 : Math.round((done / total) * 100) },
     rank: p.rank,
     documentFolder: p.documentFolder,
+    milestones: extras.milestones,
     createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString(),
   }
 }
@@ -89,16 +94,20 @@ async function progressFor(projectId: string): Promise<{ done: number; total: nu
 }
 
 // `now` is injectable purely for the overdue day boundary (tests pin it); every
-// call site in the app uses the default. Seven queries total, O(1) in the number of
+// call site in the app uses the default. Nine queries total, O(1) in the number of
 // projects — grouped aggregates, never a per-project read.
 export async function listProjects(now: Date = new Date()): Promise<ProjectDto[]> {
   const tz = await orgTimezone()
-  const [projects, totals, dones, overdues, latests] = await Promise.all([
+  const [projects, totals, dones, msTotals, msDones, overdues, latests] = await Promise.all([
     prisma.project.findMany({ orderBy: { rank: 'asc' }, include: { lead: LEAD_SELECT, documentFolder: FOLDER_SELECT } }),
     // Two grouped counts instead of N per-project queries. CANCELED issues are
     // excluded from the denominator (same Linear semantics as progressFor).
     prisma.issue.groupBy({ by: ['projectId'], _count: { _all: true }, where: { projectId: { not: null }, status: { not: 'CANCELED' } } }),
     prisma.issue.groupBy({ by: ['projectId'], _count: { _all: true }, where: { projectId: { not: null }, status: 'DONE' } }),
+    // F4: milestone counts for the card readout — same grouped-aggregate shape as
+    // the issue counts (Milestone.projectId is NOT NULL, so no null filter term).
+    prisma.milestone.groupBy({ by: ['projectId'], _count: { _all: true } }),
+    prisma.milestone.groupBy({ by: ['projectId'], _count: { _all: true }, where: { completedAt: { not: null } } }),
     // Open + past-due, day-granular in the org zone — the same boundary the overdue
     // chip and the overdue nudge use (due.ts), so the counts always agree.
     prisma.issue.groupBy({
@@ -125,11 +134,14 @@ export async function listProjects(now: Date = new Date()): Promise<ProjectDto[]
     : []
   const totalBy = new Map(totals.map((t) => [t.projectId, t._count._all]))
   const doneBy = new Map(dones.map((d) => [d.projectId, d._count._all]))
+  const msTotalBy = new Map(msTotals.map((t) => [t.projectId, t._count._all]))
+  const msDoneBy = new Map(msDones.map((d) => [d.projectId, d._count._all]))
   const overdueBy = new Map(overdues.map((o) => [o.projectId, o._count._all]))
   const latestBy = new Map<string, ProjectDto['latestUpdate']>()
   for (const r of latestRows) if (!latestBy.has(r.projectId)) latestBy.set(r.projectId, toLatestUpdate(r))
   return projects.map((p) => toDto(p, doneBy.get(p.id) ?? 0, totalBy.get(p.id) ?? 0, {
     latestUpdate: latestBy.get(p.id) ?? null, openOverdue: overdueBy.get(p.id) ?? 0,
+    milestones: { total: msTotalBy.get(p.id) ?? 0, complete: msDoneBy.get(p.id) ?? 0 },
   }))
 }
 
@@ -139,14 +151,20 @@ export async function getProject(id: string, now: Date = new Date()): Promise<Pr
   const p = await prisma.project.findUnique({ where: { id }, include: { lead: LEAD_SELECT, documentFolder: FOLDER_SELECT } })
   if (!p) return null
   const tz = await orgTimezone()
-  const [progress, openOverdue, latest] = await Promise.all([
+  const [progress, openOverdue, latest, msTotal, msDone] = await Promise.all([
     progressFor(id),
     prisma.issue.count({ where: { projectId: id, status: { in: OPEN_STATUSES }, dueDate: { lt: startOfOrgDay(now, tz) } } }),
     // deletedAt: null — same latest-pick rule as listProjects (v0.15 §6.2); the
     // detail page and the card must never disagree about which row is latest.
     prisma.projectUpdate.findFirst({ where: { projectId: id, deletedAt: null }, orderBy: PROJECT_UPDATE_ORDER, include: { author: { select: { name: true } } } }),
+    // F4: the DTO's milestone counts, same definition as listProjects' groupBys.
+    prisma.milestone.count({ where: { projectId: id } }),
+    prisma.milestone.count({ where: { projectId: id, completedAt: { not: null } } }),
   ])
-  return toDto(p, progress.done, progress.total, { latestUpdate: toLatestUpdate(latest), openOverdue })
+  return toDto(p, progress.done, progress.total, {
+    latestUpdate: toLatestUpdate(latest), openOverdue,
+    milestones: { total: msTotal, complete: msDone },
+  })
 }
 
 // Narrow companion (§4.7): the issue pages and the global composer need only
@@ -209,9 +227,10 @@ export async function createProject(args: {
     include: { lead: LEAD_SELECT, documentFolder: FOLDER_SELECT },
   })
   void bot.announceToChannel(`New project: ${p.name} — /projects/${p.id}`, args.actorId)
-  // A just-created project provably has no issues and no updates, so the extras are
-  // exact without a re-read (getProject would only re-derive these same zeros).
-  return toDto(p, 0, 0, { latestUpdate: null, openOverdue: 0 })
+  // A just-created project provably has no issues, no updates and no milestones,
+  // so the extras are exact without a re-read (getProject would only re-derive
+  // these same zeros).
+  return toDto(p, 0, 0, { latestUpdate: null, openOverdue: 0, milestones: { total: 0, complete: 0 } })
 }
 
 export async function updateProject(args: {
@@ -331,4 +350,102 @@ export async function deleteProject(args: { role: Role; id: string }): Promise<v
   const existing = await prisma.project.findUnique({ where: { id: args.id } })
   if (!existing) throw new PolicyError('not_found', 'Project not found.')
   await prisma.project.delete({ where: { id: args.id } }) // FK SetNull detaches issues
+}
+
+// ── milestones (F4: dates + progress only) ────────────────────────────────────
+// No bot announce and no emitEvent/SSE for milestones — the strip refreshes via
+// revalidatePath (the action's run()) + router.refresh() (the strip itself).
+
+export async function listMilestones(projectId: string): Promise<MilestoneDto[]> {
+  const rows = await prisma.milestone.findMany({ where: { projectId } })
+  return sortMilestones(rows).map(toMilestoneDto)
+}
+
+export async function createMilestone(args: {
+  actorId: string; role: Role; projectId: string; name: string; date: string | null
+}): Promise<MilestoneDto> {
+  assertCanMutate(args.role)
+  await assertProjectExists(args.projectId)
+  const name = args.name.trim()
+  if (name.length < 1 || name.length > 200) throw new PolicyError('invalid', 'Milestone name must be 1–200 characters.')
+  if (args.date != null && !DATE_RE.test(args.date)) throw new PolicyError('invalid', 'Milestone date must be a valid date.')
+  const m = await prisma.milestone.create({ data: { projectId: args.projectId, name, date: args.date ?? null } })
+  return toMilestoneDto(m)
+}
+
+export async function updateMilestone(args: {
+  actorId: string; role: Role; milestoneId: string; name: string; date: string | null
+}): Promise<MilestoneDto> {
+  assertCanMutate(args.role)
+  const existing = await prisma.milestone.findUnique({ where: { id: args.milestoneId }, select: { id: true } })
+  if (!existing) throw new PolicyError('not_found', 'Milestone not found.')
+  const name = args.name.trim()
+  if (name.length < 1 || name.length > 200) throw new PolicyError('invalid', 'Milestone name must be 1–200 characters.')
+  if (args.date != null && !DATE_RE.test(args.date)) throw new PolicyError('invalid', 'Milestone date must be a valid date.')
+  const m = await prisma.milestone.update({ where: { id: existing.id }, data: { name, date: args.date ?? null } })
+  return toMilestoneDto(m)
+}
+
+// Toggle both ways — a second click clears completedAt; that IS the undo.
+export async function toggleMilestone(args: { actorId: string; role: Role; milestoneId: string }): Promise<MilestoneDto> {
+  assertCanMutate(args.role)
+  const m = await prisma.milestone.findUnique({ where: { id: args.milestoneId } })
+  if (!m) throw new PolicyError('not_found', 'Milestone not found.')
+  const next = await prisma.milestone.update({ where: { id: m.id }, data: { completedAt: m.completedAt ? null : new Date() } })
+  return toMilestoneDto(next)
+}
+
+export async function deleteMilestone(args: { actorId: string; role: Role; milestoneId: string }): Promise<void> {
+  assertCanMutate(args.role)
+  const existing = await prisma.milestone.findUnique({ where: { id: args.milestoneId }, select: { id: true } })
+  if (!existing) throw new PolicyError('not_found', 'Milestone not found.')
+  await prisma.milestone.delete({ where: { id: existing.id } })
+}
+
+// ── pinned projects (F3) ─────────────────────────────────────────────────────
+// Per-user state on User.pinnedProjectIds (Task 2's TEXT[] column) — NOT project
+// mutation, so there is deliberately no assertCanMutate: /issues/me is visible to
+// every role including guests, and a guest pinning a shortcut to their own view
+// changes nobody else's state. Only existence and the cap are enforced.
+// Soft cap: two concurrent pins at the boundary can race read-modify-write (last write wins; 9 chips self-correct on next unpin) — deliberately NOT prisma array push, which would duplicate ids under the same race.
+
+export const MAX_PINS = 8
+
+export async function pinProject(args: { userId: string; projectId: string }): Promise<void> {
+  // Read the user FIRST and 404 on a miss: unreachable via actions (requireUser),
+  // but keeps the read/write pair honest for future non-session callers.
+  const u = await prisma.user.findUnique({ where: { id: args.userId }, select: { pinnedProjectIds: true } })
+  if (!u) throw new PolicyError('not_found', 'User not found.')
+  const project = await prisma.project.findUnique({ where: { id: args.projectId }, select: { id: true } })
+  if (!project) throw new PolicyError('not_found', 'Project not found.')
+  const current = u.pinnedProjectIds
+  if (current.includes(args.projectId)) return // idempotent — a repeat click is a no-op
+  if (current.length >= MAX_PINS) throw new PolicyError('invalid', `Pin limit is ${MAX_PINS} projects.`)
+  await prisma.user.update({ where: { id: args.userId }, data: { pinnedProjectIds: [...current, args.projectId] } })
+}
+
+// Unpin is idempotent too: filtering out an absent id yields the same array.
+export async function unpinProject(args: { userId: string; projectId: string }): Promise<void> {
+  const u = await prisma.user.findUnique({ where: { id: args.userId }, select: { pinnedProjectIds: true } })
+  if (!u) return // a missing user has nothing pinned — no-op
+  await prisma.user.update({ where: { id: args.userId }, data: { pinnedProjectIds: u.pinnedProjectIds.filter((id) => id !== args.projectId) } })
+}
+
+// Pin order preserved (the column's array order, not name order); deleted projects
+// drop out silently (the findMany only returns survivors). openCount uses the same
+// OPEN_STATUSES set as every other open read, and the two reads + one groupBy keep
+// it O(1) in the number of pins — no per-project query.
+export async function listPinnedProjects(userId: string): Promise<{ id: string; name: string; openCount: number }[]> {
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { pinnedProjectIds: true } })
+  const ids = u?.pinnedProjectIds ?? []
+  if (ids.length === 0) return []
+  const [projects, counts] = await Promise.all([
+    prisma.project.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }),
+    prisma.issue.groupBy({ by: ['projectId'], where: { projectId: { in: ids }, status: { in: OPEN_STATUSES } }, _count: { _all: true } }),
+  ])
+  const order = new Map(ids.map((id, i) => [id, i]))
+  const openBy = new Map(counts.map((c) => [c.projectId, c._count._all]))
+  return projects
+    .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+    .map((p) => ({ ...p, openCount: openBy.get(p.id) ?? 0 }))
 }

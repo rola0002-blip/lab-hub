@@ -1,10 +1,12 @@
 'use client'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useImperativeHandle, useEffect, useMemo, useRef, useState } from 'react'
+import type { Ref } from 'react'
 import { Bold, Italic, Strikethrough, Link as LinkIcon, Code, List, Quote, Smile, Send, Paperclip } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { searchEmoji } from '@/features/chat/emoji'
 import { wrapSelection, detectTrigger } from '@/features/chat/compose-format'
 import { humanUsers } from '@/features/chat/roster'
+import { validateAttachmentFiles } from '@/features/chat/attachment-input'
 import { useChat } from './chat-store'
 import { EmojiPicker } from './emoji-picker'
 import type { Msg } from './message-item'
@@ -51,16 +53,24 @@ function readDraft(key: string): string {
 // (`<@id>`, `<!channel>`) directly — autocomplete inserts tokens, and a hint line
 // explains they render as friendly @Name once sent. No rich-text dual buffer.
 //
+// F1 imperative surface for pane-level drag-and-drop: the message pane catches
+// drops anywhere over the message area and forwards the files into the composer's
+// (shared, validated) attach intake via this handle.
+export type ComposerHandle = { acceptFiles: (files: File[]) => void }
+
 // Thin wrapper: drafts are keyed by conversation + thread, so the body is REMOUNTED
 // whenever that key changes (channel switch, or main-vs-thread composer). Remounting
 // lets the lazy draft-restore initializer re-read sessionStorage for the new
 // conversation — the lint-safe alternative to a set-state-in-effect reset.
-export default function Composer(props: Props) {
+const Composer = forwardRef<ComposerHandle, Props>(function Composer(props, ref) {
   const draftKey = 'draft:' + props.conversationId + (props.parentId ?? '')
-  return <ComposerBody key={draftKey} draftKey={draftKey} {...props} />
-}
+  return <ComposerBody key={draftKey} draftKey={draftKey} ref={ref} {...props} />
+})
+export default Composer
 
-function ComposerBody({ draftKey, conversationId, selfRole, memberIds, parentId, onSent, onRemove, onFail, showBroadcast = false, broadcastLabel, main = false, onNavigateUp }: Props & { draftKey: string }) {
+// React 19 ref-as-prop: the wrapper's forwardRef ref reaches the body as a plain
+// prop, so useImperativeHandle below has access to the live attach intake.
+function ComposerBody({ draftKey, conversationId, selfRole, memberIds, parentId, onSent, onRemove, onFail, showBroadcast = false, broadcastLabel, main = false, onNavigateUp, ref }: Props & { draftKey: string; ref?: Ref<ComposerHandle> }) {
   const { users, selfId } = useChat()
   const [raw, setRaw] = useState<string>(() => readDraft(draftKey))
   const [broadcast, setBroadcast] = useState(false)
@@ -169,9 +179,19 @@ function ComposerBody({ draftKey, conversationId, selfRole, memberIds, parentId,
     void fetch(`/api/chat/conversations/${conversationId}/typing`, { method: 'POST' })
   }
 
-  async function onFiles(files: FileList) {
+  // F1: the SINGLE attach intake — picker, paste and pane drop all funnel through
+  // one client-side gate (allowlist / 25 MB / ≤10 files) before any upload, so
+  // the three entrances can never diverge from the server's rules.
+  async function onFiles(files: FileList | File[]) {
     setError(null)
-    for (const file of Array.from(files)) {
+    const { accepted, errors } = validateAttachmentFiles(Array.from(files), attachments.length)
+    if (errors.length) setError(errors[0])
+    if (accepted.length) await upload(accepted)
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
+  async function upload(files: File[]) {
+    for (const file of files) {
       setUploading((n) => n + 1)
       try {
         const fd = new FormData(); fd.append('file', file)
@@ -183,6 +203,9 @@ function ComposerBody({ draftKey, conversationId, selfRole, memberIds, parentId,
     }
     if (fileRef.current) fileRef.current.value = ''
   }
+
+  // Deliberately NO deps array — the handle must close over the CURRENT onFiles so drops validate against the live chip count. An empty deps array would freeze the 10-file cap at mount-time state.
+  useImperativeHandle(ref, () => ({ acceptFiles: (files) => { void onFiles(files) } }))
 
   async function send() {
     const body = raw.trim()
@@ -300,6 +323,12 @@ function ComposerBody({ draftKey, conversationId, selfRole, memberIds, parentId,
           suppressHydrationWarning
           onChange={(e) => { setRaw(e.target.value); updateMenu(e.target.value, e.target.selectionStart); maybeTyping() }}
           onKeyDown={onKeyDown} onBlur={() => setTimeout(() => setMenu(null), 100)}
+          onPaste={(e) => {
+            // F1: pasted FILES (e.g. screenshots) join the same validated intake.
+            // Plain-text paste is untouched — no files means no preventDefault.
+            const files = Array.from(e.clipboardData?.files ?? [])
+            if (files.length) { e.preventDefault(); void onFiles(files) }
+          }}
           className="max-h-40 min-h-[2.5rem] flex-1 resize-none rounded-md border border-border bg-surface px-3 py-2 text-sm text-default placeholder:text-subtle focus-visible:border-[var(--border-focus)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
         {/* `disabled` derives from `raw`, which is '' during SSR but restored from a
             sessionStorage draft on the client — an intentional divergence, like the

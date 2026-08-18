@@ -84,8 +84,30 @@ export async function setLabelsAction(issueId: string, labelIds: string[]) {
 export async function updateDescriptionAction(issueId: string, description: string) {
   return run((u) => issues.updateDescription({ actorId: u.id, role: u.role, issueId, description }))
 }
-export async function createLabelAction(name: string, color: string) {
-  return run((u) => issues.createLabel({ actorId: u.id, role: u.role, name, color }))
+// F5 — project-scoped labels. Name shape checked here (the RPC-argument lesson:
+// a forged non-string degrades to {ok:false,message}, never a 500); ids get the
+// milestoneIdSchema treatment — a malformed id can never name a row. The service
+// still owns permission, trim/cap, scope and the P2002 duplicate-name translation.
+const labelNameSchema = z.string().trim().min(1, 'Label name must be 1–40 characters.').max(40, 'Label name must be 1–40 characters.')
+const labelIdSchema = z.string().min(1)
+const createLabelSchema = z.object({ name: labelNameSchema, projectId: z.string().min(1).nullish() })
+export async function createLabelAction(name: string, projectId?: string | null) {
+  const parsed = createLabelSchema.safeParse({ name, projectId: projectId ?? null })
+  if (!parsed.success) return { ok: false as const, message: parsed.error.issues[0]?.message ?? 'Invalid label.' }
+  const v = parsed.data
+  return run((u) => issues.createLabel({ actorId: u.id, role: u.role, name: v.name, projectId: v.projectId ?? null }))
+}
+export async function renameLabelAction(labelId: string, name: string) {
+  const id = labelIdSchema.safeParse(labelId)
+  if (!id.success) return { ok: false as const, message: 'Label not found.' }
+  const parsed = labelNameSchema.safeParse(name)
+  if (!parsed.success) return { ok: false as const, message: parsed.error.issues[0]?.message ?? 'Invalid label.' }
+  return run((u) => issues.renameLabel({ actorId: u.id, role: u.role, labelId: id.data, name: parsed.data }))
+}
+export async function deleteLabelAction(labelId: string) {
+  const id = labelIdSchema.safeParse(labelId)
+  if (!id.success) return { ok: false as const, message: 'Label not found.' }
+  return run((u) => issues.deleteLabel({ actorId: u.id, role: u.role, labelId: id.data }).then(() => undefined))
 }
 export async function createProjectAction(input: { name: string; description?: string; leadId?: string | null; documentFolderId?: string | null; startDate?: string | null; targetDate?: string | null; status?: ProjectStatus }) {
   const parsed = createProjectSchema.safeParse(input)
@@ -102,6 +124,25 @@ export async function updateProjectAction(id: string, input: { name?: string; de
 export async function deleteProjectAction(id: string) {
   return run((u) => projects.deleteProject({ role: u.role, id }))
 }
+// F3 — pinned projects on /issues/me. Per-user state with NO role gate (guests may
+// pin), so unlike every other project action above there is no assertCanMutate
+// downstream — only existence and the MAX_PINS cap. The id is an RPC argument like
+// any other (the updateIdSchema lesson): the `string` type is a compile-time claim
+// only, and a forged non-string must degrade to {ok:false,message}, never a 500.
+// A malformed id can never name a row, so it reads back as the service's own miss
+// message. Distinct declaration from milestoneIdSchema because a project id is not
+// a milestone id.
+const pinProjectIdSchema = z.string().min(1)
+export async function pinProjectAction(projectId: string) {
+  const id = pinProjectIdSchema.safeParse(projectId)
+  if (!id.success) return { ok: false as const, message: 'Project not found.' }
+  return run((u) => projects.pinProject({ userId: u.id, projectId: id.data }).then(() => undefined))
+}
+export async function unpinProjectAction(projectId: string) {
+  const id = pinProjectIdSchema.safeParse(projectId)
+  if (!id.success) return { ok: false as const, message: 'Project not found.' }
+  return run((u) => projects.unpinProject({ userId: u.id, projectId: id.data }).then(() => undefined))
+}
 // v0.12 §6.2 — the grid's arrangement move. The client sends only the neighbour
 // ids the card sits between after the drop; the server mints the key. `.nullish()`
 // keeps the boundary drops expressible (no prev = front, no next = end) while an
@@ -116,6 +157,44 @@ export async function moveProjectAction(input: { projectId: string; prevId: stri
   if (!parsed.success) return { ok: false as const, message: firstIssue(parsed.error) }
   const v = parsed.data
   return run((u) => projects.moveProject({ actorId: u.id, role: u.role, projectId: v.projectId, prevId: v.prevId ?? null, nextId: v.nextId ?? null }))
+}
+// F4 — project milestones (dates + progress only). The shapes are checked here
+// (v0.15 lessons: a Server Action is an RPC endpoint, so a forged non-string
+// must degrade to {ok:false,message}, never a PrismaClientValidationError 500);
+// the service still owns permission, existence and the not-found translation.
+// The strip sends `date || null`, so '' never reaches these arms. No bot
+// announce, no SSE — refresh is revalidatePath (run) + router.refresh() (the strip).
+const milestoneNameSchema = z.string().trim().min(1, 'Milestone name must be 1–200 characters.').max(200, 'Milestone name must be 1–200 characters.')
+// z.string().date() = calendar-valid yyyy-MM-dd (rejects 2026-13-45), the shape
+// DATE_RE gates in the service — the belt to its suspenders.
+const milestoneDateSchema = z.string().date('Milestone date must be a valid date.').nullable()
+const createMilestoneSchema = z.object({ projectId: z.string().min(1), name: milestoneNameSchema, date: milestoneDateSchema })
+const editMilestoneSchema = z.object({ milestoneId: z.string().min(1), name: milestoneNameSchema, date: milestoneDateSchema })
+// Same shape as updateIdSchema, its own declaration because a milestone id is
+// not an update id — a malformed id can never name a row, so it reads back as
+// the service's own miss message.
+const milestoneIdSchema = z.string().min(1)
+export async function createMilestoneAction(projectId: string, name: string, date: string | null) {
+  const parsed = createMilestoneSchema.safeParse({ projectId, name, date: date ?? null })
+  if (!parsed.success) return { ok: false as const, message: parsed.error.issues[0]?.message ?? 'Invalid milestone.' }
+  const v = parsed.data
+  return run((u) => projects.createMilestone({ actorId: u.id, role: u.role, projectId: v.projectId, name: v.name, date: v.date }))
+}
+export async function editMilestoneAction(milestoneId: string, name: string, date: string | null) {
+  const parsed = editMilestoneSchema.safeParse({ milestoneId, name, date: date ?? null })
+  if (!parsed.success) return { ok: false as const, message: parsed.error.issues[0]?.message ?? 'Invalid milestone.' }
+  const v = parsed.data
+  return run((u) => projects.updateMilestone({ actorId: u.id, role: u.role, milestoneId: v.milestoneId, name: v.name, date: v.date }))
+}
+export async function toggleMilestoneAction(milestoneId: string) {
+  const id = milestoneIdSchema.safeParse(milestoneId)
+  if (!id.success) return { ok: false as const, message: 'Milestone not found.' }
+  return run((u) => projects.toggleMilestone({ actorId: u.id, role: u.role, milestoneId: id.data }))
+}
+export async function deleteMilestoneAction(milestoneId: string) {
+  const id = milestoneIdSchema.safeParse(milestoneId)
+  if (!id.success) return { ok: false as const, message: 'Milestone not found.' }
+  return run((u) => projects.deleteMilestone({ actorId: u.id, role: u.role, milestoneId: id.data }))
 }
 export async function deleteIssueAction(issueId: string) {
   return run((u) => issues.deleteIssue({ issueId, actorId: u.id, role: u.role }))
@@ -137,17 +216,23 @@ export async function attachIssueFilesAction(issueId: string, files: { path: str
 // health enum never reaches a Prisma enum column unchecked); the service still owns
 // permission, trim/cap and the forged-originMessageId guard.
 const healthEnum = z.enum(['ON_TRACK', 'AT_RISK', 'OFF_TRACK'])
+// F6 — the .max(5) mirrors the service's MAX_UPDATE_ATTACHMENTS (one cap, two
+// gates); the service still owns the /uploads/project-updates/ IDOR prefix guard.
+const updateAttachmentSchema = z.object({
+  path: z.string().min(1), name: z.string().min(1).max(200), mime: z.string().min(1), size: z.number().int().nonnegative(),
+})
 const postUpdateSchema = z.object({
   projectId: z.string().min(1, 'Choose a project.'),
   health: healthEnum,
   body: z.string().min(1, 'An update needs a few words.').max(4000),
   originMessageId: z.string().nullish(),
+  attachments: z.array(updateAttachmentSchema).max(5, 'At most 5 files per update.').optional(),
 })
-export async function postProjectUpdateAction(input: { projectId: string; health: ProjectHealth; body: string; originMessageId?: string | null }) {
+export async function postProjectUpdateAction(input: { projectId: string; health: ProjectHealth; body: string; originMessageId?: string | null; attachments?: { path: string; name: string; mime: string; size: number }[] }) {
   const parsed = postUpdateSchema.safeParse(input)
   if (!parsed.success) return { ok: false as const, message: parsed.error.issues[0]?.message ?? 'Invalid update.' }
   const v = parsed.data
-  return run((u) => updates.postProjectUpdate({ projectId: v.projectId, actorId: u.id, role: u.role, health: v.health, body: v.body, originMessageId: v.originMessageId ?? null }))
+  return run((u) => updates.postProjectUpdate({ projectId: v.projectId, actorId: u.id, role: u.role, health: v.health, body: v.body, originMessageId: v.originMessageId ?? null, attachments: v.attachments ?? [] }))
 }
 // v0.15 §6.3 — correction and retraction. The body/health shapes are postUpdateSchema's
 // exactly (one contract whether the composer is writing or rewriting); there is no

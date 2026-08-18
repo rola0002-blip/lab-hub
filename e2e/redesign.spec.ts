@@ -333,3 +333,159 @@ test('mobile 320px: no horizontal overflow and the thread opens as a focus-trapp
 
   await ctx.close()
 })
+
+// F12: the Files toolbar's new-window button opens window.location.href verbatim,
+// so whatever listing URL you're on carries into the popup; the originating tab
+// stays put. Exercised at the bare /files root — a ?folder= listing rides the
+// same pass-through but is not asserted here.
+test('files: open in new window opens the same listing in a popup', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  await page.goto('/files')
+  await expect(page.getByRole('button', { name: 'Open in new window' })).toBeVisible()
+
+  const popupPromise = page.waitForEvent('popup')
+  await page.getByRole('button', { name: 'Open in new window' }).click()
+  const popup = await popupPromise
+  await expect(popup).toHaveURL(/\/files/)
+  await popup.close()
+  await expect(page).toHaveURL(/\/files/)
+  await page.context().close()
+})
+
+// F2: row-level Mute/Unmute in the conversation list — the ⋯ trigger is
+// hover/keyboard-only by design (touch users get the header menu).
+test('chat: row-level Mute/Unmute from the conversation list', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  await createChannel(page, 'rowmute')
+  const row = page.getByRole('link', { name: /rowmute/ })
+  await expect(row).toBeVisible()
+
+  // Hover reveals the row's ⋯ menu; muting stamps the row's BellOff glyph.
+  await row.hover()
+  await page.getByRole('button', { name: 'rowmute actions' }).click()
+  await page.getByRole('menuitem', { name: 'Mute' }).click()
+  await expect(row.locator('[aria-label="Muted"]')).toBeVisible()
+
+  // Unmute from the same row menu restores the prior state.
+  await row.hover()
+  await page.getByRole('button', { name: 'rowmute actions' }).click()
+  await page.getByRole('menuitem', { name: 'Unmute' }).click()
+  await expect(row.locator('[aria-label="Muted"]')).toHaveCount(0)
+
+  await page.context().close()
+})
+
+// F2: Leave channel via the row menu. Leaving a NON-open row keeps the current
+// pane; leaving the open conversation lands back on the chat index.
+test('chat: leave via the row menu — other rows keep the pane, the open row returns to /chat', async ({ browser }) => {
+  test.setTimeout(120_000)
+  const page = await admin(browser)
+  const stayId = await createChannel(page, 'stayhere')
+  await createChannel(page, 'goner')
+  // Re-open 'stayhere' so the pane shows it while 'goner' is left from the rail.
+  await page.goto(`/chat/${stayId}`)
+  await expect(page.getByRole('heading', { name: '#stayhere' })).toBeVisible()
+
+  await page.getByRole('link', { name: /goner/ }).hover()
+  await page.getByRole('button', { name: 'goner actions' }).click()
+  await page.getByRole('menuitem', { name: 'Leave channel' }).click()
+  await expect(page.getByRole('link', { name: /goner/ })).toHaveCount(0)
+  await expect(page).toHaveURL(new RegExp(`/chat/${stayId}$`))
+
+  // Leaving the conversation you are reading redirects to the chat index.
+  await page.getByRole('link', { name: /stayhere/ }).hover()
+  await page.getByRole('button', { name: 'stayhere actions' }).click()
+  await page.getByRole('menuitem', { name: 'Leave channel' }).click()
+  await page.waitForURL('**/chat')
+  await expect(page.getByRole('link', { name: /stayhere/ })).toHaveCount(0)
+
+  await page.context().close()
+})
+
+// Task-7 carry-over: a file dropped OUTSIDE [data-chat-pane] (here: the
+// conversation rail) must be cancelled by the chat shell's window-level guard
+// instead of navigating the tab to the dropped file. A synthetic cancelable drop
+// proves the guard prevents the default; unprevented, Chromium would treat a
+// Files drop on non-dropzone chrome as top-level navigation.
+test('chat: dropping a file on the conversation rail is cancelled (no tab navigation)', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  // The guard lives in the chat shell, mounted for every /chat route — an open
+  // conversation is not required for it, but the rail drop target is most
+  // realistic with a channel behind it.
+  await createChannel(page, 'dropguard')
+  await expect(page.getByRole('heading', { name: '#dropguard' })).toBeVisible()
+
+  const rail = page.getByRole('navigation', { name: 'Conversations' })
+  await expect(rail).toBeVisible()
+  const url = page.url()
+  const prevented = await rail.evaluate((el) => {
+    const dt = new DataTransfer()
+    dt.items.add(new File(['drop guard'], 'drop-guard.txt', { type: 'text/plain' }))
+    const ev = new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })
+    el.dispatchEvent(ev)
+    return ev.defaultPrevented
+  })
+  // defaultPrevented is the real instrument: an untrusted synthetic event never
+  // triggers browser default actions, so the URL assert below is
+  // belt-and-suspenders documentation of the guard's user-visible contract.
+  expect(prevented).toBe(true)
+  expect(page.url()).toBe(url)
+
+  await page.context().close()
+})
+
+// F7: post-login landing is the last-open conversation (landingHrefFor), and it
+// re-validates at read — leaving the conversation reverts the landing to the
+// personal task list without anyone clearing the remembered id.
+test('F7: sign-in lands on the last-open conversation; leaving reverts to /issues/me', async ({ browser }) => {
+  test.setTimeout(120_000)
+  const page = await admin(browser)
+  const cid = await createChannel(page, 'landing')
+
+  // Last-open channel is remembered → the next sign-in lands back in it.
+  await signOut(page)
+  await page.waitForURL('**/sign-in')
+  await signIn(page, ADMIN.email, ADMIN.password)
+  await expect(page).toHaveURL(new RegExp(`/chat/${cid}$`))
+  await expect(page.getByRole('heading', { name: '#landing' })).toBeVisible()
+
+  // Leave via the row's ⋯ menu (the open row redirects to the chat index); the
+  // membership is gone, so landingHrefFor falls back to /issues/me on the next
+  // sign-in even though the remembered id still points here.
+  await page.getByRole('link', { name: /landing/ }).hover()
+  await page.getByRole('button', { name: 'landing actions' }).click()
+  await page.getByRole('menuitem', { name: 'Leave channel' }).click()
+  await page.waitForURL('**/chat')
+
+  await signOut(page)
+  await page.waitForURL('**/sign-in')
+  await signIn(page, ADMIN.email, ADMIN.password)
+  await expect(page).toHaveURL(/\/issues\/me$/)
+  await expect(page.getByRole('heading', { name: 'My issues' })).toBeVisible()
+
+  await page.context().close()
+})
+
+// F7: notification sounds — an opt-in per-device toggle (role=switch, never
+// colour-alone) whose localStorage choice survives reload; the server column is
+// only the cross-device seed.
+test('F7: profile sounds toggle stays on across reload', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+
+  await page.goto('/profile')
+  const toggle = page.getByRole('switch', { name: 'Notification sounds' })
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-checked', 'true')
+
+  // Reload: localStorage 'sounds' === '1' wins on the device, so the switch the
+  // server seeded as false still renders on.
+  await page.reload()
+  await expect(page.getByRole('switch', { name: 'Notification sounds' })).toHaveAttribute('aria-checked', 'true')
+
+  await page.context().close()
+})

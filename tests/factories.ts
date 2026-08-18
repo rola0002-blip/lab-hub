@@ -18,7 +18,7 @@ export async function resetDb() {
       await prisma.$executeRawUnsafe(`
         TRUNCATE TABLE "Feedback",
           "Document","DocumentFolder",
-          "ProjectUpdate",
+          "ProjectUpdate","ProjectUpdateAttachment",
           "IssueActivity","IssueAttachment","IssueComment","IssueLabel",
           "Label","Issue","Project",
           "Conversation","ConversationMember","Message","Reaction",

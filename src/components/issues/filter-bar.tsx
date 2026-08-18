@@ -2,6 +2,7 @@
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { X } from 'lucide-react'
 import { ISSUE_STATUSES, STATUS_LABEL, PRIORITIES, PRIORITY_LABEL } from '@/features/issues/status'
+import type { LabelDto } from '@/features/issues/issue-service'
 
 type Opt = { id: string; name: string }
 // The filter keys this bar owns. "Clear filters" removes exactly these and preserves
@@ -9,7 +10,7 @@ type Opt = { id: string; name: string }
 // button only appears when at least one of them is active.
 const FILTER_KEYS = ['status', 'assignee', 'project', 'priority', 'label', 'due', 'stalled']
 
-export function FilterBar({ users, projects, lockAssignee }: { users: Opt[]; projects: Opt[]; lockAssignee?: boolean }) {
+export function FilterBar({ users, projects, labels, lockAssignee }: { users: Opt[]; projects: Opt[]; labels: LabelDto[]; lockAssignee?: boolean }) {
   const router = useRouter(); const pathname = usePathname(); const sp = useSearchParams()
   function set(key: string, value: string) {
     const next = new URLSearchParams(sp.toString())
@@ -40,6 +41,23 @@ export function FilterBar({ users, projects, lockAssignee }: { users: Opt[]; pro
         <option value="">Any project</option>
         {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
       </select>
+      {/* F5 label filter — grouped Workspace-first then per project. Hidden
+          entirely when no labels exist, so a fresh install sees today's bar. */}
+      {labels.length > 0 && (
+        <select aria-label="Label" value={sp.get('label') ?? ''} onChange={(e) => set('label', e.target.value)} className={selectCls}>
+          <option value="">Any label</option>
+          <optgroup label="Workspace">
+            {labels.filter((l) => l.projectId === null).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </optgroup>
+          {Object.entries(labels.filter((l) => l.projectId !== null).reduce<Record<string, LabelDto[]>>((acc, l) => {
+            const key = l.project?.name ?? 'Project'
+            ;(acc[key] ??= []).push(l)
+            return acc
+          }, {})).map(([group, ls]) => (
+            <optgroup key={group} label={group}>{ls.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</optgroup>
+          ))}
+        </select>
+      )}
       <select aria-label="Priority" value={sp.get('priority') ?? ''} onChange={(e) => set('priority', e.target.value)} className={selectCls}>
         <option value="">Any priority</option>
         {PRIORITIES.map((p) => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}

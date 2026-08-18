@@ -8,11 +8,18 @@ Project management arrives in a later release on this same foundation.
 
 Built-in team chat. Channels (public or private) and direct messages, threaded
 replies, `@mentions` (and `@channel`), emoji reactions, and 25 MB file
-attachments. Full-text search spans every conversation you belong to. Delivery
-is realtime over one Server-Sent-Events stream per tab (no WebSockets), fanned
-out with Postgres `LISTEN`/`NOTIFY`. Web Push notifies you of mentions and DMs
-when you have no tab open — opt-in, and silenced per conversation by mute (except
-direct @mentions).
+attachments — dragging files onto the message pane and pasting screenshots
+both attach. Channels can be muted or left straight from the conversation
+list, any chat or Files page opens in its own window, and a stray file drop
+inside chat never navigates the tab away. Signing in returns you to the
+conversation you last had open. Full-text search spans every conversation
+you belong to. Delivery is realtime over one Server-Sent-Events stream per
+tab (no WebSockets), fanned out with Postgres `LISTEN`/`NOTIFY`. Web Push
+notifies you of mentions and DMs when you have no tab open — opt-in, and
+silenced per conversation by mute (except direct @mentions). An opt-in soft
+chime (profile → Appearance) covers mentions, DMs, and thread replies, and a
+60-minute unread-chat digest email follows (at most one per hour; mentions,
+DMs, and thread replies — never bot messages).
 Membership is the single authorization rule: you only ever read, search, or
 receive events for conversations you are a member of.
 
@@ -86,6 +93,11 @@ tokens and conventions on top of the design system:
 - **Drag-and-drop.** `@dnd-kit` is confined to the board (`board-view.tsx`); its
   `KeyboardSensor` makes every move keyboard-only (grip → Space to lift, arrows to
   move, Space to drop), and a per-card status Menu is the non-DnD fallback.
+
+v0.16 rounds out the tracker: milestones — a dated strip under the project
+description, completed by hand, with the count on the project card — per-project
+labels (names unique within their scope, global labels shared), pinned-project
+chips on My issues, and attachments on project updates.
 
 ## Calendar sync & the LabHub Bot
 

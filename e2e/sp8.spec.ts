@@ -335,7 +335,12 @@ test('5: "Lab today" renders five sections whose attention counts agree with /pr
   await gp.goto(`/projects/${offTrackProjectId}`)
   await expect(gp.getByRole('heading', { name: 'Zulu films' })).toBeVisible()
   await expect(gp.getByRole('button', { name: 'Post update' })).toHaveCount(0)     // no composer affordance at all
-  await expect(gp.getByRole('button', { name: 'Project actions' })).toHaveCount(0) // no snooze menu either
+  // The guest kebab exists (F3 pin access), but its mutating items stay gated —
+  // the snooze items are canEdit-gated, so only the per-user pin toggle remains.
+  await expect(gp.getByRole('button', { name: 'Project actions' })).toBeVisible()
+  await gp.getByRole('button', { name: 'Project actions' }).click()
+  await expect(gp.getByRole('menuitem', { name: 'Skip the next prompt' })).toHaveCount(0)
+  await expect(gp.getByRole('menuitem', { name: 'Pin to My issues' })).toBeVisible()
   await gp.context().close()
 })
 
@@ -429,4 +434,100 @@ test('7: an author edits then retracts an update; the header falls back to the p
   await expect(ownRow).toBeVisible()
   await expect(ownRow.getByRole('button', { name: 'Update actions' })).toHaveCount(0)
   await gp.context().close()
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// F4 — project milestones: the dated strip under the project description. Add a
+// dated milestone, complete it (strike-through + Check), read the overdue word,
+// then prove the guest posture: the pills render but no affordance does.
+test('8: milestones — add, complete, and the overdue word on the strip', async ({ browser }) => {
+  test.setTimeout(120_000)
+  const page = await newPage(browser)
+  await signIn(page, ADMIN.email, ADMIN.password)
+  await page.goto(`/projects/${projectId}`)
+
+  const strip = main(page).getByRole('list', { name: 'Milestones' })
+  // (b) The dashed "Milestone" button opens the dialog; a dated save lands a pill.
+  // `exact` keeps the add-button (name "Milestone") off the per-pill triggers
+  // ("Milestone <name> actions").
+  await page.getByRole('button', { name: 'Milestone', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'New milestone' })
+  await dialog.getByLabel('Name').fill('Tapeout review')
+  const weekOut = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10)
+  await dialog.getByLabel('Date').fill(weekOut)
+  await dialog.getByRole('button', { name: 'Save' }).click()
+  await expect(dialog).toBeHidden()
+  const tapeout = strip.getByRole('listitem').filter({ hasText: 'Tapeout review' })
+  await expect(tapeout).toBeVisible()
+  await expect(tapeout).toContainText(weekOut)
+
+  // (c) Complete it: strike-through pill (the issues.spec.ts `.line-through`
+  // convention) and the menu flips to the undo wording.
+  await page.getByRole('button', { name: 'Milestone Tapeout review actions' }).click()
+  await page.getByRole('menuitem', { name: 'Mark complete' }).click()
+  await expect(tapeout.locator('.line-through')).toBeVisible()
+  await page.getByRole('button', { name: 'Milestone Tapeout review actions' }).click()
+  await expect(page.getByRole('menuitem', { name: 'Mark not done' })).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  // (d) A 2020 milestone reads the overdue word + its date (the due-date.tsx
+  // "Overdue · <date>" convention, in the overdue token colour).
+  await page.getByRole('button', { name: 'Milestone', exact: true }).click()
+  await dialog.getByLabel('Name').fill('Ethics approval')
+  await dialog.getByLabel('Date').fill('2020-01-01')
+  await dialog.getByRole('button', { name: 'Save' }).click()
+  await expect(strip.getByRole('listitem').filter({ hasText: 'Ethics approval' })).toContainText('Overdue · 2020-01-01')
+
+  // Guest: the strip renders read-only — no dashed add-button, no per-pill menu.
+  const gp = await newPage(browser)
+  await signIn(gp, 'guest@lab.test', PASS)
+  await gp.goto(`/projects/${projectId}`)
+  await expect(main(gp).getByText('Tapeout review')).toBeVisible()
+  await expect(gp.getByRole('button', { name: 'Milestone', exact: true })).toHaveCount(0)
+  await expect(gp.getByRole('button', { name: 'Milestone Tapeout review actions' })).toHaveCount(0)
+  await gp.context().close()
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// F6 — attachments on project updates: attach a file in the composer, post the
+// update, then open the file from the feed chip through the session-gated
+// serving route (DB-verified, human filename).
+test('9: post an update with an attachment; the feed chip opens it', async ({ browser }) => {
+  test.setTimeout(120_000)
+  const page = await newPage(browser)
+  await signIn(page, ADMIN.email, ADMIN.password)
+  await page.goto(`/projects/${projectId}`)
+
+  await page.getByRole('button', { name: 'Post update' }).first().click()
+  const dialog = page.getByRole('dialog', { name: 'Post project update' })
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('textbox', { name: 'Update' }).fill('Growth log attached — full curve inside.')
+  // The composer's hidden multi-file input (the chat composer's shape); the chip
+  // appearing is the proof the upload round-tripped through the 201 meta.
+  await dialog.locator('input[type=file]').setInputFiles({
+    name: 'growth log.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%sp8 f6\n', 'utf8'),
+  })
+  await expect(dialog.getByText('growth log.pdf')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Post update' }).click()
+  await expect(dialog).toBeHidden()
+
+  // The feed row carries the chip, and it links into /uploads/project-updates/.
+  const chip = main(page).getByRole('link', { name: /growth log\.pdf/ })
+  await expect(chip).toBeVisible()
+  await expect(chip).toHaveAttribute('href', /^\/uploads\/project-updates\//)
+
+  // Clicking opens a new tab. Headless-shell Chromium has no PDF viewer, so the
+  // inline pdf arrives as a DOWNLOAD attributed to the OPENER page (the
+  // files.spec.ts observed contract): pre-arm BOTH waiters alongside the click,
+  // then prove the served round-trip through the real session-gated route.
+  const [popup, download] = await Promise.all([
+    page.context().waitForEvent('page'),
+    page.waitForEvent('download'),
+    chip.click(),
+  ])
+  expect(popup).toBeTruthy() // the chip really opened a new tab
+  expect(download.url()).toContain('/uploads/project-updates/')
+  const served = await page.request.get(download.url())
+  expect(served.ok()).toBeTruthy()
+  expect(served.headers()['content-type']).toContain('application/pdf')
 })

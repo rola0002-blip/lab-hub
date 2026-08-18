@@ -329,3 +329,109 @@ test('create-issue modal: status menu is fully visible and clickable, not clippe
   await inProgress.click()
   await expect(dialog.getByRole('button', { name: 'Status', exact: true })).toContainText('In Progress')
 })
+
+test('pinned projects: pin from the project page, chip filters /issues/me, unpin', async ({ page }) => {
+  test.setTimeout(120_000)
+  await runWizard(page)
+  await signIn(page, ADMIN.email, ADMIN.password)
+
+  // (a) Create a project via the UI (same flow as the lifecycle test), then pin it
+  // from the header's kebab menu — the F3 item is available to every role.
+  await page.goto('/projects')
+  await page.getByRole('button', { name: 'New project' }).click()
+  await page.getByLabel('Name').fill('Pin E2E Project')
+  await page.getByRole('button', { name: 'Create project' }).click()
+  await page.waitForURL(/\/projects\/[^/]+$/)
+  await expect(page.getByRole('heading', { name: 'Pin E2E Project' })).toBeVisible()
+  await page.getByRole('button', { name: 'Project actions' }).click()
+  await page.getByRole('menuitem', { name: 'Pin to My issues' }).click()
+  await expect(page.getByText('Pinned to My issues.')).toBeVisible()
+  // The refreshed header now offers the inverse action.
+  await expect(page.getByRole('button', { name: 'Project actions' })).toBeVisible()
+  await page.getByRole('button', { name: 'Project actions' }).click()
+  await expect(page.getByRole('menuitem', { name: 'Unpin from My issues' })).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  // (b) The chip row on /issues/me — clicking the chip filters via ?project= (the
+  // existing filter machinery, no new filter code).
+  await page.goto('/issues/me')
+  const chip = page.getByRole('link', { name: 'Pin E2E Project' })
+  await expect(chip).toBeVisible()
+  await chip.click()
+  await expect(page).toHaveURL(/\/issues\/me\?project=/)
+  await expect(chip).toBeVisible() // still rendered, now in its active/selected style
+
+  // (c) Unpin from the manage menu — the chip disappears after the refresh. The
+  // manage menu is deliberately quiet on success (rail precedent: the visible
+  // chip change IS the feedback; only failures toast, e.g. the MAX_PINS cap) —
+  // unlike the project-page kebab, which does toast 'Unpinned.'
+  await page.getByRole('button', { name: 'Manage pinned projects' }).click()
+  await page.getByRole('menuitem', { name: 'Unpin Pin E2E Project' }).click()
+  await expect(chip).toHaveCount(0)
+})
+
+test('project labels: create on the project page, apply via the properties menu, detach on project move, filter by label', async ({ page }) => {
+  test.setTimeout(150_000)
+  await runWizard(page)
+  await signIn(page, ADMIN.email, ADMIN.password)
+
+  // Alpha hosts the scoped label; Beta is the move destination (db-seeded with a
+  // trailing rank so it sorts after the UI-created Alpha without another wizard).
+  await page.goto('/projects')
+  await page.getByRole('button', { name: 'New project' }).click()
+  await page.getByLabel('Name').fill('F5 Alpha')
+  await page.getByRole('button', { name: 'Create project' }).click()
+  await page.waitForURL(/\/projects\/[^/]+$/)
+  await db.project.create({ data: { name: 'F5 Beta', rank: 'zz' } })
+  // A workspace-global label, seeded via db (global creation has no management UI).
+  await db.label.create({ data: { name: 'triage', color: '--status-done' } })
+
+  // (a) The Labels section on the project page mints the scoped label.
+  await page.getByRole('button', { name: 'Label', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'New label' })
+  await dialog.getByLabel('Label name').fill('procurement')
+  await dialog.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByLabel('Project labels').getByText('procurement')).toBeVisible()
+
+  // (b) An issue created from the project page (pre-filled project), then both the
+  // scoped and the global label applied through the properties Labels menu.
+  await createIssueViaUI(page, 'Procure boron source') // lands on its detail page
+  const detailUrl = page.url()
+  await page.getByRole('button', { name: 'Set labels' }).click()
+  await page.getByRole('menuitem', { name: 'procurement', exact: true }).click()
+  // Wait for the first label's round-trip to land before the second pick: the
+  // toggle's `applied` set comes from the server-rendered issue DTO, so a second
+  // selection dispatched before that refresh resolves computes its next-set from
+  // the stale (still label-less) state and REPLACES procurement instead of
+  // adding to it.
+  await expect(page.getByRole('button', { name: 'Set labels' })).toContainText('procurement')
+  await page.getByRole('button', { name: 'Set labels' }).click()
+  await page.getByRole('menuitem', { name: 'triage', exact: true }).click()
+  const labelsTrigger = page.getByRole('button', { name: 'Set labels' })
+  await expect(labelsTrigger).toContainText('procurement')
+  await expect(labelsTrigger).toContainText('triage')
+
+  // (c) The filter bar's Label select (grouped Workspace/projects) filters by the
+  // scoped label — the option value is the label id, resolved from the db.
+  const procurement = await db.label.findFirstOrThrow({ where: { name: 'procurement' } })
+  await page.goto('/issues')
+  await page.getByLabel('Label', { exact: true }).selectOption(procurement.id)
+  await expect(page).toHaveURL(/label=/)
+  await expect(page.getByText('Procure boron source')).toBeVisible()
+  await page.getByLabel('Label', { exact: true }).selectOption('')
+  await expect(page).not.toHaveURL(/label=/)
+
+  // (d) Moving the issue to another project via the properties Project menu
+  // detaches the stale scoped label and keeps the global one.
+  await page.goto(detailUrl)
+  await page.getByRole('button', { name: 'Set project' }).click()
+  await page.getByRole('menuitem', { name: 'F5 Beta' }).click()
+  await expect(page.getByRole('link', { name: 'F5 Beta' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Set labels' })).toContainText('triage')
+  await expect(page.getByRole('button', { name: 'Set labels' })).not.toContainText('procurement')
+
+  // (e) The detach round-trips: filtering by procurement now finds nothing.
+  await page.goto('/issues')
+  await page.getByLabel('Label', { exact: true }).selectOption(procurement.id)
+  await expect(page.getByText('Procure boron source')).toHaveCount(0)
+})

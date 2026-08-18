@@ -16,7 +16,7 @@ test('setup wizard creates org and admin, locks itself', async ({ page }) => {
 
 test('post-login landing is the personal task list, dashboard stays reachable', async ({ page }) => {
   await runWizard(page)
-  await signIn(page, ADMIN.email, ADMIN.password) // helper waits for **/issues/me
+  await signIn(page, ADMIN.email, ADMIN.password) // helper waits for the landing: /issues/me or /chat/<cid> (F7 last-opened)
   await expect(page).toHaveURL(/\/issues\/me$/)
   await expect(page.getByRole('heading', { name: 'My issues' })).toBeVisible()
   // /dashboard is not the landing but remains in the nav and directly reachable.

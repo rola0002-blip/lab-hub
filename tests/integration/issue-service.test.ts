@@ -4,6 +4,7 @@ import { resetDb, makeUser, makeProject } from '../factories'
 import {
   createIssue, setStatus, setAssignee, setTitle, setLabels, moveIssue, listIssues, createLabel,
   setPriority, setProject, setDueDate, updateDescription, attachIssueFiles, getIssue, getIssueDetail, listLabels,
+  renameLabel, deleteLabel,
 } from '@/features/issues/issue-service'
 import { PolicyError } from '@/features/issues/issue-policy'
 import { REBALANCE_THRESHOLD } from '@/features/issues/rank'
@@ -57,7 +58,7 @@ describe('issue-service', () => {
   it('writes exactly one activity row per field mutation, in-transaction', async () => {
     const me = await makeUser({ role: 'member' })
     const other = await makeUser({ role: 'member' })
-    const label = await createLabel({ actorId: me.id, role: 'member', name: 'urgent', color: '--status-in-progress' })
+    const label = await createLabel({ actorId: me.id, role: 'member', name: 'urgent' })
     const iss = await createIssue({ actorId: me.id, role: 'member', title: 'Order argon' })
     await setStatus({ actorId: me.id, role: 'member', issueId: iss.id, status: 'IN_PROGRESS' })
     await setAssignee({ actorId: me.id, role: 'member', issueId: iss.id, assigneeId: other.id })
@@ -117,19 +118,19 @@ describe('issue-service', () => {
     const got = await getIssue(iss.id)
     expect(got?.id).toBe(iss.id)
     expect(got?.identifier).toBe(`LAB-${iss.number}`)
-    await createLabel({ actorId: me.id, role: 'member', name: 'zeta', color: '--status-todo' })
-    await createLabel({ actorId: me.id, role: 'member', name: 'alpha', color: '--status-todo' })
+    await createLabel({ actorId: me.id, role: 'member', name: 'zeta' })
+    await createLabel({ actorId: me.id, role: 'member', name: 'alpha' })
     expect((await listLabels()).map((l) => l.name)).toEqual(['alpha', 'zeta'])
   })
 
   it('creates with labels attached and rejects an out-of-range title or label name', async () => {
     const me = await makeUser({ role: 'member' })
-    const label = await createLabel({ actorId: me.id, role: 'member', name: 'blocker', color: '--status-todo' })
+    const label = await createLabel({ actorId: me.id, role: 'member', name: 'blocker' })
     const iss = await createIssue({ actorId: me.id, role: 'member', title: 'Tagged', labelIds: [label.id] })
     expect(iss.labels.map((l) => l.name)).toEqual(['blocker'])
     await expect(createIssue({ actorId: me.id, role: 'member', title: '   ' })).rejects.toBeInstanceOf(PolicyError)
     await expect(createIssue({ actorId: me.id, role: 'member', title: 'x'.repeat(201) })).rejects.toBeInstanceOf(PolicyError)
-    await expect(createLabel({ actorId: me.id, role: 'member', name: '  ', color: '--status-todo' })).rejects.toBeInstanceOf(PolicyError)
+    await expect(createLabel({ actorId: me.id, role: 'member', name: '  ' })).rejects.toBeInstanceOf(PolicyError)
   })
 
   it('priority, project and dueDate each write exactly one typed activity row', async () => {
@@ -244,7 +245,7 @@ describe('issue-service', () => {
     await expect(setTitle({ actorId: guest.id, role: 'guest', issueId: iss.id, title: 'nope' })).rejects.toBeInstanceOf(PolicyError)
     await expect(updateDescription({ actorId: guest.id, role: 'guest', issueId: iss.id, description: 'x' })).rejects.toBeInstanceOf(PolicyError)
     await expect(attachIssueFiles({ actorId: guest.id, role: 'guest', issueId: iss.id, files: [] })).rejects.toBeInstanceOf(PolicyError)
-    await expect(createLabel({ actorId: guest.id, role: 'guest', name: 'x', color: '--status-todo' })).rejects.toBeInstanceOf(PolicyError)
+    await expect(createLabel({ actorId: guest.id, role: 'guest', name: 'x' })).rejects.toBeInstanceOf(PolicyError)
     await expect(moveIssue({ actorId: guest.id, role: 'guest', issueId: iss.id, status: 'TODO' })).rejects.toBeInstanceOf(PolicyError)
     // not_found: a member acting on a non-existent issue
     await expect(setStatus({ actorId: owner.id, role: 'member', issueId: 'ghost', status: 'DONE' })).rejects.toBeInstanceOf(PolicyError)
@@ -307,6 +308,118 @@ describe('issue-service', () => {
       const u = await makeUser()
       const dto = await createIssue({ actorId: u.id, role: 'member', title: 'C' })
       expect(dto.lastTouchedAt).toBeUndefined()
+    })
+  })
+
+  describe('labels (F5: project-scoped)', () => {
+    it('same name in two different projects is fine; a duplicate within ONE scope (project or global) is invalid', async () => {
+      const me = await makeUser({ role: 'member' })
+      const p1 = await makeProject()
+      const p2 = await makeProject()
+      const a = await createLabel({ actorId: me.id, role: 'member', name: 'priority', projectId: p1.id })
+      expect(a.projectId).toBe(p1.id)
+      expect(a.project?.id).toBe(p1.id)
+      const b = await createLabel({ actorId: me.id, role: 'member', name: 'priority', projectId: p2.id })
+      expect(b.projectId).toBe(p2.id)
+      // Duplicate within one project → P2002 → friendly invalid.
+      await expect(createLabel({ actorId: me.id, role: 'member', name: 'priority', projectId: p1.id }))
+        .rejects.toMatchObject({ name: 'PolicyError', code: 'invalid', message: 'A label with that name already exists here.' })
+      // A GLOBAL label with the same name coexists with the project-scoped ones…
+      const globalSame = await createLabel({ actorId: me.id, role: 'member', name: 'priority' })
+      expect(globalSame.projectId).toBeNull()
+      // …but a second GLOBAL with that name collides with the first.
+      await expect(createLabel({ actorId: me.id, role: 'member', name: 'priority' }))
+        .rejects.toMatchObject({ name: 'PolicyError', code: 'invalid', message: 'A label with that name already exists here.' })
+    })
+
+    it('createIssue silently drops labels scoped to ANOTHER project, keeping globals and the destination project own', async () => {
+      const me = await makeUser({ role: 'member' })
+      const p1 = await makeProject()
+      const p2 = await makeProject()
+      const g = await createLabel({ actorId: me.id, role: 'member', name: 'global' })
+      const own = await createLabel({ actorId: me.id, role: 'member', name: 'own', projectId: p1.id })
+      const foreign = await createLabel({ actorId: me.id, role: 'member', name: 'foreign', projectId: p2.id })
+      const iss = await createIssue({ actorId: me.id, role: 'member', title: 'Scoped', projectId: p1.id, labelIds: [g.id, own.id, foreign.id] })
+      expect(iss.labels.map((l) => l.name).sort()).toEqual(['global', 'own'])
+    })
+
+    it('setLabels silently drops a foreign-project label; the activity records what actually landed', async () => {
+      const me = await makeUser({ role: 'member' })
+      const p1 = await makeProject()
+      const p2 = await makeProject()
+      const g = await createLabel({ actorId: me.id, role: 'member', name: 'global' })
+      const foreign = await createLabel({ actorId: me.id, role: 'member', name: 'foreign', projectId: p2.id })
+      const iss = await createIssue({ actorId: me.id, role: 'member', title: 'Replace set', projectId: p1.id })
+      const after = await setLabels({ actorId: me.id, role: 'member', issueId: iss.id, labelIds: [g.id, foreign.id] })
+      // Only the global belongs on a P1 issue — the forged foreign id never attaches.
+      expect(after.labels.map((l) => l.id)).toEqual([g.id])
+      expect((await getIssue(iss.id))?.labels.map((l) => l.id)).toEqual([g.id])
+      const data = (await activities(iss.id)).find((a) => a.type === 'labels')?.data as { from: string[]; to: string[] }
+      expect(data.from).toEqual([])
+      expect(data.to).toEqual([g.id])
+    })
+
+    it('setProject detaches stale project labels (one labels activity) and keeps globals', async () => {
+      const me = await makeUser({ role: 'member' })
+      const p1 = await makeProject()
+      const p2 = await makeProject()
+      const g = await createLabel({ actorId: me.id, role: 'member', name: 'global' })
+      const own = await createLabel({ actorId: me.id, role: 'member', name: 'own', projectId: p1.id })
+      const iss = await createIssue({ actorId: me.id, role: 'member', title: 'Move', projectId: p1.id, labelIds: [g.id, own.id] })
+      const moved = await setProject({ actorId: me.id, role: 'member', issueId: iss.id, projectId: p2.id })
+      // Regression: the RETURNED DTO must reflect the detach (previously it kept the stale 'own' label until reload).
+      expect(moved.labels.map((l) => l.name)).not.toContain('own')
+      expect(moved.labels.map((l) => l.id)).toEqual([g.id])
+      expect((await getIssue(iss.id))?.labels.map((l) => l.id)).toEqual([g.id])
+      const acts = await activities(iss.id)
+      expect(acts.map((a) => a.type)).toEqual(['created', 'project', 'labels'])
+      const data = acts.find((a) => a.type === 'labels')?.data as { from: string[]; to: string[] }
+      expect([...data.from].sort()).toEqual([g.id, own.id].sort())
+      expect(data.to).toEqual([g.id])
+    })
+
+    it('setProject with NO stale labels writes only the project activity', async () => {
+      const me = await makeUser({ role: 'member' })
+      const p1 = await makeProject()
+      const p2 = await makeProject()
+      const g = await createLabel({ actorId: me.id, role: 'member', name: 'global' })
+      const iss = await createIssue({ actorId: me.id, role: 'member', title: 'Clean move', projectId: p1.id, labelIds: [g.id] })
+      await setProject({ actorId: me.id, role: 'member', issueId: iss.id, projectId: p2.id })
+      expect((await getIssue(iss.id))?.labels.map((l) => l.id)).toEqual([g.id])
+      expect((await activities(iss.id)).map((a) => a.type)).toEqual(['created', 'project'])
+    })
+
+    it('deleteLabel detaches it from every issue', async () => {
+      const me = await makeUser({ role: 'member' })
+      const label = await createLabel({ actorId: me.id, role: 'member', name: 'temp' })
+      const iss = await createIssue({ actorId: me.id, role: 'member', title: 'Tagged', labelIds: [label.id] })
+      await deleteLabel({ actorId: me.id, role: 'member', labelId: label.id })
+      expect((await getIssue(iss.id))?.labels).toEqual([])
+      expect(await prisma.issueLabel.count()).toBe(0)
+      await expect(deleteLabel({ actorId: me.id, role: 'member', labelId: label.id }))
+        .rejects.toMatchObject({ name: 'PolicyError', code: 'not_found', message: 'Label not found.' })
+    })
+
+    it('renameLabel: a colliding name is invalid; a fresh name renames', async () => {
+      const me = await makeUser({ role: 'member' })
+      const p1 = await makeProject()
+      await createLabel({ actorId: me.id, role: 'member', name: 'keep', projectId: p1.id })
+      const renameMe = await createLabel({ actorId: me.id, role: 'member', name: 'old', projectId: p1.id })
+      await expect(renameLabel({ actorId: me.id, role: 'member', labelId: renameMe.id, name: 'keep' }))
+        .rejects.toMatchObject({ name: 'PolicyError', code: 'invalid', message: 'A label with that name already exists here.' })
+      const renamed = await renameLabel({ actorId: me.id, role: 'member', labelId: renameMe.id, name: '  fresh  ' })
+      expect(renamed.name).toBe('fresh') // trimmed like every other name write
+      expect(renamed.projectId).toBe(p1.id)
+    })
+
+    it('guests cannot create, rename or delete labels', async () => {
+      const guest = await makeUser({ role: 'guest' })
+      await expect(createLabel({ actorId: guest.id, role: 'guest', name: 'x' }))
+        .rejects.toMatchObject({ name: 'PolicyError', code: 'forbidden' })
+      await expect(renameLabel({ actorId: guest.id, role: 'guest', labelId: 'whatever', name: 'x' }))
+        .rejects.toMatchObject({ name: 'PolicyError', code: 'forbidden' })
+      await expect(deleteLabel({ actorId: guest.id, role: 'guest', labelId: 'whatever' }))
+        .rejects.toMatchObject({ name: 'PolicyError', code: 'forbidden' })
     })
   })
 })

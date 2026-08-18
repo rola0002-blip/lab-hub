@@ -3,8 +3,9 @@ import { prisma } from './db'
 import { env } from './env'
 import { notify } from './notify'
 import { formatRange } from './time'
-import { drainOutbox } from './email/outbox'
-import { bookingReminderEmail } from './email/templates'
+import { drainOutbox, enqueueEmail } from './email/outbox'
+import { bookingReminderEmail, digestChatEmail } from './email/templates'
+import { notificationHref } from './notification-href'
 import { formatIdentifier } from '@/features/issues/identifier'
 import { startOfOrgDay, orgToday } from '@/features/issues/due'
 import { OPEN_STATUSES } from '@/features/issues/status'
@@ -170,6 +171,67 @@ export async function promptProjectUpdates(now: Date = new Date()): Promise<numb
   return dueProjects.length
 }
 
+// F8: one digest email per user per run for chat bells still unread after 60
+// minutes. ≤1 digest per user per ~hour via the per-user 55-min emailedAt
+// cooldown (the 300s interval alone cannot bound it — sliding window). Only
+// rows whose payload carries a HUMAN senderId digest — bot DMs (due-soon,
+// overdue, prompts) tell you something you already know, and pre-wave rows
+// without senderId are skipped rather than guessed. emailedAt is the latch:
+// stamped after enqueue, so a crash mid-user at worst double-sends one email
+// once (the SP8 unconditional-latch posture).
+export async function digestUnreadChat(now: Date = new Date()): Promise<number> {
+  const cutoff = new Date(now.getTime() - 60 * 60_000)
+  const rows = await prisma.notification.findMany({
+    where: {
+      type: { in: ['message_mention', 'message_dm', 'message_thread_reply'] },
+      readAt: null, emailedAt: null, createdAt: { lte: cutoff },
+    },
+    orderBy: { createdAt: 'asc' }, take: 1000,
+  })
+  if (rows.length === 0) return 0
+  const senderOf = (r: (typeof rows)[number]) => (r.payload as { senderId?: unknown }).senderId
+  const senderIds = [...new Set(rows.map(senderOf).filter((x): x is string => typeof x === 'string'))]
+  let eligible: typeof rows = []
+  if (senderIds.length > 0) {
+    const senders = await prisma.user.findMany({ where: { id: { in: senderIds } }, select: { id: true, isSystem: true } })
+    const human = new Set(senders.filter((s) => !s.isSystem).map((s) => s.id))
+    eligible = rows.filter((r) => human.has(senderOf(r) as string))
+  }
+  if (eligible.length === 0) return 0
+  const org = await prisma.organization.findFirst()
+  const byUser = new Map<string, typeof eligible>()
+  for (const r of eligible) {
+    const arr = byUser.get(r.userId) ?? []
+    arr.push(r); byUser.set(r.userId, arr)
+  }
+  let sent = 0
+  for (const [userId, items] of byUser) {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, banned: true } })
+    if (!user || user.banned) continue
+    // Cooldown: ≤1 digest per user per ~hour even under continuous arrival —
+    // the 300s interval alone cannot provide it (sliding 60-min window). The
+    // immediate-email latch (dmEmail etc.) also stamps emailedAt, so a user who
+    // just got an immediate email is not digested minutes later (one-bell rule).
+    const last = await prisma.notification.findFirst({
+      where: { userId, emailedAt: { not: null }, type: { in: ['message_mention', 'message_dm', 'message_thread_reply'] } },
+      orderBy: { emailedAt: 'desc' }, select: { emailedAt: true },
+    })
+    if (last && last.emailedAt && now.getTime() - last.emailedAt.getTime() < 55 * 60_000) continue
+    const tpl = digestChatEmail(
+      org?.name ?? 'LabHub',
+      items.map((n) => ({
+        message: String((n.payload as { message?: string }).message ?? 'New message'),
+        href: notificationHref({ type: n.type, payload: n.payload as Record<string, string> }) ?? '/chat',
+      })),
+      env.APP_URL,
+    )
+    await enqueueEmail(user.email, tpl.subject, tpl.html)
+    await prisma.notification.updateMany({ where: { id: { in: items.map((i) => i.id) } }, data: { emailedAt: now } })
+    sent++
+  }
+  return sent
+}
+
 export function startJobs(): void {
   if (env.DISABLE_JOBS) return
   const guard = (fn: () => Promise<unknown>) => {
@@ -186,4 +248,5 @@ export function startJobs(): void {
   setInterval(guard(() => pingDueSoonIssues()), 300_000)
   setInterval(guard(() => pingOverdueIssues()), 300_000)
   setInterval(guard(() => promptProjectUpdates()), 300_000)
+  setInterval(guard(() => digestUnreadChat()), 300_000) // F8: unread-chat digest, ≤1 email/user/hour
 }

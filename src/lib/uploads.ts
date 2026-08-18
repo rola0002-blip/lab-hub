@@ -4,7 +4,10 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 
 const IMAGE_ALLOWED: Record<string, string> = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp' }
-const CHAT_ALLOWED: Record<string, string> = {
+// Exported for the client-side chat attachment gate's drift test
+// (src/features/chat/attachment-input.test.ts): the pane's CHAT_MIMES must
+// mirror exactly this server allowlist.
+export const CHAT_ALLOWED: Record<string, string> = {
   ...IMAGE_ALLOWED,
   'image/gif': '.gif',
   'application/pdf': '.pdf',
@@ -16,18 +19,19 @@ const CHAT_ALLOWED: Record<string, string> = {
   'application/zip': '.zip',
 }
 const IMAGE_MAX = 2 * 1024 * 1024
-const CHAT_MAX = 25 * 1024 * 1024
+export const CHAT_MAX = 25 * 1024 * 1024
 const AVATAR_MAX = 5 * 1024 * 1024
 const DOCUMENT_MAX = 100 * 1024 * 1024 // shared library files; office allowlist, big cap
 const FEEDBACK_MAX = 10 * 1024 * 1024  // phone PNG screenshots overflow IMAGE_MAX; 25 MB headroom is unneeded
 
-export type UploadKind = 'logo' | 'equipment' | 'chat' | 'avatars' | 'issues' | 'documents' | 'feedback'
+export type UploadKind = 'logo' | 'equipment' | 'chat' | 'avatars' | 'issues' | 'documents' | 'feedback' | 'project-updates'
 
-// Doc-kind uploads (chat + issue attachments) share the 25 MB cap + the wider
-// document MIME allowlist; image kinds (logo/equipment/avatars) stay image-only.
-// 'documents' shares the same office allowlist but takes the 100 MB cap.
-// 'feedback' is image-only (IMAGE_ALLOWED, by fall-through) with its OWN 10 MB cap.
-const DOC_KINDS = new Set<UploadKind>(['chat', 'issues'])
+// Doc-kind uploads (chat + issue + project-update attachments) share the 25 MB
+// cap + the wider document MIME allowlist; image kinds (logo/equipment/avatars)
+// stay image-only. 'documents' shares the same office allowlist but takes the
+// 100 MB cap. 'feedback' is image-only (IMAGE_ALLOWED, by fall-through) with
+// its OWN 10 MB cap.
+const DOC_KINDS = new Set<UploadKind>(['chat', 'issues', 'project-updates'])
 
 export function uploadsDir() {
   return path.resolve(process.env.UPLOADS_DIR ?? './data/uploads')

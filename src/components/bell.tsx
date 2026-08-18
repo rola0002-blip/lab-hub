@@ -10,7 +10,9 @@ import { Avatar } from '@/components/ui/avatar'
 import { EmptyState } from '@/components/ui/empty-state'
 import { humanTime } from '@/lib/humanize'
 import { notificationHref } from '@/lib/notification-href'
+import { shouldChime } from '@/lib/chime'
 import { usePushOptIn } from './hooks/use-push-optin'
+import { useSoundsEnabled } from './hooks/use-sounds'
 import { useChat } from './chat/chat-store'
 import { useEvents } from './use-events'
 
@@ -25,6 +27,7 @@ const LABEL: Record<string, string> = {
   booking_cancelled: 'Booking cancelled',
   message_mention: 'You were mentioned',
   message_dm: 'New direct message',
+  message_thread_reply: 'New thread reply',
   channel_added: 'Added to a channel',
   issue_assigned: 'Issue assigned to you',
   issue_mention: 'You were mentioned on an issue',
@@ -46,6 +49,7 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   booking_cancelled: CalendarX,
   message_mention: AtSign,
   message_dm: MessageSquare,
+  message_thread_reply: MessageSquare,
   channel_added: Hash,
   issue_assigned: UserPlus,
   issue_mention: AtSign,
@@ -54,6 +58,28 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   project_update_prompt: ClipboardCheck,
   feedback_new: Megaphone,
   feedback_decided: Megaphone,
+}
+
+let audioCtx: AudioContext | null = null
+function playChime() {
+  try {
+    audioCtx ??= new AudioContext()
+    if (audioCtx.state === 'suspended') void audioCtx.resume()
+    const t = audioCtx.currentTime
+    const g = audioCtx.createGain(); g.connect(audioCtx.destination)
+    g.gain.setValueAtTime(0.0001, t)
+    g.gain.exponentialRampToValueAtTime(0.15, t + 0.02)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25)
+    for (const [freq, at] of [[880, 0], [1318.5, 0.09]] as const) {
+      const o = audioCtx.createOscillator(); o.type = 'sine'; o.frequency.value = freq
+      o.connect(g); o.start(t + at); o.stop(t + at + 0.22)
+    }
+  } catch {
+    /* Construction failures only (headless/embedded). Under autoplay policy the
+       context is instead created SUSPENDED — oscillators schedule into its
+       frozen currentTime and sound once a gesture resumes it — so that
+       degradation is silent-by-design, not an exception. */
+  }
 }
 
 type Face =
@@ -75,7 +101,10 @@ function groupItems(items: Item[]): { key: string; items: Item[] }[] {
   return groups
 }
 
-export default function Bell() {
+// soundsSeed carries the server-side User.soundsEnabled default into the Bell
+// (same ThemeSync prop route): useSoundsEnabled falls back to it only while
+// this device has no localStorage choice, so the device always wins locally.
+export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
   const { conversations, users, selfId } = useChat()
   const [unread, setUnread] = useState(0)
   const [items, setItems] = useState<Item[]>([])
@@ -83,6 +112,12 @@ export default function Bell() {
   const ref = useRef<HTMLDivElement>(null)
   const now = new Date() // viewer-local reference for humanized notification times
   const push = usePushOptIn() // desktop-push opt-in lives in this tray, not a separate top-bar icon
+  const { enabled: sounds } = useSoundsEnabled(soundsSeed) // server seed until the device opts in/out itself
+  // load is memoized (stable across renders), so it would capture a stale
+  // `sounds`; mirror the live value into a ref it can read at fetch time.
+  const soundsRef = useRef(false)
+  useEffect(() => { soundsRef.current = sounds }, [sounds])
+  const watermark = useRef<string | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -90,6 +125,9 @@ export default function Bell() {
       if (!r.ok) return
       const d = await r.json()
       setUnread(d.unread); setItems(d.items)
+      const r2 = shouldChime(watermark.current, d.items.map((i: Item) => ({ id: i.id, type: i.type, createdAt: i.createdAt })))
+      watermark.current = r2.watermark
+      if (r2.chime && soundsRef.current) playChime()
     } catch { /* transient network error; next poll retries */ }
   }, [])
 

@@ -1,5 +1,5 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
-import { wipe, runWizard, signIn, ADMIN, createMemberViaInvite, acceptInvite } from './helpers'
+import { wipe, runWizard, signIn, ADMIN, createMemberViaInvite, acceptInvite, db } from './helpers'
 
 // Per-context client IP. better-auth rate-limits /sign-in/email and /sign-up/email at 10/60 s
 // keyed by client IP; on localhost every request would otherwise share one bucket and the
@@ -348,5 +348,86 @@ test('7: a failed reaction / edit / delete surfaces a toast (no silent failure)'
   await expect(page.getByText('message deleted')).toHaveCount(0)
   await page.unroute(MESSAGE_URL)
 
+  await page.context().close()
+})
+
+// F1 (drag-and-drop attachments): Playwright cannot synthesize a real OS drag, so
+// build a DataTransfer in page context and dispatch dragover/drop on the pane's
+// drop surface ([data-chat-pane], the column wrapping the log + composer that owns
+// the pane-level handlers). The drop routes through the composer's shared validated
+// intake: a real POST /api/chat/attachments → pending chip → sent message renders
+// the attachment link chip in the timeline.
+const TXT = { name: 'dropped-notes.txt', type: 'text/plain', body: 'dropped payload' }
+
+function dispatchDrag(page: Page, type: 'dragover' | 'drop', file?: { name: string; type: string; body: string }) {
+  return page.locator('[data-chat-pane]').evaluate((el, { type, file }) => {
+    const dt = new DataTransfer()
+    if (file) dt.items.add(new File([file.body], file.name, { type: file.type }))
+    else dt.setData('text/plain', 'plain text only')
+    el.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }))
+  }, { type, file })
+}
+
+test('8: drop a file onto the pane to attach, then send', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  await createChannel(page, 'lab')
+
+  // A text-only drag must NOT raise the drop overlay (files only).
+  await dispatchDrag(page, 'dragover')
+  await expect(page.getByText('Drop to attach')).toHaveCount(0)
+
+  // A file drag raises the overlay anywhere over the pane…
+  await dispatchDrag(page, 'dragover', TXT)
+  await expect(page.getByText('Drop to attach')).toBeVisible()
+
+  // …and dropping uploads the file: the composer's pending chip shows the filename.
+  await dispatchDrag(page, 'drop', TXT)
+  await expect(page.getByText('dropped-notes.txt')).toBeVisible()
+
+  // Send: the message lands in the timeline with the attachment link chip.
+  await send(page, 'file inbound')
+  await expect(page.getByRole('link', { name: /dropped-notes\.txt/ })).toBeVisible()
+
+  await page.context().close()
+})
+
+// F8: a thread reply bells the root author. Mirrors journey 3's live-bell
+// assertion (the {t:notif} SSE push, not the 30 s poll) and proves the deep
+// link: the row navigates to /chat/<cid>?msg=<replyId>.
+test('9: thread reply → bell + deep-link', async ({ browser }) => {
+  test.setTimeout(120_000)
+  const page = await admin(browser)
+  const pageB = await joinAs(page, browser, BOB, 'member')
+  const cid = await createChannel(page, 'lab')
+  await joinChannel(pageB, cid, 'lab')
+
+  await send(page, 'thread root')
+  await expect(logMsg(pageB, 'thread root')).toBeVisible()
+
+  // A parks on the dashboard so the Bell is the delivery surface for the reply.
+  await page.goto('/dashboard')
+  const bell = page.getByRole('button', { name: 'Notifications', exact: true })
+  await expect(bell).toBeVisible()
+
+  // B opens the thread on A's root message and replies
+  await logMsg(pageB, 'thread root').hover()
+  await pageB.getByTitle('Reply in thread').click()
+  const threadBox = pageB.getByPlaceholder('Reply in thread…')
+  await threadBox.fill('in thread ping')
+  await threadBox.press('Enter')
+
+  // The bell badge reflects the thread reply live over SSE (tight timeout
+  // proves the live path, not the 30 s poll).
+  await expect(bell).toContainText(/[1-9]/, { timeout: 5_000 })
+  await bell.click()
+  await expect(page.getByText('New thread reply')).toBeVisible()
+
+  // Clicking the row deep-links to the reply: /chat/<cid>?msg=<replyId>.
+  const reply = await db.message.findFirstOrThrow({ where: { conversationId: cid, parentId: { not: null } } })
+  await page.getByText('New thread reply').click()
+  await page.waitForURL(new RegExp(`/chat/${cid}\\?msg=${reply.id}$`))
+
+  await pageB.context().close()
   await page.context().close()
 })
