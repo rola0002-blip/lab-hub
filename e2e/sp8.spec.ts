@@ -335,7 +335,12 @@ test('5: "Lab today" renders five sections whose attention counts agree with /pr
   await gp.goto(`/projects/${offTrackProjectId}`)
   await expect(gp.getByRole('heading', { name: 'Zulu films' })).toBeVisible()
   await expect(gp.getByRole('button', { name: 'Post update' })).toHaveCount(0)     // no composer affordance at all
-  await expect(gp.getByRole('button', { name: 'Project actions' })).toHaveCount(0) // no snooze menu either
+  // The guest kebab exists (F3 pin access), but its mutating items stay gated —
+  // the snooze items are canEdit-gated, so only the per-user pin toggle remains.
+  await expect(gp.getByRole('button', { name: 'Project actions' })).toBeVisible()
+  await gp.getByRole('button', { name: 'Project actions' }).click()
+  await expect(gp.getByRole('menuitem', { name: 'Skip the next prompt' })).toHaveCount(0)
+  await expect(gp.getByRole('menuitem', { name: 'Pin to My issues' })).toBeVisible()
   await gp.context().close()
 })
 

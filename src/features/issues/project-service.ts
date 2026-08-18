@@ -407,14 +407,18 @@ export async function deleteMilestone(args: { actorId: string; role: Role; miles
 // mutation, so there is deliberately no assertCanMutate: /issues/me is visible to
 // every role including guests, and a guest pinning a shortcut to their own view
 // changes nobody else's state. Only existence and the cap are enforced.
+// Soft cap: two concurrent pins at the boundary can race read-modify-write (last write wins; 9 chips self-correct on next unpin) — deliberately NOT prisma array push, which would duplicate ids under the same race.
 
 export const MAX_PINS = 8
 
 export async function pinProject(args: { userId: string; projectId: string }): Promise<void> {
+  // Read the user FIRST and 404 on a miss: unreachable via actions (requireUser),
+  // but keeps the read/write pair honest for future non-session callers.
+  const u = await prisma.user.findUnique({ where: { id: args.userId }, select: { pinnedProjectIds: true } })
+  if (!u) throw new PolicyError('not_found', 'User not found.')
   const project = await prisma.project.findUnique({ where: { id: args.projectId }, select: { id: true } })
   if (!project) throw new PolicyError('not_found', 'Project not found.')
-  const u = await prisma.user.findUnique({ where: { id: args.userId }, select: { pinnedProjectIds: true } })
-  const current = u?.pinnedProjectIds ?? []
+  const current = u.pinnedProjectIds
   if (current.includes(args.projectId)) return // idempotent — a repeat click is a no-op
   if (current.length >= MAX_PINS) throw new PolicyError('invalid', `Pin limit is ${MAX_PINS} projects.`)
   await prisma.user.update({ where: { id: args.userId }, data: { pinnedProjectIds: [...current, args.projectId] } })
@@ -423,7 +427,8 @@ export async function pinProject(args: { userId: string; projectId: string }): P
 // Unpin is idempotent too: filtering out an absent id yields the same array.
 export async function unpinProject(args: { userId: string; projectId: string }): Promise<void> {
   const u = await prisma.user.findUnique({ where: { id: args.userId }, select: { pinnedProjectIds: true } })
-  await prisma.user.update({ where: { id: args.userId }, data: { pinnedProjectIds: (u?.pinnedProjectIds ?? []).filter((id) => id !== args.projectId) } })
+  if (!u) return // a missing user has nothing pinned — no-op
+  await prisma.user.update({ where: { id: args.userId }, data: { pinnedProjectIds: u.pinnedProjectIds.filter((id) => id !== args.projectId) } })
 }
 
 // Pin order preserved (the column's array order, not name order); deleted projects

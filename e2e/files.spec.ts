@@ -167,9 +167,13 @@ test('a guest sees the linked-folder card read-only, with no way to change the l
   await expect(gp.getByRole('heading', { name: 'Files in Protocols' })).toBeVisible()
   await expect(gp.getByRole('link', { name: 'CVD recipe.pdf' })).toBeVisible()
   await expect(gp.getByRole('link', { name: 'Open in Files' })).toBeVisible()
-  // …but nothing on this page can re-link it: guests get no project-actions menu at
-  // all, so the composer — and its "Files folder" select — is unreachable.
-  await expect(gp.getByRole('button', { name: 'Project actions' })).toHaveCount(0)
+  // …but nothing on this page can re-link it: the guest kebab exists (F3 pin
+  // access), and the safety is item-gating — "Edit project" stays canEdit-gated —
+  // so the composer, and its "Files folder" select, remains unreachable for guests.
+  await expect(gp.getByRole('button', { name: 'Project actions' })).toBeVisible()
+  await gp.getByRole('button', { name: 'Project actions' }).click()
+  await expect(gp.getByRole('menuitem', { name: 'Edit project' })).toHaveCount(0)
+  await expect(gp.getByRole('menuitem', { name: 'Pin to My issues' })).toBeVisible()
   await expect(gp.getByRole('combobox', { name: 'Files folder' })).toHaveCount(0)
 })
 

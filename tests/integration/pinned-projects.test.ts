@@ -32,8 +32,10 @@ describe('pinned projects', () => {
 
   it('refuses the 9th pin with a PolicyError and unknown projects with not_found', async () => {
     const u = await makeUser({ role: 'member' })
+    const ids: string[] = []
     for (let i = 0; i < MAX_PINS; i++) {
       const p = await createProject({ actorId: u.id, role: 'member', name: `P${i}` })
+      ids.push(p.id)
       await pinProject({ userId: u.id, projectId: p.id })
     }
     const extra = await createProject({ actorId: u.id, role: 'member', name: 'X' })
@@ -42,6 +44,10 @@ describe('pinned projects', () => {
     await expect(pinProject({ userId: u.id, projectId: 'nope' })).rejects.toMatchObject({ code: 'not_found' })
     // Unpinning an unknown project is a silent no-op, not an error
     await unpinProject({ userId: u.id, projectId: 'nope' })
+    expect((await listPinnedProjects(u.id)).length).toBe(MAX_PINS)
+    // Re-pinning one of the already-pinned 8 is idempotent: no throw, no cap hit,
+    // and the count stays 8 (no duplicate id slipped in).
+    await pinProject({ userId: u.id, projectId: ids[0] })
     expect((await listPinnedProjects(u.id)).length).toBe(MAX_PINS)
   })
 

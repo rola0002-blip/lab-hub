@@ -22,7 +22,7 @@ export function PinnedProjects({ pinned, projects, activeId }: {
   // — the row is omitted entirely rather than rendering an empty labelled group.
   if (pinned.length === 0 && projects.length === 0) return null
   return (
-    <div className="flex flex-wrap items-center gap-1.5" aria-label="Pinned projects">
+    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Pinned projects">
       {pinned.map((p) => (
         <span key={p.id}
           className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${
@@ -31,7 +31,7 @@ export function PinnedProjects({ pinned, projects, activeId }: {
               : 'border-border text-default hover:bg-hover'
           }`}>
           <Pin size={11} aria-hidden />
-          <Link href={`/issues/me?project=${p.id}`}
+          <Link href={`/issues/me?project=${p.id}`} aria-current={p.id === activeId ? 'true' : undefined}
             className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">{p.name}</Link>
           {p.openCount > 0 && <span className="text-subtle">{p.openCount}</span>}
         </span>
