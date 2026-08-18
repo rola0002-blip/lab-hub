@@ -363,11 +363,18 @@ export async function setLabels(args: { actorId: string; role: Role; issueId: st
   const next = [...new Set(args.labelIds)]
   await assertLabelsExist(next) // §3.2, before the load — mirrors setAssignee/setProject
   const issue = await loadOrThrow(args.issueId)
+  // F5: the replace-set must honor the same "belongs" rule as createIssue and
+  // setProject — labels scoped to another project are silently dropped, never
+  // attached (splitLabelsForProject is the one definition; see labels.ts).
+  const loaded = next.length
+    ? await prisma.label.findMany({ where: { id: { in: next } }, select: { id: true, name: true, color: true, projectId: true } })
+    : []
+  const scoped = splitLabelsForProject(loaded, issue.projectId ?? null).keep.map((l) => l.id)
   const before = issue.labels.map((l) => l.labelId)
   const updated = await prisma.$transaction(async (tx) => {
     await tx.issueLabel.deleteMany({ where: { issueId: issue.id } })
-    await tx.issueLabel.createMany({ data: next.map((labelId) => ({ issueId: issue.id, labelId })) })
-    await tx.issueActivity.create({ data: { issueId: issue.id, actorId: args.actorId, type: 'labels', data: { from: before, to: next } } })
+    await tx.issueLabel.createMany({ data: scoped.map((labelId) => ({ issueId: issue.id, labelId })) })
+    await tx.issueActivity.create({ data: { issueId: issue.id, actorId: args.actorId, type: 'labels', data: { from: before, to: scoped } } })
     return tx.issue.findUniqueOrThrow({ where: { id: issue.id }, include: ISSUE_INCLUDE })
   })
   await emitEvent({ t: 'issue', id: issue.id, projectId: updated.projectId ?? undefined })

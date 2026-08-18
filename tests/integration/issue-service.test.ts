@@ -343,6 +343,22 @@ describe('issue-service', () => {
       expect(iss.labels.map((l) => l.name).sort()).toEqual(['global', 'own'])
     })
 
+    it('setLabels silently drops a foreign-project label; the activity records what actually landed', async () => {
+      const me = await makeUser({ role: 'member' })
+      const p1 = await makeProject()
+      const p2 = await makeProject()
+      const g = await createLabel({ actorId: me.id, role: 'member', name: 'global' })
+      const foreign = await createLabel({ actorId: me.id, role: 'member', name: 'foreign', projectId: p2.id })
+      const iss = await createIssue({ actorId: me.id, role: 'member', title: 'Replace set', projectId: p1.id })
+      const after = await setLabels({ actorId: me.id, role: 'member', issueId: iss.id, labelIds: [g.id, foreign.id] })
+      // Only the global belongs on a P1 issue — the forged foreign id never attaches.
+      expect(after.labels.map((l) => l.id)).toEqual([g.id])
+      expect((await getIssue(iss.id))?.labels.map((l) => l.id)).toEqual([g.id])
+      const data = (await activities(iss.id)).find((a) => a.type === 'labels')?.data as { from: string[]; to: string[] }
+      expect(data.from).toEqual([])
+      expect(data.to).toEqual([g.id])
+    })
+
     it('setProject detaches stale project labels (one labels activity) and keeps globals', async () => {
       const me = await makeUser({ role: 'member' })
       const p1 = await makeProject()
