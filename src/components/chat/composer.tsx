@@ -187,6 +187,7 @@ function ComposerBody({ draftKey, conversationId, selfRole, memberIds, parentId,
     const { accepted, errors } = validateAttachmentFiles(Array.from(files), attachments.length)
     if (errors.length) setError(errors[0])
     if (accepted.length) await upload(accepted)
+    if (fileRef.current) fileRef.current.value = ''
   }
 
   async function upload(files: File[]) {
@@ -203,6 +204,7 @@ function ComposerBody({ draftKey, conversationId, selfRole, memberIds, parentId,
     if (fileRef.current) fileRef.current.value = ''
   }
 
+  // Deliberately NO deps array — the handle must close over the CURRENT onFiles so drops validate against the live chip count. An empty deps array would freeze the 10-file cap at mount-time state.
   useImperativeHandle(ref, () => ({ acceptFiles: (files) => { void onFiles(files) } }))
 
   async function send() {

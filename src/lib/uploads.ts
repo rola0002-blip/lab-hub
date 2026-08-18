@@ -19,7 +19,7 @@ export const CHAT_ALLOWED: Record<string, string> = {
   'application/zip': '.zip',
 }
 const IMAGE_MAX = 2 * 1024 * 1024
-const CHAT_MAX = 25 * 1024 * 1024
+export const CHAT_MAX = 25 * 1024 * 1024
 const AVATAR_MAX = 5 * 1024 * 1024
 const DOCUMENT_MAX = 100 * 1024 * 1024 // shared library files; office allowlist, big cap
 const FEEDBACK_MAX = 10 * 1024 * 1024  // phone PNG screenshots overflow IMAGE_MAX; 25 MB headroom is unneeded

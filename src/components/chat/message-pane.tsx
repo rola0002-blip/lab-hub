@@ -378,14 +378,15 @@ export default function MessagePane({ conversationId, conversationType, channelN
       {/* data-chat-pane marks the pane's drop surface (header + log + composer);
           `relative` (already present) anchors the drag overlay. */}
       <div data-chat-pane="" className="relative flex min-w-0 flex-1 flex-col"
-        onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragOver(true) } }}
+        onDragOver={(e) => { if (!archived && e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragOver(true) } }}
         onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(false) }}
         onDrop={(e) => {
+          setDragOver(false)
           if (!e.dataTransfer.files.length) return
-          e.preventDefault(); setDragOver(false)
+          e.preventDefault()
           composerRef.current?.acceptFiles(Array.from(e.dataTransfer.files))
         }}>
-        {dragOver && (
+        {dragOver && !archived && (
           <div className="pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-xl border-2 border-dashed border-[var(--border-focus)] bg-hover/90 text-sm font-medium text-default" role="status">
             Drop to attach
           </div>

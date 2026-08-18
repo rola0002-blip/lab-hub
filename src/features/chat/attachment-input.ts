@@ -9,6 +9,7 @@ export const CHAT_MIMES = new Set([
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'text/plain', 'text/csv', 'application/zip',
 ])
+// Must equal CHAT_MAX in src/lib/uploads.ts — the drift test enforces the sync.
 export const CHAT_MAX_SIZE = 25 * 1024 * 1024
 export const CHAT_MAX_FILES = 10
 
@@ -16,7 +17,8 @@ export function validateAttachmentFiles(files: File[], existingCount: number): {
   const accepted: File[] = []; const errors: string[] = []
   for (const f of files) {
     if (!CHAT_MIMES.has(f.type)) { errors.push(`${f.name}: file type not allowed.`); continue }
-    if (f.size > CHAT_MAX_SIZE || f.size === 0) { errors.push(`${f.name}: files must be under 25 MB.`); continue }
+    if (f.size === 0) { errors.push(`${f.name}: empty files can't be attached.`); continue }
+    if (f.size > CHAT_MAX_SIZE) { errors.push(`${f.name}: files must be under 25 MB.`); continue }
     if (existingCount + accepted.length >= CHAT_MAX_FILES) { errors.push(`Attachment limit is ${CHAT_MAX_FILES} files per message.`); continue }
     accepted.push(f)
   }
