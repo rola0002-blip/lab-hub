@@ -10,7 +10,9 @@ import { Avatar } from '@/components/ui/avatar'
 import { EmptyState } from '@/components/ui/empty-state'
 import { humanTime } from '@/lib/humanize'
 import { notificationHref } from '@/lib/notification-href'
+import { shouldChime } from '@/lib/chime'
 import { usePushOptIn } from './hooks/use-push-optin'
+import { useSoundsEnabled } from './hooks/use-sounds'
 import { useChat } from './chat/chat-store'
 import { useEvents } from './use-events'
 
@@ -56,6 +58,23 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   feedback_decided: Megaphone,
 }
 
+let audioCtx: AudioContext | null = null
+function playChime() {
+  try {
+    audioCtx ??= new AudioContext()
+    if (audioCtx.state === 'suspended') void audioCtx.resume()
+    const t = audioCtx.currentTime
+    const g = audioCtx.createGain(); g.connect(audioCtx.destination)
+    g.gain.setValueAtTime(0.0001, t)
+    g.gain.exponentialRampToValueAtTime(0.15, t + 0.02)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25)
+    for (const [freq, at] of [[880, 0], [1318.5, 0.09]] as const) {
+      const o = audioCtx.createOscillator(); o.type = 'sine'; o.frequency.value = freq
+      o.connect(g); o.start(t + at); o.stop(t + at + 0.22)
+    }
+  } catch { /* autoplay-blocked or headless — the visual bell still works */ }
+}
+
 type Face =
   | { kind: 'user'; id: string; name: string; image: string | null }
   | { kind: 'glyph'; icon: LucideIcon }
@@ -83,6 +102,12 @@ export default function Bell() {
   const ref = useRef<HTMLDivElement>(null)
   const now = new Date() // viewer-local reference for humanized notification times
   const push = usePushOptIn() // desktop-push opt-in lives in this tray, not a separate top-bar icon
+  const { enabled: sounds } = useSoundsEnabled() // default false — a device that never opted in stays silent
+  // load is memoized (stable across renders), so it would capture a stale
+  // `sounds`; mirror the live value into a ref it can read at fetch time.
+  const soundsRef = useRef(false)
+  useEffect(() => { soundsRef.current = sounds }, [sounds])
+  const watermark = useRef<string | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -90,6 +115,9 @@ export default function Bell() {
       if (!r.ok) return
       const d = await r.json()
       setUnread(d.unread); setItems(d.items)
+      const r2 = shouldChime(watermark.current, d.items.map((i: Item) => ({ id: i.id, type: i.type, createdAt: i.createdAt })))
+      watermark.current = r2.watermark
+      if (r2.chime && soundsRef.current) playChime()
     } catch { /* transient network error; next poll retries */ }
   }, [])
 

@@ -20,7 +20,9 @@ export default function SignInPage() {
     })
     setBusy(false)
     if (error) setError(error.message ?? 'Sign-in failed')
-    else router.push('/issues/me') // post-login landing = personal task list (v0.9.5)
+    // Landing is decided server-side by landingHrefFor (F7): the last-open
+    // conversation, or the personal task list — one source of truth with /.
+    else router.push('/')
   }
 
   return (

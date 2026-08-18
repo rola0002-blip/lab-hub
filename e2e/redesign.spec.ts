@@ -436,3 +436,56 @@ test('chat: dropping a file on the conversation rail is cancelled (no tab naviga
 
   await page.context().close()
 })
+
+// F7: post-login landing is the last-open conversation (landingHrefFor), and it
+// re-validates at read — leaving the conversation reverts the landing to the
+// personal task list without anyone clearing the remembered id.
+test('F7: sign-in lands on the last-open conversation; leaving reverts to /issues/me', async ({ browser }) => {
+  test.setTimeout(120_000)
+  const page = await admin(browser)
+  const cid = await createChannel(page, 'landing')
+
+  // Last-open channel is remembered → the next sign-in lands back in it.
+  await signOut(page)
+  await page.waitForURL('**/sign-in')
+  await signIn(page, ADMIN.email, ADMIN.password)
+  await expect(page).toHaveURL(new RegExp(`/chat/${cid}$`))
+  await expect(page.getByRole('heading', { name: '#landing' })).toBeVisible()
+
+  // Leave via the row's ⋯ menu (the open row redirects to the chat index); the
+  // membership is gone, so landingHrefFor falls back to /issues/me on the next
+  // sign-in even though the remembered id still points here.
+  await page.getByRole('link', { name: /landing/ }).hover()
+  await page.getByRole('button', { name: 'landing actions' }).click()
+  await page.getByRole('menuitem', { name: 'Leave channel' }).click()
+  await page.waitForURL('**/chat')
+
+  await signOut(page)
+  await page.waitForURL('**/sign-in')
+  await signIn(page, ADMIN.email, ADMIN.password)
+  await expect(page).toHaveURL(/\/issues\/me$/)
+  await expect(page.getByRole('heading', { name: 'My issues' })).toBeVisible()
+
+  await page.context().close()
+})
+
+// F7: notification sounds — an opt-in per-device toggle (role=switch, never
+// colour-alone) whose localStorage choice survives reload; the server column is
+// only the cross-device seed.
+test('F7: profile sounds toggle stays on across reload', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+
+  await page.goto('/profile')
+  const toggle = page.getByRole('switch', { name: 'Notification sounds' })
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-checked', 'true')
+
+  // Reload: localStorage 'sounds' === '1' wins on the device, so the switch the
+  // server seeded as false still renders on.
+  await page.reload()
+  await expect(page.getByRole('switch', { name: 'Notification sounds' })).toHaveAttribute('aria-checked', 'true')
+
+  await page.context().close()
+})

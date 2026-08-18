@@ -4,6 +4,7 @@ import { Camera, Trash2 } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { AccentPicker } from '@/components/accent-picker'
+import { SoundsToggle } from '@/components/sounds-toggle'
 import { toast } from '@/lib/toast-store'
 
 type ProfileUser = {
@@ -14,7 +15,7 @@ type ProfileUser = {
 // Full IANA list from the runtime ICU — the same set the server validates against.
 const TIMEZONES = Intl.supportedValuesOf('timeZone')
 
-export default function ProfileClient({ user }: { user: ProfileUser }) {
+export default function ProfileClient({ user, soundsEnabled }: { user: ProfileUser; soundsEnabled: boolean }) {
   const [image, setImage] = useState<string | null>(user.image)
   const [name, setName] = useState(user.name)
   const [title, setTitle] = useState(user.title)
@@ -128,6 +129,10 @@ export default function ProfileClient({ user }: { user: ProfileUser }) {
         <div className="mt-4">
           <p className="text-sm text-muted">Accent color — used for buttons, links, and highlights. The sidebar rail stays teal-slate.</p>
           <div className="mt-2"><AccentPicker /></div>
+        </div>
+        <div className="mt-4 flex items-center justify-between gap-4">
+          <p className="text-sm text-muted">Notification sounds — a soft chime for mentions and direct messages on this device.</p>
+          <SoundsToggle initial={soundsEnabled} />
         </div>
       </section>
     </div>

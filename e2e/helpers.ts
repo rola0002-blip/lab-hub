@@ -76,7 +76,10 @@ export async function signIn(page: Page, email: string, password: string) {
   await page.fill('input[name=email]', email)
   await page.fill('input[name=password]', password)
   await page.click('button:has-text("Sign in")')
-  await page.waitForURL('**/issues/me') // post-login landing = personal task list (v0.9.5)
+  // F7: sign-in pushes '/', whose landing is decided by landingHrefFor — the
+  // last-open conversation (still member + not archived) or the personal task
+  // list. Suites that re-sign-in after visiting a channel land on /chat/<cid>.
+  await page.waitForURL(/\/(issues\/me|chat\/[^/]+)$/)
 }
 
 export async function latestInviteToken(email: string): Promise<string> {

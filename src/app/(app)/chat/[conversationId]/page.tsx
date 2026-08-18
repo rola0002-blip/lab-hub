@@ -16,6 +16,9 @@ export default async function ConversationPage({ params, searchParams }: {
   if (!(await isMember(user.id, conversationId))) notFound()
   const convo = await prisma.conversation.findUnique({ where: { id: conversationId } })
   if (!convo) notFound()
+  // F7: remember the last-opened conversation for the landing redirect
+  // (landingHrefFor re-validates membership + archive at read; stale is benign).
+  void prisma.user.update({ where: { id: user.id }, data: { lastConversationId: conversationId } }).catch(() => {})
   const [manage, members] = await Promise.all([
     canManage(user.id, conversationId),
     prisma.conversationMember.findMany({ where: { conversationId }, select: { userId: true } }),
