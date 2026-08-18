@@ -20,12 +20,13 @@ import { EmptyState } from '@/components/ui/empty-state'
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser()
   const { id } = await params
-  const [project, issues, updates, users, folders, org, milestones] = await Promise.all([
+  const [project, issues, updates, users, folders, org, milestones, me] = await Promise.all([
     getProject(id), listIssues({ projectId: id }), listProjectUpdates(id),
     prisma.user.findMany({ where: { banned: false, isSystem: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
     listFolders(), // the composer's "Files folder" options (§5.3)
     getOrg(),
     listMilestones(id), // F4: the header strip's dated, sorted milestones
+    prisma.user.findUnique({ where: { id: user.id }, select: { pinnedProjectIds: true } }), // F3: this viewer's pins
   ])
   if (!project) notFound()
   const timezone = org?.timezone ?? 'Asia/Singapore'
@@ -72,7 +73,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const empty = <EmptyState icon={ListTodo} title="No issues in this project yet" hint='Use "New issue" above — it pre-fills this project.' />
   return (
     <div className="space-y-5">
-      <ProjectHeader project={project} role={user.role} users={users} folders={folders} timezone={timezone} today={today} milestones={milestones} />
+      <ProjectHeader project={project} role={user.role} users={users} folders={folders} timezone={timezone} today={today} milestones={milestones} pinned={(me?.pinnedProjectIds ?? []).includes(project.id)} />
       {/* Omitted entirely with no linked folder — the composer's select is the affordance. */}
       {project.documentFolder && <ProjectFiles folder={project.documentFolder} docs={folderDocs} timezone={timezone} />}
       {/* selfId (v0.15 §6.4): the row edit/delete affordances are author-scoped,

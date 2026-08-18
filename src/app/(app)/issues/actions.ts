@@ -102,6 +102,25 @@ export async function updateProjectAction(id: string, input: { name?: string; de
 export async function deleteProjectAction(id: string) {
   return run((u) => projects.deleteProject({ role: u.role, id }))
 }
+// F3 — pinned projects on /issues/me. Per-user state with NO role gate (guests may
+// pin), so unlike every other project action above there is no assertCanMutate
+// downstream — only existence and the MAX_PINS cap. The id is an RPC argument like
+// any other (the updateIdSchema lesson): the `string` type is a compile-time claim
+// only, and a forged non-string must degrade to {ok:false,message}, never a 500.
+// A malformed id can never name a row, so it reads back as the service's own miss
+// message. Distinct declaration from milestoneIdSchema because a project id is not
+// a milestone id.
+const pinProjectIdSchema = z.string().min(1)
+export async function pinProjectAction(projectId: string) {
+  const id = pinProjectIdSchema.safeParse(projectId)
+  if (!id.success) return { ok: false as const, message: 'Project not found.' }
+  return run((u) => projects.pinProject({ userId: u.id, projectId: id.data }).then(() => undefined))
+}
+export async function unpinProjectAction(projectId: string) {
+  const id = pinProjectIdSchema.safeParse(projectId)
+  if (!id.success) return { ok: false as const, message: 'Project not found.' }
+  return run((u) => projects.unpinProject({ userId: u.id, projectId: id.data }).then(() => undefined))
+}
 // v0.12 §6.2 — the grid's arrangement move. The client sends only the neighbour
 // ids the card sits between after the drop; the server mints the key. `.nullish()`
 // keeps the boundary drops expressible (no prev = front, no next = end) while an

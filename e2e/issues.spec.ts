@@ -329,3 +329,41 @@ test('create-issue modal: status menu is fully visible and clickable, not clippe
   await inProgress.click()
   await expect(dialog.getByRole('button', { name: 'Status', exact: true })).toContainText('In Progress')
 })
+
+test('pinned projects: pin from the project page, chip filters /issues/me, unpin', async ({ page }) => {
+  test.setTimeout(120_000)
+  await runWizard(page)
+  await signIn(page, ADMIN.email, ADMIN.password)
+
+  // (a) Create a project via the UI (same flow as the lifecycle test), then pin it
+  // from the header's kebab menu — the F3 item is available to every role.
+  await page.goto('/projects')
+  await page.getByRole('button', { name: 'New project' }).click()
+  await page.getByLabel('Name').fill('Pin E2E Project')
+  await page.getByRole('button', { name: 'Create project' }).click()
+  await page.waitForURL(/\/projects\/[^/]+$/)
+  await expect(page.getByRole('heading', { name: 'Pin E2E Project' })).toBeVisible()
+  await page.getByRole('button', { name: 'Project actions' }).click()
+  await page.getByRole('menuitem', { name: 'Pin to My issues' }).click()
+  await expect(page.getByText('Pinned to My issues.')).toBeVisible()
+  // The refreshed header now offers the inverse action.
+  await expect(page.getByRole('button', { name: 'Project actions' })).toBeVisible()
+  await page.getByRole('button', { name: 'Project actions' }).click()
+  await expect(page.getByRole('menuitem', { name: 'Unpin from My issues' })).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  // (b) The chip row on /issues/me — clicking the chip filters via ?project= (the
+  // existing filter machinery, no new filter code).
+  await page.goto('/issues/me')
+  const chip = page.getByRole('link', { name: 'Pin E2E Project' })
+  await expect(chip).toBeVisible()
+  await chip.click()
+  await expect(page).toHaveURL(/\/issues\/me\?project=/)
+  await expect(chip).toBeVisible() // still rendered, now in its active/selected style
+
+  // (c) Unpin from the manage menu — the chip disappears after the refresh.
+  await page.getByRole('button', { name: 'Manage pinned projects' }).click()
+  await page.getByRole('menuitem', { name: 'Unpin Pin E2E Project' }).click()
+  await expect(page.getByText('Unpinned.')).toBeVisible()
+  await expect(chip).toHaveCount(0)
+})

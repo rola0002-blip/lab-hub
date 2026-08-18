@@ -401,3 +401,46 @@ export async function deleteMilestone(args: { actorId: string; role: Role; miles
   if (!existing) throw new PolicyError('not_found', 'Milestone not found.')
   await prisma.milestone.delete({ where: { id: existing.id } })
 }
+
+// ── pinned projects (F3) ─────────────────────────────────────────────────────
+// Per-user state on User.pinnedProjectIds (Task 2's TEXT[] column) — NOT project
+// mutation, so there is deliberately no assertCanMutate: /issues/me is visible to
+// every role including guests, and a guest pinning a shortcut to their own view
+// changes nobody else's state. Only existence and the cap are enforced.
+
+export const MAX_PINS = 8
+
+export async function pinProject(args: { userId: string; projectId: string }): Promise<void> {
+  const project = await prisma.project.findUnique({ where: { id: args.projectId }, select: { id: true } })
+  if (!project) throw new PolicyError('not_found', 'Project not found.')
+  const u = await prisma.user.findUnique({ where: { id: args.userId }, select: { pinnedProjectIds: true } })
+  const current = u?.pinnedProjectIds ?? []
+  if (current.includes(args.projectId)) return // idempotent — a repeat click is a no-op
+  if (current.length >= MAX_PINS) throw new PolicyError('invalid', `Pin limit is ${MAX_PINS} projects.`)
+  await prisma.user.update({ where: { id: args.userId }, data: { pinnedProjectIds: [...current, args.projectId] } })
+}
+
+// Unpin is idempotent too: filtering out an absent id yields the same array.
+export async function unpinProject(args: { userId: string; projectId: string }): Promise<void> {
+  const u = await prisma.user.findUnique({ where: { id: args.userId }, select: { pinnedProjectIds: true } })
+  await prisma.user.update({ where: { id: args.userId }, data: { pinnedProjectIds: (u?.pinnedProjectIds ?? []).filter((id) => id !== args.projectId) } })
+}
+
+// Pin order preserved (the column's array order, not name order); deleted projects
+// drop out silently (the findMany only returns survivors). openCount uses the same
+// OPEN_STATUSES set as every other open read, and the two reads + one groupBy keep
+// it O(1) in the number of pins — no per-project query.
+export async function listPinnedProjects(userId: string): Promise<{ id: string; name: string; openCount: number }[]> {
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { pinnedProjectIds: true } })
+  const ids = u?.pinnedProjectIds ?? []
+  if (ids.length === 0) return []
+  const [projects, counts] = await Promise.all([
+    prisma.project.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }),
+    prisma.issue.groupBy({ by: ['projectId'], where: { projectId: { in: ids }, status: { in: OPEN_STATUSES } }, _count: { _all: true } }),
+  ])
+  const order = new Map(ids.map((id, i) => [id, i]))
+  const openBy = new Map(counts.map((c) => [c.projectId, c._count._all]))
+  return projects
+    .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+    .map((p) => ({ ...p, openCount: openBy.get(p.id) ?? 0 }))
+}

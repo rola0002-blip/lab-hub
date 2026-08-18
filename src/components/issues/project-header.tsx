@@ -13,7 +13,7 @@ import { HealthChip } from './health-chip'
 import { MilestoneStrip } from './milestone-strip'
 import { openIssueComposer } from '@/lib/issue-composer-store'
 import { openProjectUpdateComposer } from '@/lib/project-update-composer-store'
-import { deleteProjectAction, pauseUpdatePromptsAction, resumeUpdatePromptsAction } from '@/app/(app)/issues/actions'
+import { deleteProjectAction, pauseUpdatePromptsAction, resumeUpdatePromptsAction, pinProjectAction, unpinProjectAction } from '@/app/(app)/issues/actions'
 import { isProjectUpdateStale } from '@/features/issues/stale'
 import { toast } from '@/lib/toast-store'
 import { formatDay } from '@/lib/time'
@@ -23,7 +23,7 @@ import type { Role } from '@/lib/session'
 
 const STATUS_VARIANT = { ACTIVE: 'success', PAUSED: 'warning', COMPLETED: 'neutral', CANCELED: 'danger' } as const
 type Opt = { id: string; name: string }
-export function ProjectHeader({ project, role, users, folders, timezone, today, milestones }: { project: ProjectDto; role: Role; users: Opt[]; folders: Opt[]; timezone: string; today: string; milestones?: MilestoneDto[] }) {
+export function ProjectHeader({ project, role, users, folders, timezone, today, milestones, pinned }: { project: ProjectDto; role: Role; users: Opt[]; folders: Opt[]; timezone: string; today: string; milestones?: MilestoneDto[]; pinned?: boolean }) {
   const router = useRouter()
   const [editing, setEditing] = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
@@ -47,6 +47,15 @@ export function ProjectHeader({ project, role, users, folders, timezone, today, 
       { label: 'Pause updates for 4 weeks', onSelect: () => start(async () => { const r = await pauseUpdatePromptsAction(project.id, 4); toast(r.ok ? 'Prompts paused for 4 weeks.' : r.message); router.refresh() }) },
       { label: 'Resume update prompts', onSelect: () => start(async () => { const r = await resumeUpdatePromptsAction(project.id); toast(r.ok ? 'Prompts resumed.' : r.message); router.refresh() }) },
     ] : []),
+    // F3: pin/unpin sits before the admin Delete item and is available to EVERY
+    // role (guests included — it only edits the viewer's own pinnedProjectIds).
+    // With this item the menu always has ≥1 entry, so the header's kebab now
+    // renders for guests too.
+    { label: pinned ? 'Unpin from My issues' : 'Pin to My issues', onSelect: () => start(async () => {
+      const r = pinned ? await unpinProjectAction(project.id) : await pinProjectAction(project.id)
+      toast(r.ok ? (pinned ? 'Unpinned.' : 'Pinned to My issues.') : r.message)
+      router.refresh()
+    }) },
     ...(role === 'admin' ? [{ label: 'Delete project', danger: true, onSelect: () => setConfirmDel(true) }] : []),
   ]
   return (
