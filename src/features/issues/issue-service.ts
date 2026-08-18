@@ -473,9 +473,11 @@ export async function renameLabel(args: { actorId: string; role: Role; labelId: 
 // rows — a label delete would spam every affected timeline.
 export async function deleteLabel(args: { actorId: string; role: Role; labelId: string }): Promise<void> {
   assertCanMutate(args.role)
-  const existing = await prisma.label.findUnique({ where: { id: args.labelId }, select: { id: true } })
-  if (!existing) throw new PolicyError('not_found', 'Label not found.')
-  await prisma.label.delete({ where: { id: existing.id } })
+  // Translate-on-catch (the renameLabel pattern): a concurrent delete between
+  // check and remove would surface raw P2025 — the repo bars untranslated
+  // Prisma codes from reaching the client.
+  try { await prisma.label.delete({ where: { id: args.labelId } }) }
+  catch (e) { labelWriteError(e, 'A label with that name already exists here.', 'Label not found.') }
 }
 
 export async function listLabels(): Promise<LabelDto[]> {

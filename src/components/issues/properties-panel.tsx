@@ -69,7 +69,7 @@ export function PropertiesPanel({ issue, role, users, projects, labels }: { issu
       const r = await createLabelAction(draft, issue.project?.id ?? null)
       if (!r.ok) { toast(r.message); return }
       const r2 = await setLabelsAction(issue.id, [...issue.labels.map((l) => l.id), r.data.id])
-      if (!r2.ok) { toast(r2.message); return }
+      if (!r2.ok) { toast(`Label created, but it couldn't be applied — ${r2.message}`); router.refresh(); return }
       setCreating(false); setDraft(''); router.refresh()
     })
   }
@@ -104,7 +104,7 @@ export function PropertiesPanel({ issue, role, users, projects, labels }: { issu
       {creating && (
         <Modal title="New label" onClose={() => setCreating(false)}>
           <input value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={40} autoFocus aria-label="Label name" placeholder="Label name"
-            onKeyDown={(e) => { if (e.key === 'Enter' && draft.trim()) submitNewLabel() }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && draft.trim() && !labelPending) submitNewLabel() }}
             className="w-full rounded-md border border-border bg-surface px-3 py-2 text-base text-default focus-visible:border-[var(--border-focus)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
           {issue.project && <p className="mt-1 text-xs text-muted">Creates in the {issue.project.name} scope.</p>}
           <div className="mt-4 flex justify-end gap-2">
