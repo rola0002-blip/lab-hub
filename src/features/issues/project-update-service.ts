@@ -9,6 +9,7 @@ import { assertProjectExists } from './issue-service'
 import { nthPromptAfter } from './update-prompt'
 import { PROJECT_HEALTH_LABEL } from './project-health'
 
+export type ProjectUpdateAttachmentDto = { id: string; path: string; name: string; mime: string; size: number }
 export type ProjectUpdateDto = {
   id: string; projectId: string; health: ProjectHealth; body: string
   author: { id: string; name: string; image: string | null }
@@ -16,12 +17,16 @@ export type ProjectUpdateDto = {
   // v0.15 §6: a retracted update stays in the feed as an empty tombstone (the
   // CommentDto shape), and a corrected one says when it was corrected.
   deleted: boolean; editedAt: string | null
+  // F6: files attached at post time. The rows survive a retraction (the tombstone
+  // keeps no deletion logic) but the feed hides them with the body.
+  attachments: ProjectUpdateAttachmentDto[]
 }
 
 const AUTHOR_SELECT = { select: { id: true, name: true, image: true } } as const
 const BODY_MAX = 4000       // sendMessage truncates at 4000 — never exceed it (spec §4.0)
 const EXCERPT_MAX = 200     // the announce line can never be silently truncated mid-thought
 const FEED_MAX = 50         // the detail-page feed is bounded; a project's history is not
+const MAX_UPDATE_ATTACHMENTS = 5  // mirrors the action's zod .max(5) — one cap, two gates
 
 // THE reverse-chron ordering for ProjectUpdate rows. `createdAt` alone is not a
 // total order — two updates posted in the same millisecond tie, and Postgres is
@@ -46,6 +51,7 @@ function toDto(u: {
   id: string; projectId: string; health: ProjectHealth; body: string; originMessageId: string | null
   editedAt: Date | null; deletedAt: Date | null; createdAt: Date
   author: { id: string; name: string; image: string | null }
+  attachments?: ProjectUpdateAttachmentDto[]
 }): ProjectUpdateDto {
   return {
     id: u.id, projectId: u.projectId, health: u.health,
@@ -56,16 +62,35 @@ function toDto(u: {
     author: { id: u.author.id, name: u.author.name, image: u.author.image },
     originMessageId: u.originMessageId, createdAt: u.createdAt.toISOString(),
     deleted: !!u.deletedAt, editedAt: u.editedAt?.toISOString() ?? null,
+    // Optional in the input so fixture-shaped rows stay valid; every read site
+    // below includes the relation.
+    attachments: u.attachments ?? [],
   }
 }
 
 export async function postProjectUpdate(args: {
   projectId: string; actorId: string; role: Role; health: ProjectHealth; body: string; originMessageId?: string | null
+  attachments?: { path: string; name: string; mime: string; size: number }[]
 }): Promise<ProjectUpdateDto> {
   assertCanMutate(args.role)                       // guests read-only (§3.3 — one predicate)
   await assertProjectExists(args.projectId)
   const body = args.body.trim().slice(0, BODY_MAX)
   if (!body) throw new PolicyError('invalid', 'An update needs a few words.')
+  // F6 attachment gates — all BEFORE the create, so a refusal orphans nothing
+  // (the uploaded files stay on disk exactly as the chat composer's cancels do).
+  const attachments = args.attachments ?? []
+  if (attachments.length > MAX_UPDATE_ATTACHMENTS) {
+    throw new PolicyError('invalid', `At most ${MAX_UPDATE_ATTACHMENTS} files per update.`)
+  }
+  // IDOR guard (the attachIssueFiles precedent): only paths this flow minted —
+  // saveUpload emits /uploads/project-updates/<uuid>.<ext>. Rejecting any other
+  // uploads-tree path stops a client referencing another user's chat upload or
+  // avatar on an update. The '..' check is belt-and-braces (paths are UUIDs).
+  for (const a of attachments) {
+    if (!a.path.startsWith('/uploads/project-updates/') || a.path.includes('..')) {
+      throw new PolicyError('invalid', 'Invalid attachment path.')
+    }
+  }
   // Origin backlink (post-from-message): identical forged-id guard to createIssue —
   // a missing message and a non-member raise the SAME not_found (no existence leak).
   if (args.originMessageId) {
@@ -74,8 +99,11 @@ export async function postProjectUpdate(args: {
   }
   const project = await prisma.project.findUniqueOrThrow({ where: { id: args.projectId }, select: { name: true } })
   const created = await prisma.projectUpdate.create({
-    data: { projectId: args.projectId, authorId: args.actorId, health: args.health, body, originMessageId: args.originMessageId ?? null },
-    include: { author: AUTHOR_SELECT },
+    data: {
+      projectId: args.projectId, authorId: args.actorId, health: args.health, body, originMessageId: args.originMessageId ?? null,
+      attachments: { create: attachments.map((a) => ({ path: a.path, name: a.name.slice(0, 200), mime: a.mime, size: a.size })) },
+    },
+    include: { author: AUTHOR_SELECT, attachments: true },
   })
   // AWAITED, not void: the void announce sites are what forced resetDb's deadlock-retry
   // loop; the action is weekly and announceToChannel is internally non-fatal (§4.6).
@@ -97,7 +125,7 @@ export async function postProjectUpdate(args: {
 // look like the update was never written.
 export async function listProjectUpdates(projectId: string): Promise<ProjectUpdateDto[]> {
   const rows = await prisma.projectUpdate.findMany({
-    where: { projectId }, orderBy: PROJECT_UPDATE_ORDER, take: FEED_MAX, include: { author: AUTHOR_SELECT },
+    where: { projectId }, orderBy: PROJECT_UPDATE_ORDER, take: FEED_MAX, include: { author: AUTHOR_SELECT, attachments: true },
   })
   return rows.map(toDto)
 }
@@ -105,7 +133,7 @@ export async function listProjectUpdates(projectId: string): Promise<ProjectUpda
 // ONE load path for both mutations. Missing and already-tombstoned are the SAME
 // not_found: to every writer a retracted update is gone (the editComment contract).
 async function loadLiveUpdate(id: string) {
-  const u = await prisma.projectUpdate.findUnique({ where: { id }, include: { author: AUTHOR_SELECT } })
+  const u = await prisma.projectUpdate.findUnique({ where: { id }, include: { author: AUTHOR_SELECT, attachments: true } })
   if (!u || u.deletedAt) throw new PolicyError('not_found', 'Update not found.')
   return u
 }
@@ -131,7 +159,7 @@ export async function editProjectUpdate(args: {
   if (!body) throw new PolicyError('invalid', 'An update needs a few words.')
   const updated = await prisma.projectUpdate.update({
     where: { id: u.id }, data: { body, health: args.health, editedAt: new Date() },
-    include: { author: AUTHOR_SELECT },
+    include: { author: AUTHOR_SELECT, attachments: true },
   })
   return toDto(updated)
 }

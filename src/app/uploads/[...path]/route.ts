@@ -26,7 +26,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
   const isIssue = path[0].toLowerCase() === 'issues'
   const isDocument = path[0].toLowerCase() === 'documents'
   const isFeedback = path[0].toLowerCase() === 'feedback'
-  const isPrivate = isChat || isAvatar || isIssue || isDocument || isFeedback
+  const isProjectUpdate = path[0].toLowerCase() === 'project-updates'
+  const isPrivate = isChat || isAvatar || isIssue || isDocument || isFeedback || isProjectUpdate
 
   // Chat attachments are chat reads of potentially confidential lab data, so
   // they go through the ConversationMember gate like every other chat read.
@@ -42,13 +43,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
     })
     if (!attachment) return new Response('Not found', { status: 404 })
     if (!(await isMember(user.id, attachment.message.conversationId))) return new Response('Forbidden', { status: 403 })
-  } else if (isAvatar || isIssue || isDocument || isFeedback) {
-    // Avatars, issue attachments, shared documents AND feedback screenshots are
-    // private but workspace-visible: any authenticated session (incl. guests) may
-    // read them. The traversal/case-fold guard above already proved path[0] names
-    // the same top-level dir readUpload will open. A new kind is served PUBLICLY,
-    // with a shared-cache header, until this arm learns it — feedback screenshots
-    // can show lab data, so the kind must never fall through (spec §7.1).
+  } else if (isAvatar || isIssue || isDocument || isFeedback || isProjectUpdate) {
+    // Avatars, issue attachments, shared documents, feedback screenshots AND
+    // project-update attachments are private but workspace-visible: any
+    // authenticated session (incl. guests) may read them. The traversal/case-fold
+    // guard above already proved path[0] names the same top-level dir readUpload
+    // will open. A new kind is served PUBLICLY, with a shared-cache header, until
+    // this arm learns it — feedback screenshots can show lab data, so the kind
+    // must never fall through (spec §7.1).
     const user = await getSessionUser()
     if (!user) return new Response('Unauthorized', { status: 401 })
   }
@@ -57,23 +59,29 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
   if (!file) return new Response('Not found', { status: 404 })
   const headers: Record<string, string> = {
     'Content-Type': file.mime,
-    // Chat files, avatars, documents and feedback screenshots are private and must
-    // never be retained by shared/proxy caches; SP1 public assets keep the long,
-    // shared cache.
+    // Chat files, avatars, documents, feedback screenshots and project-update
+    // attachments are private and must never be retained by shared/proxy caches;
+    // SP1 public assets keep the long, shared cache.
     'Cache-Control': isPrivate ? 'private, no-store' : 'public, max-age=86400',
     // Attacker-supplied bytes are served inline (pdf/image), so never let a browser
     // MIME-sniff them into an executable type. Belt-and-suspenders alongside the global
     // next.config nosniff header, since this Route Handler builds its own Response (SP7 §7.1).
     'X-Content-Type-Options': 'nosniff',
   }
-  if (isDocument) {
-    // Recover the human filename (on-disk basename is a UUID) and 404 unknown paths.
-    const doc = await prisma.document.findFirst({ where: { path: '/uploads/' + path.join('/') }, select: { name: true } })
-    if (!doc) return new Response('Not found', { status: 404 })
+  if (isDocument || isProjectUpdate) {
+    // Recover the human filename (on-disk basename is a UUID) and 404 unknown
+    // paths. Documents and project-update attachments keep the same posture: the
+    // row is the authority — bytes on disk with no row (an abandoned upload) are
+    // never streamed.
+    const publicPath = '/uploads/' + path.join('/')
+    const name = isDocument
+      ? (await prisma.document.findFirst({ where: { path: publicPath }, select: { name: true } }))?.name
+      : (await prisma.projectUpdateAttachment.findFirst({ where: { path: publicPath }, select: { name: true } }))?.name
+    if (!name) return new Response('Not found', { status: 404 })
     // pdf + images view inline in a new tab; office files download. Either way the
     // original name survives via filename* (RFC 5987).
     const inline = file.mime === 'application/pdf' || file.mime.startsWith('image/')
-    headers['Content-Disposition'] = contentDisposition(inline ? 'inline' : 'attachment', doc.name)
+    headers['Content-Disposition'] = contentDisposition(inline ? 'inline' : 'attachment', name)
   } else if (!file.mime.startsWith('image/')) {
     // Chat/issue/avatar non-image downloads keep the UUID basename, but stop mangling —
     // the shared builder star-encodes it (harmless for an ASCII UUID).

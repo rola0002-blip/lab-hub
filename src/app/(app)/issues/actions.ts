@@ -216,17 +216,23 @@ export async function attachIssueFilesAction(issueId: string, files: { path: str
 // health enum never reaches a Prisma enum column unchecked); the service still owns
 // permission, trim/cap and the forged-originMessageId guard.
 const healthEnum = z.enum(['ON_TRACK', 'AT_RISK', 'OFF_TRACK'])
+// F6 — the .max(5) mirrors the service's MAX_UPDATE_ATTACHMENTS (one cap, two
+// gates); the service still owns the /uploads/project-updates/ IDOR prefix guard.
+const updateAttachmentSchema = z.object({
+  path: z.string().min(1), name: z.string().max(200), mime: z.string().min(1), size: z.number().int().nonnegative(),
+})
 const postUpdateSchema = z.object({
   projectId: z.string().min(1, 'Choose a project.'),
   health: healthEnum,
   body: z.string().min(1, 'An update needs a few words.').max(4000),
   originMessageId: z.string().nullish(),
+  attachments: z.array(updateAttachmentSchema).max(5, 'At most 5 files per update.').optional(),
 })
-export async function postProjectUpdateAction(input: { projectId: string; health: ProjectHealth; body: string; originMessageId?: string | null }) {
+export async function postProjectUpdateAction(input: { projectId: string; health: ProjectHealth; body: string; originMessageId?: string | null; attachments?: { path: string; name: string; mime: string; size: number }[] }) {
   const parsed = postUpdateSchema.safeParse(input)
   if (!parsed.success) return { ok: false as const, message: parsed.error.issues[0]?.message ?? 'Invalid update.' }
   const v = parsed.data
-  return run((u) => updates.postProjectUpdate({ projectId: v.projectId, actorId: u.id, role: u.role, health: v.health, body: v.body, originMessageId: v.originMessageId ?? null }))
+  return run((u) => updates.postProjectUpdate({ projectId: v.projectId, actorId: u.id, role: u.role, health: v.health, body: v.body, originMessageId: v.originMessageId ?? null, attachments: v.attachments ?? [] }))
 }
 // v0.15 §6.3 — correction and retraction. The body/health shapes are postUpdateSchema's
 // exactly (one contract whether the composer is writing or rewriting); there is no

@@ -21,13 +21,14 @@ const AVATAR_MAX = 5 * 1024 * 1024
 const DOCUMENT_MAX = 100 * 1024 * 1024 // shared library files; office allowlist, big cap
 const FEEDBACK_MAX = 10 * 1024 * 1024  // phone PNG screenshots overflow IMAGE_MAX; 25 MB headroom is unneeded
 
-export type UploadKind = 'logo' | 'equipment' | 'chat' | 'avatars' | 'issues' | 'documents' | 'feedback'
+export type UploadKind = 'logo' | 'equipment' | 'chat' | 'avatars' | 'issues' | 'documents' | 'feedback' | 'project-updates'
 
-// Doc-kind uploads (chat + issue attachments) share the 25 MB cap + the wider
-// document MIME allowlist; image kinds (logo/equipment/avatars) stay image-only.
-// 'documents' shares the same office allowlist but takes the 100 MB cap.
-// 'feedback' is image-only (IMAGE_ALLOWED, by fall-through) with its OWN 10 MB cap.
-const DOC_KINDS = new Set<UploadKind>(['chat', 'issues'])
+// Doc-kind uploads (chat + issue + project-update attachments) share the 25 MB
+// cap + the wider document MIME allowlist; image kinds (logo/equipment/avatars)
+// stay image-only. 'documents' shares the same office allowlist but takes the
+// 100 MB cap. 'feedback' is image-only (IMAGE_ALLOWED, by fall-through) with
+// its OWN 10 MB cap.
+const DOC_KINDS = new Set<UploadKind>(['chat', 'issues', 'project-updates'])
 
 export function uploadsDir() {
   return path.resolve(process.env.UPLOADS_DIR ?? './data/uploads')

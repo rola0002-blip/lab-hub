@@ -20,6 +20,12 @@ describe('validateUpload', () => {
     expect(() => validateUpload('application/x-msdownload', 1024, 'chat')).toThrow('invalid_upload')
     expect(() => validateUpload('application/pdf', 1024)).toThrow('invalid_upload') // logo kind unchanged
   })
+  it('project-updates kind rides DOC_KINDS: office allowlist + the 25 MB doc cap', () => {
+    expect(() => validateUpload('application/pdf', 24 * 1024 * 1024, 'project-updates')).not.toThrow()
+    expect(() => validateUpload('application/vnd.openxmlformats-officedocument.wordprocessingml.document', 1024, 'project-updates')).not.toThrow()
+    expect(() => validateUpload('application/pdf', 26 * 1024 * 1024, 'project-updates')).toThrow('invalid_upload')
+    expect(() => validateUpload('application/x-msdownload', 1024, 'project-updates')).toThrow('invalid_upload')
+  })
 })
 
 describe('uploadsDir', () => {
