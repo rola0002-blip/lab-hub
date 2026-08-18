@@ -4,7 +4,10 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 
 const IMAGE_ALLOWED: Record<string, string> = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp' }
-const CHAT_ALLOWED: Record<string, string> = {
+// Exported for the client-side chat attachment gate's drift test
+// (src/features/chat/attachment-input.test.ts): the pane's CHAT_MIMES must
+// mirror exactly this server allowlist.
+export const CHAT_ALLOWED: Record<string, string> = {
   ...IMAGE_ALLOWED,
   'image/gif': '.gif',
   'application/pdf': '.pdf',

@@ -350,3 +350,44 @@ test('7: a failed reaction / edit / delete surfaces a toast (no silent failure)'
 
   await page.context().close()
 })
+
+// F1 (drag-and-drop attachments): Playwright cannot synthesize a real OS drag, so
+// build a DataTransfer in page context and dispatch dragover/drop on the pane's
+// drop surface ([data-chat-pane], the column wrapping the log + composer that owns
+// the pane-level handlers). The drop routes through the composer's shared validated
+// intake: a real POST /api/chat/attachments → pending chip → sent message renders
+// the attachment link chip in the timeline.
+const TXT = { name: 'dropped-notes.txt', type: 'text/plain', body: 'dropped payload' }
+
+function dispatchDrag(page: Page, type: 'dragover' | 'drop', file?: { name: string; type: string; body: string }) {
+  return page.locator('[data-chat-pane]').evaluate((el, { type, file }) => {
+    const dt = new DataTransfer()
+    if (file) dt.items.add(new File([file.body], file.name, { type: file.type }))
+    else dt.setData('text/plain', 'plain text only')
+    el.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }))
+  }, { type, file })
+}
+
+test('8: drop a file onto the pane to attach, then send', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  await createChannel(page, 'lab')
+
+  // A text-only drag must NOT raise the drop overlay (files only).
+  await dispatchDrag(page, 'dragover')
+  await expect(page.getByText('Drop to attach')).toHaveCount(0)
+
+  // A file drag raises the overlay anywhere over the pane…
+  await dispatchDrag(page, 'dragover', TXT)
+  await expect(page.getByText('Drop to attach')).toBeVisible()
+
+  // …and dropping uploads the file: the composer's pending chip shows the filename.
+  await dispatchDrag(page, 'drop', TXT)
+  await expect(page.getByText('dropped-notes.txt')).toBeVisible()
+
+  // Send: the message lands in the timeline with the attachment link chip.
+  await send(page, 'file inbound')
+  await expect(page.getByRole('link', { name: /dropped-notes\.txt/ })).toBeVisible()
+
+  await page.context().close()
+})

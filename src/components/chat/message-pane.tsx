@@ -11,7 +11,7 @@ import { useMediaQuery } from '@/components/hooks/use-media-query'
 import { useChat, dmName } from './chat-store'
 import MessageItem, { type Msg } from './message-item'
 import { IssueRefProvider } from './issue-ref-store'
-import Composer from './composer'
+import Composer, { type ComposerHandle } from './composer'
 import ThreadPanel from './thread-panel'
 import ConversationMenu, { MembersDialog } from './conversation-menu'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -84,6 +84,10 @@ export default function MessagePane({ conversationId, conversationType, channelN
   const [activeMsgId, setActiveMsgId] = useState<string | null>(null)
   // Channel-intro "Add people" opens the same members dialog the ⋯ menu uses.
   const [membersOpen, setMembersOpen] = useState(false)
+  // F1 pane-level drop: files dropped anywhere over the message area funnel into
+  // the composer's shared attach intake via its imperative handle.
+  const composerRef = useRef<ComposerHandle>(null)
+  const [dragOver, setDragOver] = useState(false)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const firstLoad = useRef(true)
@@ -371,7 +375,21 @@ export default function MessagePane({ conversationId, conversationType, channelN
     // `relative` anchors the thread panel's 768–1279 overlay form; it has no effect
     // on the xl in-row column (which is statically positioned).
     <div className="relative flex h-full min-w-0 flex-1">
-      <div className="relative flex min-w-0 flex-1 flex-col">
+      {/* data-chat-pane marks the pane's drop surface (header + log + composer);
+          `relative` (already present) anchors the drag overlay. */}
+      <div data-chat-pane="" className="relative flex min-w-0 flex-1 flex-col"
+        onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragOver(true) } }}
+        onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(false) }}
+        onDrop={(e) => {
+          if (!e.dataTransfer.files.length) return
+          e.preventDefault(); setDragOver(false)
+          composerRef.current?.acceptFiles(Array.from(e.dataTransfer.files))
+        }}>
+        {dragOver && (
+          <div className="pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-xl border-2 border-dashed border-[var(--border-focus)] bg-hover/90 text-sm font-medium text-default" role="status">
+            Drop to attach
+          </div>
+        )}
         <header className="flex items-center gap-2 border-b border-border px-4 py-2">
           {/* Narrow (<768): the conversation-list rail collapses (list/pane swap),
               so the pane gets a back affordance to return to the list at /chat. */}
@@ -452,7 +470,7 @@ export default function MessagePane({ conversationId, conversationType, channelN
         )}
         {archived
           ? <p className="border-t border-border p-3 text-sm text-muted">This conversation is archived.</p>
-          : <Composer main onNavigateUp={enterListAtNewest} conversationId={conversationId} selfRole={selfRole} memberIds={memberIds} onSent={upsert} onRemove={remove} onFail={markFailed} />}
+          : <Composer ref={composerRef} main onNavigateUp={enterListAtNewest} conversationId={conversationId} selfRole={selfRole} memberIds={memberIds} onSent={upsert} onRemove={remove} onFail={markFailed} />}
       </div>
       {threadRoot && (
         <ThreadPanel rootId={threadRoot} conversationId={conversationId} conversationType={conversationType} channelName={channelName}
