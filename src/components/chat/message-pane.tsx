@@ -146,6 +146,17 @@ export default function MessagePane({ conversationId, conversationType, channelN
     return () => document.removeEventListener('pointerdown', onDoc)
   }, [coarse])
 
+  // Files dropped outside [data-chat-pane] (thread panel, conversation list, chrome) would hit
+  // the browser default — the tab navigates to the dropped file and drafts are
+  // lost. A window-level preventDefault (no stopPropagation) kills only that
+  // default; the pane's own handlers run first on real targets.
+  useEffect(() => {
+    const prevent = (e: DragEvent) => e.preventDefault()
+    window.addEventListener('dragover', prevent)
+    window.addEventListener('drop', prevent)
+    return () => { window.removeEventListener('dragover', prevent); window.removeEventListener('drop', prevent) }
+  }, [])
+
   const remove = useCallback((id: string) => {
     setMessages((prev) => prev.filter((m) => m.id !== id))
   }, [])

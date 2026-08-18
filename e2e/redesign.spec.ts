@@ -333,3 +333,99 @@ test('mobile 320px: no horizontal overflow and the thread opens as a focus-trapp
 
   await ctx.close()
 })
+
+// F12: the Files toolbar's new-window button pops the current listing (including
+// its ?folder= query) into its own window; the originating tab stays put.
+test('files: open in new window opens the same listing in a popup', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  await page.goto('/files')
+  await expect(page.getByRole('button', { name: 'Open in new window' })).toBeVisible()
+
+  const popupPromise = page.waitForEvent('popup')
+  await page.getByRole('button', { name: 'Open in new window' }).click()
+  const popup = await popupPromise
+  await expect(popup).toHaveURL(/\/files/)
+  await popup.close()
+  await expect(page).toHaveURL(/\/files/)
+  await page.context().close()
+})
+
+// F2: row-level Mute/Unmute in the conversation list — the ⋯ trigger is
+// hover/keyboard-only by design (touch users get the header menu).
+test('chat: row-level Mute/Unmute from the conversation list', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  await createChannel(page, 'rowmute')
+  const row = page.getByRole('link', { name: /rowmute/ })
+  await expect(row).toBeVisible()
+
+  // Hover reveals the row's ⋯ menu; muting stamps the row's BellOff glyph.
+  await row.hover()
+  await page.getByRole('button', { name: 'rowmute actions' }).click()
+  await page.getByRole('menuitem', { name: 'Mute' }).click()
+  await expect(row.locator('[aria-label="Muted"]')).toBeVisible()
+
+  // Unmute from the same row menu restores the prior state.
+  await row.hover()
+  await page.getByRole('button', { name: 'rowmute actions' }).click()
+  await page.getByRole('menuitem', { name: 'Unmute' }).click()
+  await expect(row.locator('[aria-label="Muted"]')).toHaveCount(0)
+
+  await page.context().close()
+})
+
+// F2: Leave channel via the row menu. Leaving a NON-open row keeps the current
+// pane; leaving the open conversation lands back on the chat index.
+test('chat: leave via the row menu — other rows keep the pane, the open row returns to /chat', async ({ browser }) => {
+  test.setTimeout(120_000)
+  const page = await admin(browser)
+  const stayId = await createChannel(page, 'stayhere')
+  await createChannel(page, 'goner')
+  // Re-open 'stayhere' so the pane shows it while 'goner' is left from the rail.
+  await page.goto(`/chat/${stayId}`)
+  await expect(page.getByRole('heading', { name: '#stayhere' })).toBeVisible()
+
+  await page.getByRole('link', { name: /goner/ }).hover()
+  await page.getByRole('button', { name: 'goner actions' }).click()
+  await page.getByRole('menuitem', { name: 'Leave channel' }).click()
+  await expect(page.getByRole('link', { name: /goner/ })).toHaveCount(0)
+  await expect(page).toHaveURL(new RegExp(`/chat/${stayId}$`))
+
+  // Leaving the conversation you are reading redirects to the chat index.
+  await page.getByRole('link', { name: /stayhere/ }).hover()
+  await page.getByRole('button', { name: 'stayhere actions' }).click()
+  await page.getByRole('menuitem', { name: 'Leave channel' }).click()
+  await page.waitForURL('**/chat')
+  await expect(page.getByRole('link', { name: /stayhere/ })).toHaveCount(0)
+
+  await page.context().close()
+})
+
+// Task-7 carry-over: a file dropped OUTSIDE [data-chat-pane] (here: the
+// conversation rail) must be cancelled by the pane's window-level guard instead
+// of navigating the tab to the dropped file. A synthetic cancelable drop proves
+// the guard prevents the default; unprevented, Chromium would treat a Files
+// drop on non-dropzone chrome as top-level navigation.
+test('chat: dropping a file on the conversation rail is cancelled (no tab navigation)', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  // The guard lives in message-pane, so an open conversation must be mounted.
+  await createChannel(page, 'dropguard')
+  await expect(page.getByRole('heading', { name: '#dropguard' })).toBeVisible()
+
+  const rail = page.getByRole('navigation', { name: 'Conversations' })
+  await expect(rail).toBeVisible()
+  const url = page.url()
+  const prevented = await rail.evaluate((el) => {
+    const dt = new DataTransfer()
+    dt.items.add(new File(['drop guard'], 'drop-guard.txt', { type: 'text/plain' }))
+    const ev = new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })
+    el.dispatchEvent(ev)
+    return ev.defaultPrevented
+  })
+  expect(prevented).toBe(true)
+  expect(page.url()).toBe(url)
+
+  await page.context().close()
+})

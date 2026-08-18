@@ -71,6 +71,7 @@ export default function ConversationMenu({ conversationId, conversationType, cha
       </button>
       {open && (
         <div className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-md border border-border bg-surface py-1 shadow-menu">
+          <button onClick={() => { setOpen(false); window.open(window.location.href, '_blank', 'noopener') }} className={item}>Open in new window</button>
           <button onClick={toggleMute} className={item}>{muted ? 'Unmute' : 'Mute'}</button>
           {isChannel && manage && !archived && (
             <button onClick={() => { setOpen(false); setDialog('edit') }} className={item}>Edit channel…</button>
