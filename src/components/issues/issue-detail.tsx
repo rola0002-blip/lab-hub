@@ -15,15 +15,15 @@ import { canDeleteIssue } from '@/features/issues/issue-policy'
 import { toast } from '@/lib/toast-store'
 import { useEvents } from '@/components/use-events'
 import { isIssueRefetchEvent } from '@/features/issues/issue-events'
-import type { IssueDto } from '@/features/issues/issue-service'
+import type { IssueDto, LabelDto } from '@/features/issues/issue-service'
 import type { TimelineEntry } from '@/features/issues/comment-service'
 import type { Role } from '@/lib/session'
 
 type Opt = { id: string; name: string; image?: string | null }
 type Attachment = { id: string; path: string; name: string; mime: string; size: number }
-export function IssueDetail({ issue, attachments, timeline, role, selfId, users, projects, timezone, originChip, issueRefs = [] }: {
+export function IssueDetail({ issue, attachments, timeline, role, selfId, users, projects, labels, timezone, originChip, issueRefs = [] }: {
   issue: IssueDto; attachments: Attachment[]; timeline: TimelineEntry[]; role: Role; selfId: string
-  users: Opt[]; projects: Opt[]; timezone: string; originChip?: ReactNode
+  users: Opt[]; projects: Opt[]; labels: LabelDto[]; timezone: string; originChip?: ReactNode
   // Server-resolved LAB-<n> refs from the description + all comment bodies; the
   // client builds the Map once (pure render) and threads it into renderTokens.
   issueRefs?: { number: number; identifier: string; title: string; status: IssueDto['status'] }[]
@@ -62,7 +62,7 @@ export function IssueDetail({ issue, attachments, timeline, role, selfId, users,
       {/* Panel FIRST in source so it stacks ABOVE the content below lg (§6.3);
           on lg the explicit order utilities put the content back in column 1. */}
       <div className="lg:order-2">
-        <PropertiesPanel issue={issue} role={role} users={users} projects={projects} />
+        <PropertiesPanel issue={issue} role={role} users={users} projects={projects} labels={labels} />
       </div>
       <div className="min-w-0 space-y-4 lg:order-1">
         <div>

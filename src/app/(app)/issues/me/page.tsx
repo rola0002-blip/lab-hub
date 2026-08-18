@@ -2,7 +2,7 @@ import { Inbox, SearchX } from 'lucide-react'
 import { requireUser } from '@/lib/session'
 import { prisma } from '@/lib/db'
 import { getOrg } from '@/lib/org'
-import { listIssues } from '@/features/issues/issue-service'
+import { listIssues, listLabels } from '@/features/issues/issue-service'
 import { listProjectOptions, listPinnedProjects } from '@/features/issues/project-service'
 import { parseIssueFilters } from '@/features/issues/status'
 import { orgToday } from '@/features/issues/due'
@@ -18,10 +18,10 @@ export default async function MyIssuesPage({ searchParams }: { searchParams: Pro
   const sp = await searchParams
   // Validated URL filters (assignee is locked to self, so f.assignee is ignored).
   const f = parseIssueFilters(sp)
-  const [issues, users, projects, org, pinned] = await Promise.all([
+  const [issues, users, projects, labels, org, pinned] = await Promise.all([
     listIssues({ assigneeId: user.id, status: f.status, projectId: f.project, labelId: f.label, priority: f.priority, due: f.due }),
     prisma.user.findMany({ where: { banned: false, isSystem: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
-    listProjectOptions(), getOrg(), listPinnedProjects(user.id),
+    listProjectOptions(), listLabels(), getOrg(), listPinnedProjects(user.id),
   ])
   const timezone = org?.timezone ?? 'Asia/Singapore'
   const today = orgToday(new Date(), timezone) // org-day reference threaded to the due chips (stable across hydration)
@@ -40,7 +40,7 @@ export default async function MyIssuesPage({ searchParams }: { searchParams: Pro
       </div>
       {/* F3: per-user pin chips — between the header and the filter bar, all roles. */}
       <PinnedProjects pinned={pinned} projects={projects} activeId={f.project ?? null} />
-      <FilterBar users={users} projects={projects} lockAssignee />
+      <FilterBar users={users} projects={projects} labels={labels} lockAssignee />
       <IssuesSurface key={JSON.stringify(sp)} initial={visible} role={user.role} users={users} timezone={timezone} today={today} closedGrouped empty={empty} />
     </div>
   )

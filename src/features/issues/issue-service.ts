@@ -15,6 +15,7 @@ import { assertCanMutate, assertCanDeleteIssue, PolicyError } from './issue-poli
 import { rankBetween, rebalance, REBALANCE_THRESHOLD } from './rank'
 import { formatIdentifier } from './identifier'
 import { dueRange, type DueFilter } from './due'
+import { nextLabelColor, splitLabelsForProject } from './labels'
 
 export type IssueDto = {
   id: string; number: number; identifier: string; title: string; description: string
@@ -35,7 +36,7 @@ export const ISSUE_INCLUDE = {
   assignee: { select: { id: true, name: true, image: true } },
   creator: { select: { id: true, name: true, image: true } },
   project: { select: { id: true, name: true } },
-  labels: { include: { label: { select: { id: true, name: true, color: true } } } },
+  labels: { include: { label: { select: { id: true, name: true, color: true, projectId: true } } } },
 } satisfies P.IssueInclude
 
 type Loaded = P.IssueGetPayload<{ include: typeof ISSUE_INCLUDE }>
@@ -199,8 +200,14 @@ export async function createIssue(args: {
   // keeps it), so a truthy guard would let the empty string reach the FK → P2003.
   if (args.assigneeId != null) await assertAssigneeExists(args.assigneeId)
   if (args.projectId != null) await assertProjectExists(args.projectId)
-  const labelIds = [...new Set(args.labelIds ?? [])] // deduped like setLabels: @@unique([issueId,labelId])
-  await assertLabelsExist(labelIds)
+  const wantedIds = [...new Set(args.labelIds ?? [])] // deduped like setLabels: @@unique([issueId,labelId])
+  await assertLabelsExist(wantedIds)
+  // F5: labels scoped to ANOTHER project can't ride along — keep only what
+  // belongs on the destination project (globals + that project's own).
+  const loaded = wantedIds.length
+    ? await prisma.label.findMany({ where: { id: { in: wantedIds } }, select: { id: true, name: true, color: true, projectId: true } })
+    : []
+  const labelIds = splitLabelsForProject(loaded, args.projectId ?? null).keep.map((l) => l.id)
   // Initial rank = end of the destination column.
   const last = await prisma.issue.findFirst({ where: { status }, orderBy: { rank: 'desc' }, select: { rank: true } })
   const rank = rankBetween(last?.rank ?? null, null)
@@ -319,7 +326,21 @@ export async function setProject(args: { actorId: string; role: Role; issueId: s
   assertCanMutate(args.role)
   if (args.projectId != null) await assertProjectExists(args.projectId) // §3.2; only null detaches — '' is a bad id, not a detach
   const issue = await loadOrThrow(args.issueId)
-  return simpleSet({ actorId: args.actorId, issue, type: 'project', data: { projectId: args.projectId }, from: issue.projectId, to: args.projectId })
+  // F5: project-scoped labels that don't belong on the destination detach with
+  // the move, one 'labels' activity recording it.
+  const stale = splitLabelsForProject(issue.labels.map((l) => l.label), args.projectId).drop
+  const updated = await prisma.$transaction(async (tx) => {
+    const u = await tx.issue.update({ where: { id: issue.id }, data: { projectId: args.projectId }, include: ISSUE_INCLUDE })
+    await tx.issueActivity.create({ data: { issueId: issue.id, actorId: args.actorId, type: 'project', data: { from: issue.projectId, to: args.projectId } as P.InputJsonValue } })
+    if (stale.length) {
+      await tx.issueLabel.deleteMany({ where: { issueId: issue.id, labelId: { in: stale.map((l) => l.id) } } })
+      const after = (await tx.issueLabel.findMany({ where: { issueId: issue.id }, select: { labelId: true } })).map((l) => l.labelId)
+      await tx.issueActivity.create({ data: { issueId: issue.id, actorId: args.actorId, type: 'labels', data: { from: issue.labels.map((l) => l.labelId), to: after } as P.InputJsonValue } })
+    }
+    return u
+  })
+  await emitEvent({ t: 'issue', id: issue.id, projectId: updated.projectId ?? undefined })
+  return toDto(updated)
 }
 export async function setDueDate(args: { actorId: string; role: Role; issueId: string; dueDate: Date | null }): Promise<IssueDto> {
   assertCanMutate(args.role)
@@ -412,14 +433,55 @@ async function rebalanceAndPlace(status: IssueStatus, movedId: string, prevId: s
 }
 
 // ── labels + attachments ──────────────────────────────────────────────────────
-export async function createLabel(args: { actorId: string; role: Role; name: string; color: string }): Promise<{ id: string; name: string; color: string }> {
+export type LabelDto = { id: string; name: string; color: string; projectId: string | null; project: { id: string; name: string } | null }
+
+// P2002 = the two partial uniques (migration SQL; Prisma can't express them) →
+// friendly invalid; P2025 = missing row → not_found. Everything else rethrows.
+function labelWriteError(e: unknown, p20: string, p25: string): never {
+  const code = (e as { code?: string }).code
+  if (code === 'P2002') throw new PolicyError('invalid', p20)
+  if (code === 'P2025') throw new PolicyError('not_found', p25)
+  throw e
+}
+
+export async function createLabel(args: { actorId: string; role: Role; name: string; projectId?: string | null }): Promise<LabelDto> {
   assertCanMutate(args.role)
   const name = args.name.trim()
   if (name.length < 1 || name.length > 40) throw new PolicyError('invalid', 'Label name must be 1–40 characters.')
-  return prisma.label.create({ data: { name, color: args.color }, select: { id: true, name: true, color: true } })
+  const projectId = args.projectId ?? null
+  if (projectId != null) await assertProjectExists(projectId)
+  const scopeCount = await prisma.label.count({ where: { projectId } })
+  try {
+    return await prisma.label.create({
+      data: { name, color: nextLabelColor(scopeCount), projectId },
+      include: { project: { select: { id: true, name: true } } },
+    })
+  } catch (e) { labelWriteError(e, 'A label with that name already exists here.', 'Project not found.') }
 }
-export async function listLabels(): Promise<{ id: string; name: string; color: string }[]> {
-  return prisma.label.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true, color: true } })
+
+export async function renameLabel(args: { actorId: string; role: Role; labelId: string; name: string }): Promise<LabelDto> {
+  assertCanMutate(args.role)
+  const name = args.name.trim()
+  if (name.length < 1 || name.length > 40) throw new PolicyError('invalid', 'Label name must be 1–40 characters.')
+  try {
+    return await prisma.label.update({ where: { id: args.labelId }, data: { name }, include: { project: { select: { id: true, name: true } } } })
+  } catch (e) { labelWriteError(e, 'A label with that name already exists here.', 'Label not found.') }
+}
+
+// Deleting detaches from every issue (IssueLabel cascade). No per-issue activity
+// rows — a label delete would spam every affected timeline.
+export async function deleteLabel(args: { actorId: string; role: Role; labelId: string }): Promise<void> {
+  assertCanMutate(args.role)
+  const existing = await prisma.label.findUnique({ where: { id: args.labelId }, select: { id: true } })
+  if (!existing) throw new PolicyError('not_found', 'Label not found.')
+  await prisma.label.delete({ where: { id: existing.id } })
+}
+
+export async function listLabels(): Promise<LabelDto[]> {
+  return prisma.label.findMany({
+    orderBy: [{ projectId: 'asc' }, { name: 'asc' }],
+    include: { project: { select: { id: true, name: true } } },
+  })
 }
 
 export async function attachIssueFiles(args: {

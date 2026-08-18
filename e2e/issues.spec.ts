@@ -367,3 +367,63 @@ test('pinned projects: pin from the project page, chip filters /issues/me, unpin
   await expect(page.getByText('Unpinned.')).toBeVisible()
   await expect(chip).toHaveCount(0)
 })
+
+test('project labels: create on the project page, apply via the properties menu, detach on project move, filter by label', async ({ page }) => {
+  test.setTimeout(150_000)
+  await runWizard(page)
+  await signIn(page, ADMIN.email, ADMIN.password)
+
+  // Alpha hosts the scoped label; Beta is the move destination (db-seeded with a
+  // trailing rank so it sorts after the UI-created Alpha without another wizard).
+  await page.goto('/projects')
+  await page.getByRole('button', { name: 'New project' }).click()
+  await page.getByLabel('Name').fill('F5 Alpha')
+  await page.getByRole('button', { name: 'Create project' }).click()
+  await page.waitForURL(/\/projects\/[^/]+$/)
+  await db.project.create({ data: { name: 'F5 Beta', rank: 'zz' } })
+  // A workspace-global label, seeded via db (global creation has no management UI).
+  await db.label.create({ data: { name: 'triage', color: '--status-done' } })
+
+  // (a) The Labels section on the project page mints the scoped label.
+  await page.getByRole('button', { name: 'Label', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'New label' })
+  await dialog.getByLabel('Label name').fill('procurement')
+  await dialog.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByLabel('Project labels').getByText('procurement')).toBeVisible()
+
+  // (b) An issue created from the project page (pre-filled project), then both the
+  // scoped and the global label applied through the properties Labels menu.
+  await createIssueViaUI(page, 'Procure boron source') // lands on its detail page
+  const detailUrl = page.url()
+  await page.getByRole('button', { name: 'Set labels' }).click()
+  await page.getByRole('menuitem', { name: 'procurement', exact: true }).click()
+  await page.getByRole('button', { name: 'Set labels' }).click()
+  await page.getByRole('menuitem', { name: 'triage', exact: true }).click()
+  const labelsTrigger = page.getByRole('button', { name: 'Set labels' })
+  await expect(labelsTrigger).toContainText('procurement')
+  await expect(labelsTrigger).toContainText('triage')
+
+  // (c) The filter bar's Label select (grouped Workspace/projects) filters by the
+  // scoped label — the option value is the label id, resolved from the db.
+  const procurement = await db.label.findFirstOrThrow({ where: { name: 'procurement' } })
+  await page.goto('/issues')
+  await page.getByLabel('Label', { exact: true }).selectOption(procurement.id)
+  await expect(page).toHaveURL(/label=/)
+  await expect(page.getByText('Procure boron source')).toBeVisible()
+  await page.getByLabel('Label', { exact: true }).selectOption('')
+  await expect(page).not.toHaveURL(/label=/)
+
+  // (d) Moving the issue to another project via the properties Project menu
+  // detaches the stale scoped label and keeps the global one.
+  await page.goto(detailUrl)
+  await page.getByRole('button', { name: 'Set project' }).click()
+  await page.getByRole('menuitem', { name: 'F5 Beta' }).click()
+  await expect(page.getByRole('link', { name: 'F5 Beta' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Set labels' })).toContainText('triage')
+  await expect(page.getByRole('button', { name: 'Set labels' })).not.toContainText('procurement')
+
+  // (e) The detach round-trips: filtering by procurement now finds nothing.
+  await page.goto('/issues')
+  await page.getByLabel('Label', { exact: true }).selectOption(procurement.id)
+  await expect(page.getByText('Procure boron source')).toHaveCount(0)
+})

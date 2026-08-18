@@ -84,8 +84,30 @@ export async function setLabelsAction(issueId: string, labelIds: string[]) {
 export async function updateDescriptionAction(issueId: string, description: string) {
   return run((u) => issues.updateDescription({ actorId: u.id, role: u.role, issueId, description }))
 }
-export async function createLabelAction(name: string, color: string) {
-  return run((u) => issues.createLabel({ actorId: u.id, role: u.role, name, color }))
+// F5 — project-scoped labels. Name shape checked here (the RPC-argument lesson:
+// a forged non-string degrades to {ok:false,message}, never a 500); ids get the
+// milestoneIdSchema treatment — a malformed id can never name a row. The service
+// still owns permission, trim/cap, scope and the P2002 duplicate-name translation.
+const labelNameSchema = z.string().trim().min(1, 'Label name must be 1–40 characters.').max(40, 'Label name must be 1–40 characters.')
+const labelIdSchema = z.string().min(1)
+const createLabelSchema = z.object({ name: labelNameSchema, projectId: z.string().min(1).nullish() })
+export async function createLabelAction(name: string, projectId?: string | null) {
+  const parsed = createLabelSchema.safeParse({ name, projectId: projectId ?? null })
+  if (!parsed.success) return { ok: false as const, message: parsed.error.issues[0]?.message ?? 'Invalid label.' }
+  const v = parsed.data
+  return run((u) => issues.createLabel({ actorId: u.id, role: u.role, name: v.name, projectId: v.projectId ?? null }))
+}
+export async function renameLabelAction(labelId: string, name: string) {
+  const id = labelIdSchema.safeParse(labelId)
+  if (!id.success) return { ok: false as const, message: 'Label not found.' }
+  const parsed = labelNameSchema.safeParse(name)
+  if (!parsed.success) return { ok: false as const, message: parsed.error.issues[0]?.message ?? 'Invalid label.' }
+  return run((u) => issues.renameLabel({ actorId: u.id, role: u.role, labelId: id.data, name: parsed.data }))
+}
+export async function deleteLabelAction(labelId: string) {
+  const id = labelIdSchema.safeParse(labelId)
+  if (!id.success) return { ok: false as const, message: 'Label not found.' }
+  return run((u) => issues.deleteLabel({ actorId: u.id, role: u.role, labelId: id.data }).then(() => undefined))
 }
 export async function createProjectAction(input: { name: string; description?: string; leadId?: string | null; documentFolderId?: string | null; startDate?: string | null; targetDate?: string | null; status?: ProjectStatus }) {
   const parsed = createProjectSchema.safeParse(input)
