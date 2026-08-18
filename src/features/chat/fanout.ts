@@ -66,6 +66,12 @@ export async function fanoutThreadReply(args: {
 }): Promise<void> {
   try {
     const { reply: m, root, conversation: c } = args
+    // One-bell rule: fanoutMessage's message_dm already bells every DM message,
+    // so a DM thread reply must not add a second bell (and, unlatched as it is,
+    // a 60-min digest email on top of the immediate dmEmail).
+    if (c.type === 'DM') return
+    // System rows are root-level only; guard mirrors fanoutMessage's invariant.
+    if (m.kind === 'system') return
     const replies = await prisma.message.findMany({
       where: { parentId: root.id, deletedAt: null },
       select: { userId: true }, distinct: ['userId'],

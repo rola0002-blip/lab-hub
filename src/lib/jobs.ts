@@ -172,7 +172,8 @@ export async function promptProjectUpdates(now: Date = new Date()): Promise<numb
 }
 
 // F8: one digest email per user per run for chat bells still unread after 60
-// minutes. The 300s interval IS the rate limit (≤1 digest/user/hour). Only
+// minutes. ≤1 digest per user per ~hour via the per-user 55-min emailedAt
+// cooldown (the 300s interval alone cannot bound it — sliding window). Only
 // rows whose payload carries a HUMAN senderId digest — bot DMs (due-soon,
 // overdue, prompts) tell you something you already know, and pre-wave rows
 // without senderId are skipped rather than guessed. emailedAt is the latch:
@@ -207,6 +208,15 @@ export async function digestUnreadChat(now: Date = new Date()): Promise<number> 
   for (const [userId, items] of byUser) {
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, banned: true } })
     if (!user || user.banned) continue
+    // Cooldown: ≤1 digest per user per ~hour even under continuous arrival —
+    // the 300s interval alone cannot provide it (sliding 60-min window). The
+    // immediate-email latch (dmEmail etc.) also stamps emailedAt, so a user who
+    // just got an immediate email is not digested minutes later (one-bell rule).
+    const last = await prisma.notification.findFirst({
+      where: { userId, emailedAt: { not: null }, type: { in: ['message_mention', 'message_dm', 'message_thread_reply'] } },
+      orderBy: { emailedAt: 'desc' }, select: { emailedAt: true },
+    })
+    if (last && last.emailedAt && now.getTime() - last.emailedAt.getTime() < 55 * 60_000) continue
     const tpl = digestChatEmail(
       org?.name ?? 'LabHub',
       items.map((n) => ({

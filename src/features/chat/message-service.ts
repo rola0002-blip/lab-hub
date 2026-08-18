@@ -1,5 +1,5 @@
 import 'server-only'
-import type { Prisma as P } from '@prisma/client'
+import type { Prisma as P, Message } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { emitEvent } from '@/lib/events'
 import { removeUpload } from '@/lib/uploads'
@@ -106,9 +106,11 @@ export async function sendMessage(input: SendInput): Promise<SendResult> {
   if (convo.archivedAt) return { ok: false, error: 'invalid', message: 'This conversation is archived.' }
   const body = input.body.trim().slice(0, 4000)
   if (!body && !(input.attachments?.length)) return { ok: false, error: 'invalid', message: 'Message is empty.' }
+  // Captured at validation so the fanout hook below reuses it (no second findUnique).
+  let rootMsg: Message | null = null
   if (input.parentId) {
-    const root = await prisma.message.findUnique({ where: { id: input.parentId } })
-    if (!root || root.conversationId !== input.conversationId || root.parentId !== null || root.deletedAt) {
+    rootMsg = await prisma.message.findUnique({ where: { id: input.parentId } })
+    if (!rootMsg || rootMsg.conversationId !== input.conversationId || rootMsg.parentId !== null || rootMsg.deletedAt) {
       return { ok: false, error: 'invalid', message: 'Thread replies attach to a message in this conversation.' }
     }
   }
@@ -132,9 +134,8 @@ export async function sendMessage(input: SendInput): Promise<SendResult> {
   // F8: a thread reply bells the thread's participants (suppressed bot DMs
   // and broadcast copies excluded — the copy fans out on its own above/below).
   if (input.parentId && !input.suppressNotify) {
-    const root = await prisma.message.findUnique({ where: { id: input.parentId } })
-    // root is non-null and in this conversation — validated at the top of sendMessage
-    if (root) void fanoutThreadReply({ reply: created, root, conversation: convo, senderName: sender.name })
+    // rootMsg is non-null and in this conversation — validated at the top of sendMessage
+    if (rootMsg) void fanoutThreadReply({ reply: created, root: rootMsg, conversation: convo, senderName: sender.name })
   }
 
   // "Also send to #channel": mirror a thread reply into the channel as its own

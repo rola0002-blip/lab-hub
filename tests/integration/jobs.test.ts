@@ -36,8 +36,7 @@ describe('scheduler jobs', () => {
   it('digestUnreadChat emails one digest per user, exactly once, excluding bot senders and fresh rows', async () => {
     const u1 = await makeUser(); const u2 = await makeUser()
     const sender = await makeUser()
-    const bot = await prisma.user.upsert({ where: { id: 'colossus-bot' }, update: {}, create: { id: 'colossus-bot', name: 'LabHub Bot', email: 'bot@colossus.local', isSystem: true } })
-    void bot
+    await prisma.user.upsert({ where: { id: 'colossus-bot' }, update: {}, create: { id: 'colossus-bot', name: 'LabHub Bot', email: 'bot@colossus.local', isSystem: true } })
     const old = new Date(Date.now() - 2 * 3_600_000)
     const mk = async (userId: string, senderId: string, at: Date) => {
       const n = await prisma.notification.create({ data: { userId, type: 'message_dm', payload: { message: 'x', conversationId: 'c', messageId: 'm', senderId } } })
@@ -50,11 +49,19 @@ describe('scheduler jobs', () => {
     await mk(u1.id, sender.id, new Date())     // fresh (<60min) → skipped
     const preWave = await prisma.notification.create({ data: { userId: u2.id, type: 'message_dm', payload: { message: 'old row', conversationId: 'c', messageId: 'm3' } } })
     await prisma.notification.update({ where: { id: preWave.id }, data: { createdAt: old } }) // no senderId (pre-wave) → skipped
-    const emailed = await prisma.notification.create({ data: { userId: u1.id, type: 'message_dm', payload: { message: 'y', conversationId: 'c', messageId: 'm2', senderId: sender.id }, emailedAt: new Date() } })
-    await prisma.notification.update({ where: { id: emailed.id }, data: { createdAt: old } }) // already emailed → skipped
+    const emailed = await prisma.notification.create({ data: { userId: u1.id, type: 'message_dm', payload: { message: 'y', conversationId: 'c', messageId: 'm2', senderId: sender.id }, emailedAt: old } })
+    await prisma.notification.update({ where: { id: emailed.id }, data: { createdAt: old } }) // already emailed → skipped (emailedAt aged so it does not trip u1's cooldown)
     expect(await digestUnreadChat()).toBe(2)
     expect(await prisma.emailOutbox.count()).toBe(2)
     expect((await prisma.notification.findUniqueOrThrow({ where: { id: a1 } })).emailedAt).not.toBeNull()
     expect(await digestUnreadChat()).toBe(0) // latched
+    // Per-user cooldown: a NEW old unread row for u1 must not digest — u1 was
+    // just emailed (emailedAt stamped moments ago by the run above).
+    const another = await mk(u1.id, sender.id, old)
+    expect(await digestUnreadChat()).toBe(0)
+    // Age u1's cooldown (her latched row's emailedAt → 2h ago): the row digests.
+    await prisma.notification.update({ where: { id: a1 }, data: { emailedAt: old } })
+    expect(await digestUnreadChat()).toBe(1)
+    expect((await prisma.notification.findUniqueOrThrow({ where: { id: another } })).emailedAt).not.toBeNull()
   })
 })

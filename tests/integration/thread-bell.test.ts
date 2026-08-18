@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { prisma } from '@/lib/db'
-import { resetDb, makeUser, makeChannel, makeMember } from '../factories'
+import { resetDb, makeUser, makeChannel, makeDm, makeMember } from '../factories'
 import { resetRate } from '@/features/chat/rate-limit'
 import { _resetForTests } from '@/lib/events'
 import { sendMessage } from '@/features/chat/message-service'
@@ -64,6 +64,30 @@ describe('thread-reply bell (F8)', () => {
     // Bell-only: no immediate email, and the row stays digest-eligible (no emailedAt).
     expect(await prisma.emailOutbox.count()).toBe(0)
     expect(n.emailedAt).toBeNull()
+  })
+
+  it('one-bell rule in DMs: a thread reply bells only via fanoutMessage — zero message_thread_reply rows', async () => {
+    const a = await makeUser({ name: 'A' })
+    const b = await makeUser({ name: 'B' })
+    const dm = await makeDm([a.id, b.id])
+    const root = await sendMessage({ userId: a.id, conversationId: dm.id, body: 'dm root' })
+    expect(root.ok).toBe(true)
+    if (!root.ok) return
+    await until(async () => (await prisma.notification.count({ where: { userId: b.id, type: 'message_dm' } })) === 1)
+
+    const reply = await sendMessage({ userId: b.id, conversationId: dm.id, body: 'dm thread reply', parentId: root.message.id })
+    expect(reply.ok).toBe(true)
+    if (!reply.ok) return
+    await until(async () => (await prisma.notification.count({ where: { userId: a.id, type: 'message_dm' } })) === 1)
+
+    // B: exactly one message_dm (A's root, via fanoutMessage) and no thread bell.
+    expect(await prisma.notification.count({ where: { userId: b.id, type: 'message_dm' } })).toBe(1)
+    expect(await prisma.notification.count({ where: { userId: b.id, type: 'message_thread_reply' } })).toBe(0)
+    // A (root author = the sole thread candidate) also gets ONLY the message_dm
+    // from B's reply — without the DM guard the thread fan-out would add a
+    // second bell here, unlatched and headed for the 60-min digest.
+    expect(await prisma.notification.count({ where: { userId: a.id, type: 'message_dm' } })).toBe(1)
+    expect(await prisma.notification.count({ where: { userId: a.id, type: 'message_thread_reply' } })).toBe(0)
   })
 
   it('mention-wins: a later @-mention of a participant gives one mention bell, no second thread bell', async () => {
