@@ -334,8 +334,10 @@ test('mobile 320px: no horizontal overflow and the thread opens as a focus-trapp
   await ctx.close()
 })
 
-// F12: the Files toolbar's new-window button pops the current listing (including
-// its ?folder= query) into its own window; the originating tab stays put.
+// F12: the Files toolbar's new-window button opens window.location.href verbatim,
+// so whatever listing URL you're on carries into the popup; the originating tab
+// stays put. Exercised at the bare /files root — a ?folder= listing rides the
+// same pass-through but is not asserted here.
 test('files: open in new window opens the same listing in a popup', async ({ browser }) => {
   test.setTimeout(90_000)
   const page = await admin(browser)
@@ -403,14 +405,16 @@ test('chat: leave via the row menu — other rows keep the pane, the open row re
 })
 
 // Task-7 carry-over: a file dropped OUTSIDE [data-chat-pane] (here: the
-// conversation rail) must be cancelled by the pane's window-level guard instead
-// of navigating the tab to the dropped file. A synthetic cancelable drop proves
-// the guard prevents the default; unprevented, Chromium would treat a Files
-// drop on non-dropzone chrome as top-level navigation.
+// conversation rail) must be cancelled by the chat shell's window-level guard
+// instead of navigating the tab to the dropped file. A synthetic cancelable drop
+// proves the guard prevents the default; unprevented, Chromium would treat a
+// Files drop on non-dropzone chrome as top-level navigation.
 test('chat: dropping a file on the conversation rail is cancelled (no tab navigation)', async ({ browser }) => {
   test.setTimeout(90_000)
   const page = await admin(browser)
-  // The guard lives in message-pane, so an open conversation must be mounted.
+  // The guard lives in the chat shell, mounted for every /chat route — an open
+  // conversation is not required for it, but the rail drop target is most
+  // realistic with a channel behind it.
   await createChannel(page, 'dropguard')
   await expect(page.getByRole('heading', { name: '#dropguard' })).toBeVisible()
 
@@ -424,6 +428,9 @@ test('chat: dropping a file on the conversation rail is cancelled (no tab naviga
     el.dispatchEvent(ev)
     return ev.defaultPrevented
   })
+  // defaultPrevented is the real instrument: an untrusted synthetic event never
+  // triggers browser default actions, so the URL assert below is
+  // belt-and-suspenders documentation of the guard's user-visible contract.
   expect(prevented).toBe(true)
   expect(page.url()).toBe(url)
 

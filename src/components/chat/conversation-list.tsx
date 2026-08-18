@@ -32,7 +32,10 @@ export default function ConversationList({ role }: { role: string }) {
       const r = await fetch(`/api/chat/conversations/${c.id}/members`, {
         method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: selfId }),
       })
-      if (!r.ok) return
+      // Refresh even on failure: the rail can be stale at the moment of the call —
+      // e.g. 403 'Not a member.' after a left-elsewhere race — and keeping the
+      // prior state would leave a phantom row. Converges like the mute path.
+      if (!r.ok) { await refresh(); return }
       await refresh()
       // Leaving the conversation you're reading lands you back on the chat index;
       // leaving any other row keeps the open pane untouched.

@@ -38,6 +38,18 @@ export function ChatShell({ list, children }: { list: React.ReactNode; children:
     el.style.height = `${Math.max(0, Math.round(vvh - el.getBoundingClientRect().top - 16))}px`
   }, [narrow, vvh])
 
+  // Files dropped outside [data-chat-pane] (thread panel, rail, chat chrome) would
+  // hit the browser default — the tab navigates to the dropped file and drafts are
+  // lost. preventDefault (no stopPropagation) for FILE drags only; the pane's own
+  // handlers run first on real targets, and text/URL drags keep their native
+  // insert behaviour.
+  useEffect(() => {
+    const prevent = (e: DragEvent) => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault() }
+    window.addEventListener('dragover', prevent)
+    window.addEventListener('drop', prevent)
+    return () => { window.removeEventListener('dragover', prevent); window.removeEventListener('drop', prevent) }
+  }, [])
+
   return (
     // Height = viewport minus the app chrome ABOVE and BELOW this pane, which is
     // ((app)/layout.tsx) the h-12 header plus <main>'s padding: 48 + 2×16 = 5rem
