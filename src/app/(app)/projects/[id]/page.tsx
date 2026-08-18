@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { requireUser } from '@/lib/session'
 import { prisma } from '@/lib/db'
 import { getOrg } from '@/lib/org'
-import { getProject } from '@/features/issues/project-service'
+import { getProject, listMilestones } from '@/features/issues/project-service'
 import { listProjectUpdates } from '@/features/issues/project-update-service'
 import { listIssues } from '@/features/issues/issue-service'
 import { extractIssueRefNumbers } from '@/features/issues/identifier'
@@ -20,11 +20,12 @@ import { EmptyState } from '@/components/ui/empty-state'
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser()
   const { id } = await params
-  const [project, issues, updates, users, folders, org] = await Promise.all([
+  const [project, issues, updates, users, folders, org, milestones] = await Promise.all([
     getProject(id), listIssues({ projectId: id }), listProjectUpdates(id),
     prisma.user.findMany({ where: { banned: false, isSystem: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
     listFolders(), // the composer's "Files folder" options (§5.3)
     getOrg(),
+    listMilestones(id), // F4: the header strip's dated, sorted milestones
   ])
   if (!project) notFound()
   const timezone = org?.timezone ?? 'Asia/Singapore'
@@ -71,7 +72,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const empty = <EmptyState icon={ListTodo} title="No issues in this project yet" hint='Use "New issue" above — it pre-fills this project.' />
   return (
     <div className="space-y-5">
-      <ProjectHeader project={project} role={user.role} users={users} folders={folders} timezone={timezone} today={today} />
+      <ProjectHeader project={project} role={user.role} users={users} folders={folders} timezone={timezone} today={today} milestones={milestones} />
       {/* Omitted entirely with no linked folder — the composer's select is the affordance. */}
       {project.documentFolder && <ProjectFiles folder={project.documentFolder} docs={folderDocs} timezone={timezone} />}
       {/* selfId (v0.15 §6.4): the row edit/delete affordances are author-scoped,

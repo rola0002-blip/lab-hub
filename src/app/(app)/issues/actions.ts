@@ -117,6 +117,23 @@ export async function moveProjectAction(input: { projectId: string; prevId: stri
   const v = parsed.data
   return run((u) => projects.moveProject({ actorId: u.id, role: u.role, projectId: v.projectId, prevId: v.prevId ?? null, nextId: v.nextId ?? null }))
 }
+// F4 — project milestones (dates + progress only). Simple pass-throughs like the
+// issue setters above: the service owns permission, trim/cap, the DATE_RE gate
+// and the not-found translation, and `date || null` turns an empty date input
+// ('') into a cleared date. No bot announce, no SSE — refresh is revalidatePath
+// (run) + router.refresh() (the strip).
+export async function createMilestoneAction(projectId: string, name: string, date: string | null) {
+  return run((u) => projects.createMilestone({ actorId: u.id, role: u.role, projectId, name, date: date || null }))
+}
+export async function editMilestoneAction(milestoneId: string, name: string, date: string | null) {
+  return run((u) => projects.updateMilestone({ actorId: u.id, role: u.role, milestoneId, name, date: date || null }))
+}
+export async function toggleMilestoneAction(milestoneId: string) {
+  return run((u) => projects.toggleMilestone({ actorId: u.id, role: u.role, milestoneId }))
+}
+export async function deleteMilestoneAction(milestoneId: string) {
+  return run((u) => projects.deleteMilestone({ actorId: u.id, role: u.role, milestoneId }))
+}
 export async function deleteIssueAction(issueId: string) {
   return run((u) => issues.deleteIssue({ issueId, actorId: u.id, role: u.role }))
 }

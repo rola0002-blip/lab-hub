@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/modal'
 import { ProgressBar } from './progress-bar'
 import { ProjectComposer } from './project-composer'
 import { HealthChip } from './health-chip'
+import { MilestoneStrip } from './milestone-strip'
 import { openIssueComposer } from '@/lib/issue-composer-store'
 import { openProjectUpdateComposer } from '@/lib/project-update-composer-store'
 import { deleteProjectAction, pauseUpdatePromptsAction, resumeUpdatePromptsAction } from '@/app/(app)/issues/actions'
@@ -17,11 +18,12 @@ import { isProjectUpdateStale } from '@/features/issues/stale'
 import { toast } from '@/lib/toast-store'
 import { formatDay } from '@/lib/time'
 import type { ProjectDto } from '@/features/issues/project-service'
+import type { MilestoneDto } from '@/features/issues/milestone-state'
 import type { Role } from '@/lib/session'
 
 const STATUS_VARIANT = { ACTIVE: 'success', PAUSED: 'warning', COMPLETED: 'neutral', CANCELED: 'danger' } as const
 type Opt = { id: string; name: string }
-export function ProjectHeader({ project, role, users, folders, timezone, today }: { project: ProjectDto; role: Role; users: Opt[]; folders: Opt[]; timezone: string; today: string }) {
+export function ProjectHeader({ project, role, users, folders, timezone, today, milestones }: { project: ProjectDto; role: Role; users: Opt[]; folders: Opt[]; timezone: string; today: string; milestones?: MilestoneDto[] }) {
   const router = useRouter()
   const [editing, setEditing] = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
@@ -83,6 +85,11 @@ export function ProjectHeader({ project, role, users, folders, timezone, today }
           hardcodes text-default and would otherwise outshine its own paragraph.
           Rendering-only parity — no mention parsing/notification in project-service. */}
       {project.description && <p className="max-w-2xl whitespace-pre-wrap text-sm text-default">{renderTokens(project.description, names)}</p>}
+      {/* F4: the milestone strip — dated progress pills between the description
+          and the meta row. Read-only for guests (MilestoneStrip hides every
+          affordance when !canEdit); absent entirely with no milestones AND no
+          edit right, so a bare new project shows nothing. */}
+      {(milestones?.length || canEdit) ? <MilestoneStrip projectId={project.id} milestones={milestones ?? []} canEdit={canEdit} today={today} /> : null}
       <div className="flex items-center gap-3 text-xs text-muted">
         {project.lead && <span className="flex items-center gap-1.5"><Avatar size={20} name={project.lead.name} id={project.lead.id} image={project.lead.image} />{project.lead.name}</span>}
         {/* Org-timezone rule (src/lib/time.ts): fixed pattern + org zone, never the

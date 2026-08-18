@@ -49,6 +49,11 @@ export function ProjectCard({ project, timezone, today, controls }: { project: P
         {project.targetDate && <span className="ml-auto">{formatDay(new Date(project.targetDate), timezone)}</span>}
       </div>
       <div className="mt-3"><ProgressBar {...project.progress} /></div>
+      {/* F4: the milestone readout — only when milestones exist, under the issue
+          progress line (server-safe: a plain string off the DTO). */}
+      {project.milestones.total > 0 && (
+        <p className="mt-1 text-2xs text-subtle">{project.milestones.complete}/{project.milestones.total} milestones</p>
+      )}
     </div>
   )
 }
