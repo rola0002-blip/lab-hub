@@ -571,6 +571,8 @@ model Label {
   project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   issues IssueLabel[]
+
+  @@index([projectId])
 }
 
 model IssueLabel {

@@ -8,7 +8,7 @@
 -- Postgres has no ADD CONSTRAINT IF NOT EXISTS, so each FK is wrapped in a
 -- duplicate_object guard (sp8 idiom); PKs are inline in CREATE TABLE IF NOT EXISTS.
 
--- F4: milestones
+-- F4: milestones (dates + progress only; never linked to issues)
 CREATE TABLE IF NOT EXISTS "Milestone" (
     "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
@@ -26,7 +26,7 @@ DO $$ BEGIN
     FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
--- F6: project-update attachments
+-- F6: project-update attachments (the ChatAttachment tuple pattern)
 CREATE TABLE IF NOT EXISTS "ProjectUpdateAttachment" (
     "id" TEXT NOT NULL,
     "updateId" TEXT NOT NULL,
@@ -52,11 +52,16 @@ DO $$ BEGIN
   ALTER TABLE "Label" ADD CONSTRAINT "Label_projectId_fkey"
     FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DROP INDEX IF EXISTS "Label_name_key";
+-- Create the partials BEFORE dropping the old unique: existing data already
+-- satisfies them (Label_name_key held), so this order is strictly safe and
+-- removes the hand-run (psql autocommit) window where a concurrent insert
+-- could wedge re-runs with 23505.
 CREATE UNIQUE INDEX IF NOT EXISTS "label_global_name_unique" ON "Label"("name") WHERE "projectId" IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS "label_project_scoped_name_unique" ON "Label"("name", "projectId") WHERE "projectId" IS NOT NULL;
+DROP INDEX IF EXISTS "Label_name_key";
 
 -- F3/F7/F9: per-user workspace state
+-- NOT NULL DEFAULTs are metadata-only adds — a running v0.15 binary INSERTs fine.
 ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "pinnedProjectIds" TEXT[] NOT NULL DEFAULT '{}';
 ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "lastConversationId" TEXT;
 ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "soundsEnabled" BOOLEAN NOT NULL DEFAULT false;
