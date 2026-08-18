@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { prisma } from '@/lib/db'
 import { resetDb, makeUser, makeEquipment, hoursFromNow } from '../factories'
-import { expirePendingBookings, sendBookingReminders } from '@/lib/jobs'
+import { expirePendingBookings, sendBookingReminders, digestUnreadChat } from '@/lib/jobs'
 import { setManagers } from '@/features/equipment/service'
 
 describe('scheduler jobs', () => {
@@ -31,5 +31,30 @@ describe('scheduler jobs', () => {
     expect(await sendBookingReminders()).toBe(0) // reminderSentAt set — no double send
     expect(await prisma.notification.count({ where: { userId: u.id, type: 'booking_reminder' } })).toBe(1)
     expect(await prisma.emailOutbox.count()).toBe(1)
+  })
+
+  it('digestUnreadChat emails one digest per user, exactly once, excluding bot senders and fresh rows', async () => {
+    const u1 = await makeUser(); const u2 = await makeUser()
+    const sender = await makeUser()
+    const bot = await prisma.user.upsert({ where: { id: 'colossus-bot' }, update: {}, create: { id: 'colossus-bot', name: 'LabHub Bot', email: 'bot@colossus.local', isSystem: true } })
+    void bot
+    const old = new Date(Date.now() - 2 * 3_600_000)
+    const mk = async (userId: string, senderId: string, at: Date) => {
+      const n = await prisma.notification.create({ data: { userId, type: 'message_dm', payload: { message: 'x', conversationId: 'c', messageId: 'm', senderId } } })
+      await prisma.notification.update({ where: { id: n.id }, data: { createdAt: at } })
+      return n.id
+    }
+    const a1 = await mk(u1.id, sender.id, old)
+    await mk(u2.id, sender.id, old)
+    await mk(u1.id, 'colossus-bot', old)       // bot sender → skipped
+    await mk(u1.id, sender.id, new Date())     // fresh (<60min) → skipped
+    const preWave = await prisma.notification.create({ data: { userId: u2.id, type: 'message_dm', payload: { message: 'old row', conversationId: 'c', messageId: 'm3' } } })
+    await prisma.notification.update({ where: { id: preWave.id }, data: { createdAt: old } }) // no senderId (pre-wave) → skipped
+    const emailed = await prisma.notification.create({ data: { userId: u1.id, type: 'message_dm', payload: { message: 'y', conversationId: 'c', messageId: 'm2', senderId: sender.id }, emailedAt: new Date() } })
+    await prisma.notification.update({ where: { id: emailed.id }, data: { createdAt: old } }) // already emailed → skipped
+    expect(await digestUnreadChat()).toBe(2)
+    expect(await prisma.emailOutbox.count()).toBe(2)
+    expect((await prisma.notification.findUniqueOrThrow({ where: { id: a1 } })).emailedAt).not.toBeNull()
+    expect(await digestUnreadChat()).toBe(0) // latched
   })
 })

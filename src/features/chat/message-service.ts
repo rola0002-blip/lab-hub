@@ -6,7 +6,7 @@ import { removeUpload } from '@/lib/uploads'
 import { isMember } from './conversation-service'
 import { parseMentions } from './mentions'
 import { checkRate } from './rate-limit'
-import { fanoutMessage } from './fanout'
+import { fanoutMessage, fanoutThreadReply } from './fanout'
 
 export type MessageDto = {
   id: string; conversationId: string; parentId: string | null
@@ -128,6 +128,14 @@ export async function sendMessage(input: SendInput): Promise<SendResult> {
   })
   await emitEvent({ t: 'msg', cid: input.conversationId, mid: created.id })
   if (!input.suppressNotify) void fanoutMessage({ message: created, conversation: convo, senderName: sender.name })
+
+  // F8: a thread reply bells the thread's participants (suppressed bot DMs
+  // and broadcast copies excluded — the copy fans out on its own above/below).
+  if (input.parentId && !input.suppressNotify) {
+    const root = await prisma.message.findUnique({ where: { id: input.parentId } })
+    // root is non-null and in this conversation — validated at the top of sendMessage
+    if (root) void fanoutThreadReply({ reply: created, root, conversation: convo, senderName: sender.name })
+  }
 
   // "Also send to #channel": mirror a thread reply into the channel as its own
   // root message so members not watching the thread still see it. Purely additive

@@ -8,6 +8,9 @@ export type NotificationType =
   | 'booking_pending' | 'booking_decided' | 'booking_cancelled_maintenance'
   | 'booking_reminder' | 'booking_expired' | 'booking_cancelled'
   | 'message_mention' | 'message_dm' | 'channel_added'
+  // F8: a reply in a thread you participate in — bell-only (no immediate email);
+  // unread rows reach the 60-minute digest job instead.
+  | 'message_thread_reply'
   | 'issue_assigned' | 'issue_mention' | 'issue_comment' | 'issue_done'
   // SP8: weekly project-update prompt (suppressed bot DM + this no-email bell)
   | 'project_update_prompt'
@@ -24,7 +27,8 @@ export async function notify(
     if (!user) return
     // payload is validated JSON at the call sites; Prisma's Json input type
     // (InputJsonValue) is narrower than Record<string, unknown>, so cast here.
-    await prisma.notification.create({ data: { userId, type, payload: payload as Prisma.InputJsonValue } })
+    // immediate-email rows are exempt from the 60-min digest (emailedAt is the latch)
+    await prisma.notification.create({ data: { userId, type, payload: payload as Prisma.InputJsonValue, ...(email ? { emailedAt: new Date() } : {}) } })
     void emitEvent({ t: 'notif', uid: userId }) // live bell push; emitEvent never throws
     if (email) await enqueueEmail(user.email, email.subject, email.html)
   } catch (e) {

@@ -1,5 +1,5 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
-import { wipe, runWizard, signIn, ADMIN, createMemberViaInvite, acceptInvite } from './helpers'
+import { wipe, runWizard, signIn, ADMIN, createMemberViaInvite, acceptInvite, db } from './helpers'
 
 // Per-context client IP. better-auth rate-limits /sign-in/email and /sign-up/email at 10/60 s
 // keyed by client IP; on localhost every request would otherwise share one bucket and the
@@ -389,5 +389,45 @@ test('8: drop a file onto the pane to attach, then send', async ({ browser }) =>
   await send(page, 'file inbound')
   await expect(page.getByRole('link', { name: /dropped-notes\.txt/ })).toBeVisible()
 
+  await page.context().close()
+})
+
+// F8: a thread reply bells the root author. Mirrors journey 3's live-bell
+// assertion (the {t:notif} SSE push, not the 30 s poll) and proves the deep
+// link: the row navigates to /chat/<cid>?msg=<replyId>.
+test('9: thread reply → bell + deep-link', async ({ browser }) => {
+  test.setTimeout(120_000)
+  const page = await admin(browser)
+  const pageB = await joinAs(page, browser, BOB, 'member')
+  const cid = await createChannel(page, 'lab')
+  await joinChannel(pageB, cid, 'lab')
+
+  await send(page, 'thread root')
+  await expect(logMsg(pageB, 'thread root')).toBeVisible()
+
+  // A parks on the dashboard so the Bell is the delivery surface for the reply.
+  await page.goto('/dashboard')
+  const bell = page.getByRole('button', { name: 'Notifications', exact: true })
+  await expect(bell).toBeVisible()
+
+  // B opens the thread on A's root message and replies
+  await logMsg(pageB, 'thread root').hover()
+  await pageB.getByTitle('Reply in thread').click()
+  const threadBox = pageB.getByPlaceholder('Reply in thread…')
+  await threadBox.fill('in thread ping')
+  await threadBox.press('Enter')
+
+  // The bell badge reflects the thread reply live over SSE (tight timeout
+  // proves the live path, not the 30 s poll).
+  await expect(bell).toContainText(/[1-9]/, { timeout: 5_000 })
+  await bell.click()
+  await expect(page.getByText('New thread reply')).toBeVisible()
+
+  // Clicking the row deep-links to the reply: /chat/<cid>?msg=<replyId>.
+  const reply = await db.message.findFirstOrThrow({ where: { conversationId: cid, parentId: { not: null } } })
+  await page.getByText('New thread reply').click()
+  await page.waitForURL(new RegExp(`/chat/${cid}\\?msg=${reply.id}$`))
+
+  await pageB.context().close()
   await page.context().close()
 })
