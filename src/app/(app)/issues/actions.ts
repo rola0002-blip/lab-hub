@@ -219,7 +219,7 @@ const healthEnum = z.enum(['ON_TRACK', 'AT_RISK', 'OFF_TRACK'])
 // F6 — the .max(5) mirrors the service's MAX_UPDATE_ATTACHMENTS (one cap, two
 // gates); the service still owns the /uploads/project-updates/ IDOR prefix guard.
 const updateAttachmentSchema = z.object({
-  path: z.string().min(1), name: z.string().max(200), mime: z.string().min(1), size: z.number().int().nonnegative(),
+  path: z.string().min(1), name: z.string().min(1).max(200), mime: z.string().min(1), size: z.number().int().nonnegative(),
 })
 const postUpdateSchema = z.object({
   projectId: z.string().min(1, 'Choose a project.'),

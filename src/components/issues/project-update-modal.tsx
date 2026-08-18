@@ -130,7 +130,7 @@ function Composer({ projects }: { projects: Opt[] }) {
           <input ref={fileRef} type="file" multiple hidden onChange={(e) => e.target.files && onFiles(e.target.files)} />
           {/* Removing a chip only drops the reference; the uploaded file stays on
               disk as an accepted orphan (the chat composer's cancel posture). */}
-          <IconButton label="Attach a file" onClick={() => fileRef.current?.click()}><Paperclip size={16} aria-hidden /></IconButton>
+          <IconButton label="Attach a file" onClick={() => fileRef.current?.click()} disabled={uploading > 0}><Paperclip size={16} aria-hidden /></IconButton>
           <button type="button" onClick={closeProjectUpdateComposer} className="rounded-md border border-border px-3 py-1.5 text-sm text-default hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">Cancel</button>
           <button type="button" onClick={submit} disabled={pending || uploading > 0}
             title={uploading > 0 ? 'Uploading…' : undefined}
