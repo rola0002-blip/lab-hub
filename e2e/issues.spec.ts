@@ -361,10 +361,12 @@ test('pinned projects: pin from the project page, chip filters /issues/me, unpin
   await expect(page).toHaveURL(/\/issues\/me\?project=/)
   await expect(chip).toBeVisible() // still rendered, now in its active/selected style
 
-  // (c) Unpin from the manage menu — the chip disappears after the refresh.
+  // (c) Unpin from the manage menu — the chip disappears after the refresh. The
+  // manage menu is deliberately quiet on success (rail precedent: the visible
+  // chip change IS the feedback; only failures toast, e.g. the MAX_PINS cap) —
+  // unlike the project-page kebab, which does toast 'Unpinned.'
   await page.getByRole('button', { name: 'Manage pinned projects' }).click()
   await page.getByRole('menuitem', { name: 'Unpin Pin E2E Project' }).click()
-  await expect(page.getByText('Unpinned.')).toBeVisible()
   await expect(chip).toHaveCount(0)
 })
 
@@ -397,6 +399,12 @@ test('project labels: create on the project page, apply via the properties menu,
   const detailUrl = page.url()
   await page.getByRole('button', { name: 'Set labels' }).click()
   await page.getByRole('menuitem', { name: 'procurement', exact: true }).click()
+  // Wait for the first label's round-trip to land before the second pick: the
+  // toggle's `applied` set comes from the server-rendered issue DTO, so a second
+  // selection dispatched before that refresh resolves computes its next-set from
+  // the stale (still label-less) state and REPLACES procurement instead of
+  // adding to it.
+  await expect(page.getByRole('button', { name: 'Set labels' })).toContainText('procurement')
   await page.getByRole('button', { name: 'Set labels' }).click()
   await page.getByRole('menuitem', { name: 'triage', exact: true }).click()
   const labelsTrigger = page.getByRole('button', { name: 'Set labels' })

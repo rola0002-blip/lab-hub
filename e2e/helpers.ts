@@ -5,7 +5,10 @@ import { expect, type Page, type Response } from '@playwright/test'
 // itself pulls `server-only` into Playwright's Node runner and throws at load.
 import { COLOSSUS_BOT_ID, LAB_UPDATES_CHANNEL_ID } from '@/features/bot/ids'
 
-const TEST_DB = 'postgresql://labhub:labhub@localhost:5432/labhub_test'
+// Overridable via the environment — mirrors playwright.config.ts's TEST_DB so
+// `TEST_DATABASE_URL=… npx playwright test` points the runner's Prisma client at
+// the same database the dev server uses.
+const TEST_DB = process.env.TEST_DATABASE_URL ?? 'postgresql://labhub:labhub@localhost:5432/labhub_test'
 
 // Prisma 7 requires a driver adapter for the runtime connection — the brief's
 // `new PrismaClient({ datasources: ... })` throws under Prisma 7. Mirror the
