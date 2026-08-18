@@ -23,6 +23,14 @@ model User {
   timezone         String? // IANA tz id; drives the member's local time on People
   isSystem         Boolean   @default(false) // true ONLY for the LabHub Bot; excluded from every human enumeration (SP5 §5.6)
   icsToken         String?   @unique // per-user calendar-feed token; nullable-unique (many NULLs coexist), minted lazily (SP5 §4.1)
+  // v0.16 F3/F7/F9: per-user workspace state. pinnedProjectIds is pin order
+  // (NOT NULL array, SQL DEFAULT '{}' — a rolled-back binary INSERTs fine);
+  // lastConversationId is a plain string (membership re-validated at read, NOT
+  // a FK — DMs/channels are never hard-deleted and stale degrades to fallback);
+  // soundsEnabled default OFF (opt-in chime).
+  pinnedProjectIds   String[]  @default([])
+  lastConversationId String?
+  soundsEnabled      Boolean   @default(false)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -250,6 +258,10 @@ model Notification {
   type      String
   payload   Json
   readAt    DateTime?
+  // v0.16 F8: stamped when this bell row has been emailed (immediately by
+  // notify() when an email rides along, or by the 60-min digest job). Null =
+  // never emailed. Single source of truth against double-emailing.
+  emailedAt DateTime?
   createdAt DateTime  @default(now())
 
   @@index([userId, createdAt])
@@ -437,6 +449,8 @@ model Project {
 
   issues         Issue[]
   projectUpdates ProjectUpdate[]
+  milestones     Milestone[] // v0.16 F4 (dates + progress only; never linked to issues)
+  labels         Label[] // v0.16 F5 back-relation (Label.projectId; partial uniques live in SQL only)
 
   @@index([status])
   @@index([leadId])
@@ -465,7 +479,42 @@ model ProjectUpdate {
   deletedAt       DateTime?
   createdAt       DateTime      @default(now())
 
+  attachments ProjectUpdateAttachment[] // v0.16 F6 — the ChatAttachment pattern
+
   @@index([projectId, createdAt])
+}
+
+// v0.16 F4: a dated milestone on a project. date is an org-tz yyyy-MM-dd string
+// (the RecurrenceRule firstDate/untilDate convention — day-granular, no tz
+// ambiguity; lexicographic compare works). completedAt null = open. Manual
+// completion only — issues are NEVER linked to milestones (spec decision).
+model Milestone {
+  id          String    @id @default(cuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String // 1–200, enforced in project-service
+  date        String? // org-tz yyyy-MM-dd or null
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([projectId])
+}
+
+// v0.16 F6: a file attached to a project update — byte-for-byte the
+// ChatAttachment pattern (path/name/mime/size tuple; server-minted
+// /uploads/project-updates/<uuid><ext> path; human name capped 200 at write).
+model ProjectUpdateAttachment {
+  id        String        @id @default(cuid())
+  updateId  String
+  update    ProjectUpdate @relation(fields: [updateId], references: [id], onDelete: Cascade)
+  path      String
+  name      String
+  mime      String
+  size      Int
+  createdAt DateTime      @default(now())
+
+  @@index([updateId])
 }
 
 model Issue {
@@ -510,9 +559,16 @@ model Issue {
 }
 
 model Label {
-  id    String @id @default(cuid())
-  name  String @unique
-  color String
+  id        String   @id @default(cuid())
+  // v0.16 F5: null = workspace-global. Uniqueness is TWO partial indexes that
+  // live in the migration SQL only (Prisma cannot express them — the booking
+  // exclusion-constraint posture): (name) WHERE "projectId" IS NULL and
+  // (name, "projectId") WHERE "projectId" IS NOT NULL. Never reintroduce
+  // @unique on name — it would fight the partial indexes.
+  name      String
+  color     String
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   issues IssueLabel[]
 }
