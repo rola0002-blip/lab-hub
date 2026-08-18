@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-08-18
+
 ### Added
 - Chat takes files the way the rest of the lab does. Drop attachments anywhere on the message pane, or paste a screenshot straight into the composer — dragged, pasted and picked files all pass through one shared validator, so the limits are the same whichever way a file arrives.
 - The conversation list does more than list. Mute or leave a conversation from its own row, without opening it; chat and Files each offer "Open in new window" for when you want them beside your work; and a file dropped somewhere without a dropzone no longer navigates the tab away.
