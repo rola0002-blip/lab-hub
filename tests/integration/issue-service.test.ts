@@ -350,7 +350,10 @@ describe('issue-service', () => {
       const g = await createLabel({ actorId: me.id, role: 'member', name: 'global' })
       const own = await createLabel({ actorId: me.id, role: 'member', name: 'own', projectId: p1.id })
       const iss = await createIssue({ actorId: me.id, role: 'member', title: 'Move', projectId: p1.id, labelIds: [g.id, own.id] })
-      await setProject({ actorId: me.id, role: 'member', issueId: iss.id, projectId: p2.id })
+      const moved = await setProject({ actorId: me.id, role: 'member', issueId: iss.id, projectId: p2.id })
+      // Regression: the RETURNED DTO must reflect the detach (previously it kept the stale 'own' label until reload).
+      expect(moved.labels.map((l) => l.name)).not.toContain('own')
+      expect(moved.labels.map((l) => l.id)).toEqual([g.id])
       expect((await getIssue(iss.id))?.labels.map((l) => l.id)).toEqual([g.id])
       const acts = await activities(iss.id)
       expect(acts.map((a) => a.type)).toEqual(['created', 'project', 'labels'])

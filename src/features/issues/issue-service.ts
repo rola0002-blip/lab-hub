@@ -330,14 +330,15 @@ export async function setProject(args: { actorId: string; role: Role; issueId: s
   // the move, one 'labels' activity recording it.
   const stale = splitLabelsForProject(issue.labels.map((l) => l.label), args.projectId).drop
   const updated = await prisma.$transaction(async (tx) => {
-    const u = await tx.issue.update({ where: { id: issue.id }, data: { projectId: args.projectId }, include: ISSUE_INCLUDE })
+    await tx.issue.update({ where: { id: issue.id }, data: { projectId: args.projectId } })
     await tx.issueActivity.create({ data: { issueId: issue.id, actorId: args.actorId, type: 'project', data: { from: issue.projectId, to: args.projectId } as P.InputJsonValue } })
     if (stale.length) {
       await tx.issueLabel.deleteMany({ where: { issueId: issue.id, labelId: { in: stale.map((l) => l.id) } } })
       const after = (await tx.issueLabel.findMany({ where: { issueId: issue.id }, select: { labelId: true } })).map((l) => l.labelId)
       await tx.issueActivity.create({ data: { issueId: issue.id, actorId: args.actorId, type: 'labels', data: { from: issue.labels.map((l) => l.labelId), to: after } as P.InputJsonValue } })
     }
-    return u
+    // Fresh load AFTER the detach — `u` captured pre-deleteMany would still carry the stale labels.
+    return tx.issue.findUniqueOrThrow({ where: { id: issue.id }, include: ISSUE_INCLUDE })
   })
   await emitEvent({ t: 'issue', id: issue.id, projectId: updated.projectId ?? undefined })
   return toDto(updated)
