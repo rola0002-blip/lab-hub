@@ -37,9 +37,10 @@ export default function ConversationMenu({ conversationId, conversationType, cha
   async function toggleMute() {
     setOpen(false); setBusy(true)
     try {
-      await fetch(`/api/chat/conversations/${conversationId}/mute`, {
+      const r = await fetch(`/api/chat/conversations/${conversationId}/mute`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ muted: !muted }),
       })
+      if (!r.ok) { await refresh(); return }
       await refresh()
     } catch { /* best-effort; the store keeps the prior mute state on failure */ } finally { setBusy(false) }
   }
@@ -49,9 +50,10 @@ export default function ConversationMenu({ conversationId, conversationType, cha
   async function toggleFavorite() {
     setOpen(false); setBusy(true)
     try {
-      await fetch(`/api/chat/conversations/${conversationId}/favorite`, {
+      const r = await fetch(`/api/chat/conversations/${conversationId}/favorite`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ favorite: !favorite }),
       })
+      if (!r.ok) { await refresh(); return }
       await refresh()
     } catch { /* best-effort; the store keeps the prior favorite state on failure */ } finally { setBusy(false) }
   }

@@ -20,9 +20,11 @@ export default function ConversationList({ role }: { role: string }) {
   // call is swallowed (the store keeps the prior state) — no toast in the rail.
   async function toggleMute(c: (typeof conversations)[number]) {
     try {
-      await fetch(`/api/chat/conversations/${c.id}/mute`, {
+      const r = await fetch(`/api/chat/conversations/${c.id}/mute`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ muted: !c.muted }),
       })
+      // Non-2xx (e.g. a leave-race 403) must still converge the rail to server truth.
+      if (!r.ok) { await refresh(); return }
       await refresh()
     } catch { /* best-effort; the store keeps the prior mute state on failure */ }
   }
@@ -31,9 +33,10 @@ export default function ConversationList({ role }: { role: string }) {
   // favorites; the sort module floats the row to the top of its section.
   async function toggleFavorite(c: (typeof conversations)[number]) {
     try {
-      await fetch(`/api/chat/conversations/${c.id}/favorite`, {
+      const r = await fetch(`/api/chat/conversations/${c.id}/favorite`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ favorite: !c.favorite }),
       })
+      if (!r.ok) { await refresh(); return }
       await refresh()
     } catch { /* best-effort; the store keeps the prior favorite state on failure */ }
   }
@@ -97,8 +100,8 @@ export default function ConversationList({ role }: { role: string }) {
               <Hash size={15} aria-hidden className="shrink-0 text-subtle" />
             )}
             <span className="truncate">{label}</span>
-            {c.favorite && <Star size={13} aria-label="Favorited" fill="currentColor" className="shrink-0 text-subtle" />}
-            {c.muted && <BellOff size={13} aria-label="Muted" className="shrink-0 text-subtle" />}
+            {c.favorite && <Star size={13} role="img" aria-label="Favorited" fill="currentColor" className="shrink-0 text-subtle" />}
+            {c.muted && <BellOff size={13} role="img" aria-label="Muted" className="shrink-0 text-subtle" />}
           </span>
           {c.mentions > 0 ? (
             <span className="ml-1 shrink-0 rounded-full bg-accent px-1.5 text-[11px] font-bold text-accent-on">{c.mentions}</span>
