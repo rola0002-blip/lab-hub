@@ -4,18 +4,21 @@ import { useChat } from '@/components/chat/chat-store'
 import { sumUnread } from '@/features/chat/unread'
 
 // Teams-style "(N)" unread-chats count in the TAB TITLE (wave-6). Mounted once
-// in the app shell inside ChatProvider. Same derivation as the sidebar Chat
-// badge (sidebar.tsx — sumUnread over live conversations with the SSR seed as
-// pre-load fallback), so tab and badge can never disagree; muted rows count 0
-// but a mention in a muted room still bells (the unread.ts contract).
+// in the app shell inside ChatProvider. Same live derivation as the sidebar
+// Chat badge (sumUnread over conversations; muted rows count 0 — the
+// unread.ts contract), so tab and badge can never disagree once the store has
+// loaded. Unlike the sidebar, there is NO SSR-seed fallback here: the badge's
+// seed is a SERVER prop threaded to <Sidebar>, and the tab title has no
+// first-paint urgency — before the store loads (~1s) the title stays at its
+// base, which is indistinguishable from "no unreads".
 export function ChatTitleBadge() {
-  const { conversations, unread } = useChat()
+  const { conversations } = useChat()
   const base = useRef<string | null>(null)
   useEffect(() => {
     // Capture the server-rendered title once; it is the restore target.
     if (base.current === null) base.current = document.title
-    const n = conversations.length > 0 ? sumUnread(conversations) : unread
+    const n = sumUnread(conversations)
     document.title = n > 0 ? `(${n}) ${base.current}` : base.current
-  }, [conversations, unread])
+  }, [conversations])
   return null
 }
