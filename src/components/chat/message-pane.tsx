@@ -160,7 +160,11 @@ export default function MessagePane({ conversationId, conversationType, channelN
     // idiom; focus() on a detached control is a silent no-op.
     const opener = document.activeElement as HTMLElement | null
     pinnedPanelRef.current?.focus()
-    const onClick = (e: MouseEvent) => { if (pinnedWrapRef.current && !pinnedWrapRef.current.contains(e.target as Node)) setPinnedOpen(false) }
+    const onClick = (e: MouseEvent) => {
+      const t = e.target as Node
+      if (pinnedWrapRef.current?.contains(t) || pinnedPanelRef.current?.contains(t)) return
+      setPinnedOpen(false)
+    }
     // stopPropagation so an open thread panel isn't closed by the same keypress
     // (emoji-picker precedent).
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setPinnedOpen(false) } }
@@ -452,7 +456,7 @@ export default function MessagePane({ conversationId, conversationType, channelN
             Drop to attach
           </div>
         )}
-        <header className="flex items-center gap-2 border-b border-border px-4 py-2">
+        <header className="relative flex items-center gap-2 border-b border-border px-4 py-2">
           {/* Narrow (<768): the conversation-list rail collapses (list/pane swap),
               so the pane gets a back affordance to return to the list at /chat. */}
           <Link href="/chat" aria-label="Back to conversations"
@@ -476,42 +480,47 @@ export default function MessagePane({ conversationId, conversationType, channelN
                 <Pin size={13} aria-hidden />
                 Pinned ({pinned.length})
               </button>
-              {pinnedOpen && (
-                // MembersDialog visual idiom as an anchored panel: labelled dialog
-                // region, focus moves in on open, Escape/outside-click close (the
-                // effects above). Guests see it too — view-only (no Unpin rows).
-                <div ref={pinnedPanelRef} role="dialog" aria-label="Pinned messages" tabIndex={-1}
-                  className="absolute right-0 z-30 mt-1 max-h-80 w-[22rem] overflow-y-auto rounded-md border border-border bg-surface py-1 shadow-menu focus:outline-none">
-                  {pinned.map((m) => {
-                    // Plain-text slice (~120 chars) of the pinned body for the row preview.
-                    const flat = messageToPlainText(m.body, (id) => names.get(id))
-                    const preview = flat.length > 120 ? `${flat.slice(0, 120).trimEnd()}…` : flat
-                    return (
-                      <div key={m.id} className="flex items-start gap-2 px-2 py-1.5 hover:bg-hover">
-                        <Avatar name={m.author.name} id={m.author.id} image={m.author.image} size={24} />
-                        <button type="button" className="min-w-0 flex-1 text-left"
-                          onClick={() => { setPinnedOpen(false); router.push(`/chat/${conversationId}?msg=${m.id}`) }}>
-                          <span className="flex items-baseline gap-1.5">
-                            <span className="truncate text-sm font-semibold text-default">{m.author.name}</span>
-                            {m.pinnedAt && <time className="shrink-0 text-2xs text-subtle" dateTime={m.pinnedAt}>{humanTime(m.pinnedAt, now)}</time>}
-                          </span>
-                          <span className="mt-0.5 block truncate text-xs text-muted">{preview || 'message deleted'}</span>
-                        </button>
-                        {selfRole !== 'guest' && (
-                          <button type="button" onClick={() => void unpin(m.id)}
-                            className="mt-0.5 shrink-0 text-xs text-muted hover:text-default hover:underline">
-                            Unpin
-                          </button>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
             </div>
           )}
           <ConversationMenu conversationId={conversationId} conversationType={conversationType}
             channelName={channelName} archived={archived} manage={manage} />
+          {pinnedOpen && (
+            // MembersDialog visual idiom as an anchored panel: labelled dialog
+            // region, focus moves in on open, Escape/outside-click close (the
+            // effects above). Guests see it too — view-only (no Unpin rows).
+            // Anchored to the HEADER (right-0 top-full), NOT the Pinned button:
+            // the button sits deep in the header on phones, and a 22rem panel
+            // right-anchored to it spills off the left edge of a 375px viewport
+            // (the pre-paint-flip problem ui/menu.tsx solves for menus). max-w-full
+            // also caps it inside a narrow desktop three-column chat column.
+            <div ref={pinnedPanelRef} role="dialog" aria-label="Pinned messages" tabIndex={-1}
+              className="absolute right-0 top-full z-30 mt-1 max-h-80 w-[22rem] max-w-full overflow-y-auto rounded-md border border-border bg-surface py-1 shadow-menu focus:outline-none">
+              {pinned.map((m) => {
+                // Plain-text slice (~120 chars) of the pinned body for the row preview.
+                const flat = messageToPlainText(m.body, (id) => names.get(id))
+                const preview = flat.length > 120 ? `${flat.slice(0, 120).trimEnd()}…` : flat
+                return (
+                  <div key={m.id} className="flex items-start gap-2 px-2 py-1.5 hover:bg-hover">
+                    <Avatar name={m.author.name} id={m.author.id} image={m.author.image} size={24} />
+                    <button type="button" className="min-w-0 flex-1 text-left"
+                      onClick={() => { setPinnedOpen(false); router.push(`/chat/${conversationId}?msg=${m.id}`) }}>
+                      <span className="flex items-baseline gap-1.5">
+                        <span className="truncate text-sm font-semibold text-default">{m.author.name}</span>
+                        {m.pinnedAt && <time className="shrink-0 text-2xs text-subtle" dateTime={m.pinnedAt}>{humanTime(m.pinnedAt, now)}</time>}
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs text-muted">{preview || 'message deleted'}</span>
+                    </button>
+                    {selfRole !== 'guest' && (
+                      <button type="button" onClick={() => void unpin(m.id)}
+                        className="mt-0.5 shrink-0 text-xs text-muted hover:text-default hover:underline">
+                        Unpin
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </header>
         <div ref={scroller} onScroll={onScroll} onKeyDown={onListKeyDown} onFocus={onListFocus}
           role="log" aria-label="Messages" aria-live="off"
