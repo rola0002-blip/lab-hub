@@ -14,6 +14,7 @@ import { CreateIssueModal } from '@/components/issues/create-issue-modal'
 import { FeedbackDialog } from '@/components/feedback-dialog'
 import { ProjectUpdateModal } from '@/components/issues/project-update-modal'
 import { IssueHotkeys } from '@/components/issues/issue-hotkeys'
+import { ChatTitleBadge } from '@/components/chat-title-badge'
 import { UserMenu } from '@/components/user-menu'
 import { ToastHost } from '@/components/ui/toast'
 import { RegionCycler } from '@/components/region-cycler'
@@ -93,6 +94,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           palette on any page. Deliberately NOT role-gated: guests submit too. */}
       <FeedbackDialog version={APP_VERSION} />
       <IssueHotkeys role={user.role} />
+      {/* Unread-chats "(N)" tab title — mounted once in the app shell (inside
+          ChatProvider); same live derivation as the sidebar Chat badge. */}
+      <ChatTitleBadge />
       {/* Global toast host — mounted once so `toast()` works from any page. */}
       <ToastHost />
       {/* Accessibility: F6 region cycling + SSE live regions mounted at first

@@ -587,3 +587,38 @@ test('13: grouped-row hover clock reveals without shifting layout', async ({ bro
 
   await page.context().close()
 })
+
+// Wave-6: unread-chats "(N)" TAB TITLE. ChatTitleBadge is mounted in the app
+// shell, so it bells from ANY page — here A parks on the dashboard while B
+// messages a channel A hasn't opened. The count uses the SAME derivation as the
+// sidebar Chat badge (sumUnread over the live store), so opening the channel
+// (markRead) clears the tab title exactly when it clears the badge.
+test('14: unread messages bell the tab title "(N)"; opening the channel restores it', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  const pageB = await joinAs(page, browser, BOB, 'member')
+  const cid = await createChannel(page, 'lab')
+  await joinChannel(pageB, cid, 'lab')
+
+  // A parks AWAY from the channel; capture the base title BEFORE any unread
+  // exists (the badge prefixes onto this exact string when restoring).
+  await page.goto('/dashboard')
+  const base = await page.evaluate(() => document.title)
+  expect(base).not.toMatch(/^\(\d+\)\s/) // sanity: no stale prefix at the start
+
+  // B sends; A's live store updates over SSE → the tab title gains "(1)".
+  await send(pageB, 'title ping')
+  await expect
+    .poll(() => page.evaluate(() => document.title), { timeout: 10_000 })
+    .toMatch(/^\(1\)\s/)
+
+  // A opens the channel → markRead clears the unread → title restored to base.
+  await page.goto('/chat/' + cid)
+  await expect(logMsg(page, 'title ping')).toBeVisible()
+  await expect
+    .poll(() => page.evaluate(() => document.title), { timeout: 10_000 })
+    .toBe(base)
+
+  await pageB.context().close()
+  await page.context().close()
+})
