@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Copying selected text in a chat no longer opens the issue composer. The single-key shortcuts treated any press of their letter as theirs — including the one in Ctrl/Cmd+C — and in claiming it they also blocked the copy itself. Single-key shortcuts now respond only to bare keypresses, which quietly un-blocks Cmd+R (refresh) in a conversation too.
+
+### Added
+- The browser tab title now counts unread chat messages, Teams-style: "(3) LabHub" while you're elsewhere in the app, back to plain "LabHub" once caught up. It always agrees with the sidebar Chat badge — same count, same mute rules. For the Slack-style pop-in-the-corner experience that already exists, opt in once from the bell tray's "Enable desktop notifications".
 ## [0.17.1] - 2026-08-19
 
 ### Fixed
