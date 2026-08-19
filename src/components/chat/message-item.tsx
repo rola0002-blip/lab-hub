@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { Smile, SmilePlus, MessageSquare, Forward, Bookmark, MoreHorizontal, ListPlus } from 'lucide-react'
+import { Smile, SmilePlus, MessageSquare, Forward, Pin, MoreHorizontal, ListPlus } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { IconButton } from '@/components/ui/icon-button'
 import { Menu } from '@/components/ui/menu'
@@ -34,6 +34,9 @@ export type Msg = {
   body: string
   deleted: boolean
   editedAt: string | null
+  // W4-A1: set when pinned, null = unpinned. Server DTOs always carry it;
+  // optimistic temps omit it (treated as unpinned, like kind).
+  pinnedAt?: string | null
   createdAt: string
   replyCount: number
   // Thread facepile source (root messages only): distinct reply authors (≤5,
@@ -120,6 +123,9 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
   // "Post as project update" item so a guest never raises a modal that only 403s
   // at submit. The service is the real gate; this is the UI half.
   const canCreateIssue = selfRole !== 'guest'
+  // W4-A1: pinning is members+admins; guests see the popover but never a pin
+  // affordance (the service rejects them regardless — this is the UI half).
+  const canPin = selfRole !== 'guest'
   const isTemp = msg.id.startsWith('tmp-')
   // A live message that @-mentions the viewer tints its row (accent rail + wash).
   const selfMention = !msg.deleted && msg.mentionUserIds.includes(selfId)
@@ -156,6 +162,20 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
       // No optimistic local state to roll back — the lozenges render from the
       // server DTO, so on failure we just surface it and leave the row unchanged.
       toast('Could not update your reaction. Please try again.')
+    }
+  }
+  // W4-A1: pin/unpin. Same posture as react() — POST, then refresh this row from
+  // the server DTO (the route's msg_edit SSE event also reconciles other tabs and
+  // the pane's Pinned (n) header count).
+  async function togglePin() {
+    try {
+      const r = await fetch(`/api/chat/messages/${msg.id}/pin`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pinned: !msg.pinnedAt }),
+      })
+      if (!r.ok) throw new Error('pin failed')
+      await refresh()
+    } catch {
+      toast('Could not update the pin. Please try again.')
     }
   }
   async function saveEdit() {
@@ -221,13 +241,13 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
   const authorPresence: 'active' | 'away' = online.has(msg.author.id) ? 'active' : 'away'
 
   // The ⋯ overflow menu. Edit is author-only; Delete is author-or-admin; Copy
-  // link is always available; Pin has no model yet, so it renders disabled.
+  // link is always available; Pin mirrors the toolbar (members+admins).
   const menuItems = [
     ...(own ? [{ label: 'Edit', onSelect: () => { setDraft(msg.body); setEditing(true) } }] : []),
     { label: 'Copy link', onSelect: copyLink },
     ...(canCreateIssue ? [{ label: 'Create issue', onSelect: createFromMessage }] : []),
     ...(canCreateIssue ? [{ label: 'Post as project update', onSelect: postAsUpdate }] : []),
-    { label: 'Pin', onSelect: () => {}, disabled: true },
+    ...(canPin ? [{ label: msg.pinnedAt ? 'Unpin' : 'Pin', onSelect: () => void togglePin() }] : []),
     ...(canDelete ? [{ label: 'Delete', onSelect: () => setConfirmDel(true), danger: true }] : []),
   ]
 
@@ -389,9 +409,13 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
               <IconButton label="Reply in thread" onClick={onOpenThread}><MessageSquare size={16} aria-hidden /></IconButton>
             )}
             {canCreateIssue && <IconButton label="Create issue from message" onClick={createFromMessage}><ListPlus size={16} aria-hidden /></IconButton>}
-            {/* Forward + Save have no backend yet (like Pin) → present but disabled. */}
+            {/* Forward has no backend yet → present but disabled. Pin is real (W4-A1). */}
             <IconButton label="Forward (coming soon)" disabled><Forward size={16} aria-hidden /></IconButton>
-            <IconButton label="Save for later (coming soon)" disabled><Bookmark size={16} aria-hidden /></IconButton>
+            {canPin && (
+              <IconButton label={msg.pinnedAt ? 'Unpin message' : 'Pin message'} active={!!msg.pinnedAt} onClick={() => void togglePin()}>
+                <Pin size={16} aria-hidden />
+              </IconButton>
+            )}
             <Menu label="More actions" button={<MoreHorizontal size={16} aria-hidden />} items={menuItems} />
           </div>
         )}

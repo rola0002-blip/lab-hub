@@ -9,10 +9,15 @@ Project management arrives in a later release on this same foundation.
 Built-in team chat. Channels (public or private) and direct messages, threaded
 replies, `@mentions` (and `@channel`), emoji reactions, and 25 MB file
 attachments — dragging files onto the message pane and pasting screenshots
-both attach. Channels can be muted or left straight from the conversation
-list, any chat or Files page opens in its own window, and a stray file drop
-inside chat never navigates the tab away. Signing in returns you to the
-conversation you last had open. Full-text search spans every conversation
+both attach. Members and admins can pin messages; a "Pinned (n)" button in
+the conversation header lists them with deep links to each one, and guests
+see the list but cannot pin. Conversations can be favorited — a star that
+floats them to the top of their section in the sidebar. The composer grows
+with your message up to 200 px, then scrolls inside. Channels can be muted
+or left straight from the conversation list, any chat or Files page opens in
+its own window, and a stray file drop inside chat never navigates the tab
+away. Signing in returns you to the conversation you last had open.
+Full-text search spans every conversation
 you belong to. Delivery is realtime over one Server-Sent-Events stream per
 tab (no WebSockets), fanned out with Postgres `LISTEN`/`NOTIFY`. Web Push
 notifies you of mentions and DMs when you have no tab open — opt-in, and
@@ -118,8 +123,9 @@ same per-instrument approval policy as single bookings.
 A workspace-wide document library at `/files`: one level of folders, drag-and-drop
 uploads of office files (images, PDF, Office, txt/csv, zip) up to 100 MB, and
 full-text filename search (also surfaced in ⌘K). Every signed-in user — including
-guests — can browse, search, and download; members and admins upload, rename, move,
-and create folders; a file is deleted by its uploader or an admin, and a folder by
+guests — can browse, search, and download; members and admins upload and
+create folders; a file is renamed, moved, or deleted by its uploader or an
+admin, and a folder by
 its creator or an admin (only when empty). PDFs and images open inline in a new tab,
 office files download (with the original, possibly non-ASCII, filename preserved).
 Each new upload is announced by the LabHub Bot in `#lab-updates`. Storage reuses

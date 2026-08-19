@@ -4,7 +4,7 @@ import type { Role } from '@/lib/session'
 import { prisma } from '@/lib/db'
 import { removeUpload } from '@/lib/uploads'
 import * as bot from '@/features/bot'
-import { PolicyError, assertCanUpload, assertCanDeleteDocument, assertCanManageFolder } from './documents-policy'
+import { PolicyError, assertCanUpload, assertCanDeleteDocument, assertCanModifyDocument, assertCanManageFolder } from './documents-policy'
 
 export type DocumentDto = {
   id: string; folderId: string | null; folderName: string | null; name: string; path: string; mime: string; size: number
@@ -48,17 +48,17 @@ export async function createDocument(args: {
 }
 
 export async function renameDocument(args: { userId: string; role: Role; id: string; name: string }): Promise<DocumentDto> {
-  assertCanUpload(args.role)
   const doc = await prisma.document.findUnique({ where: { id: args.id }, include: { uploader: { select: { name: true } } } })
   if (!doc) throw new PolicyError('not_found', 'File not found.')
+  assertCanModifyDocument(args.role, doc.uploaderId, args.userId)
   const updated = await prisma.document.update({ where: { id: args.id }, data: { name: args.name.slice(0, NAME_MAX) }, include: { uploader: { select: { name: true } }, folder: { select: { name: true } } } })
   return toDto(updated)
 }
 
 export async function moveDocument(args: { userId: string; role: Role; id: string; folderId: string | null }): Promise<DocumentDto> {
-  assertCanUpload(args.role)
-  const doc = await prisma.document.findUnique({ where: { id: args.id }, select: { id: true } })
+  const doc = await prisma.document.findUnique({ where: { id: args.id }, select: { id: true, uploaderId: true } })
   if (!doc) throw new PolicyError('not_found', 'File not found.')
+  assertCanModifyDocument(args.role, doc.uploaderId, args.userId)
   if (args.folderId) await assertFolderExists(args.folderId)
   const updated = await prisma.document.update({ where: { id: args.id }, data: { folderId: args.folderId }, include: { uploader: { select: { name: true } }, folder: { select: { name: true } } } })
   return toDto(updated)

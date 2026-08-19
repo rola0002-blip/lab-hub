@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-08-19
+
+### Added
+- Chat messages can be pinned. Any member or admin pins a message from its hover toolbar, and the conversation header gains a "Pinned (n)" button that opens the list — author, when it was pinned, a preview of the text — where clicking a row jumps straight to the message with the usual deep link to share, and Unpin sits on the row for quick removal. Guests see the list but get no pin affordance anywhere: viewing is as far as a visitor goes. Deleting a message clears its pin, and the header count moves live in every open window.
+- Conversations can be favorited. Star a channel or a direct message from its row in the sidebar — or from the header menu of the one you are in — and it floats to the top of its section, marked with a filled star; unstar it and the ordinary order returns. Favorites never jump sections: a starred direct message rises within direct messages rather than muscling into the channels. Guests can favorite too — it is your own rail, like mute.
+
+### Changed
+- The chat composer grows with what you are writing. It starts at one line and follows the text down to a 200-pixel cap, then scrolls inside itself instead of pushing the message pane taller. There is no animation to it, which keeps it calm under reduced motion, and the thread composer — the same body — grows the same way.
+- Rename and move in Files now follow delete: the uploader of a file, or any admin, can rename or move it, so a member can no longer rename an admin's upload. Uploading and creating folders are unchanged, open to members and admins alike.
+- One hand-written, additive database migration (`20260819000000_wave4_pins_favorites`) adds the message pin timestamp and the per-person conversation favorite. Every statement is guarded so the migration is re-runnable, and nothing is renamed or dropped — rolling back to the previous release stays data-safe.
+
 ## [0.16.0] - 2026-08-18
 
 ### Added

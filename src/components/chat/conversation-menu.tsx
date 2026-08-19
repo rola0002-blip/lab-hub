@@ -25,6 +25,7 @@ export default function ConversationMenu({ conversationId, conversationType, cha
 
   const convo = conversations.find((c) => c.id === conversationId)
   const muted = !!convo?.muted
+  const favorite = !!convo?.favorite
   const isChannel = conversationType === 'CHANNEL'
 
   useEffect(() => {
@@ -36,11 +37,25 @@ export default function ConversationMenu({ conversationId, conversationType, cha
   async function toggleMute() {
     setOpen(false); setBusy(true)
     try {
-      await fetch(`/api/chat/conversations/${conversationId}/mute`, {
+      const r = await fetch(`/api/chat/conversations/${conversationId}/mute`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ muted: !muted }),
       })
+      if (!r.ok) { await refresh(); return }
       await refresh()
     } catch { /* best-effort; the store keeps the prior mute state on failure */ } finally { setBusy(false) }
+  }
+
+  // W4-A2: same self-service posture as mute — the rail floats the row to the
+  // top of its section on refresh.
+  async function toggleFavorite() {
+    setOpen(false); setBusy(true)
+    try {
+      const r = await fetch(`/api/chat/conversations/${conversationId}/favorite`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ favorite: !favorite }),
+      })
+      if (!r.ok) { await refresh(); return }
+      await refresh()
+    } catch { /* best-effort; the store keeps the prior favorite state on failure */ } finally { setBusy(false) }
   }
 
   async function leave() {
@@ -73,6 +88,7 @@ export default function ConversationMenu({ conversationId, conversationType, cha
         <div className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-md border border-border bg-surface py-1 shadow-menu">
           <button onClick={() => { setOpen(false); window.open(window.location.href, '_blank', 'noopener') }} className={item}>Open in new window</button>
           <button onClick={toggleMute} className={item}>{muted ? 'Unmute' : 'Mute'}</button>
+          <button onClick={toggleFavorite} className={item}>{favorite ? 'Unfavorite' : 'Favorite'}</button>
           {isChannel && manage && !archived && (
             <button onClick={() => { setOpen(false); setDialog('edit') }} className={item}>Edit channel…</button>
           )}

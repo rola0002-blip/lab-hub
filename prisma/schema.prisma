@@ -318,6 +318,10 @@ model ConversationMember {
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   lastReadAt     DateTime     @default(now())
   muted          Boolean      @default(false)
+  // v0.17 W4-A2: per-user favorite (rail sorts favorites first within each
+  // section). Named favorite, NOT pinned, to avoid colliding with
+  // pinnedProjectIds/pinnedAt concepts.
+  favorite       Boolean      @default(false)
   createdAt      DateTime     @default(now())
 
   @@unique([conversationId, userId])
@@ -338,6 +342,10 @@ model Message {
   mentionUserIds  String[]
   mentionsChannel Boolean                  @default(false)
   editedAt        DateTime?
+  // v0.17 W4-A1: set when pinned (members/admins only, header popover surface);
+  // null = unpinned. No index — the pinned list scans one conversation via the
+  // existing @@index([conversationId, createdAt]) at lab scale.
+  pinnedAt        DateTime?
   deletedAt       DateTime?
   slackTs         String?
   createdAt       DateTime                 @default(now())

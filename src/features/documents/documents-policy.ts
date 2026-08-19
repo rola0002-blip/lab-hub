@@ -8,7 +8,7 @@ import { PolicyError, policyStatus } from '@/features/issues/issue-policy'
 export { PolicyError, policyStatus }
 
 // browse / search / download = any authenticated user incl. guests (no role gate).
-// upload / rename / move / create folder = admin or member.
+// upload / create folder = admin or member.
 export function canUpload(role: Role): boolean {
   return role === 'admin' || role === 'member'
 }
@@ -22,6 +22,16 @@ export function canDeleteDocument(role: Role, uploaderId: string, userId: string
 }
 export function assertCanDeleteDocument(role: Role, uploaderId: string, userId: string): void {
   if (!canDeleteDocument(role, uploaderId, userId)) throw new PolicyError('forbidden', 'Only the uploader or an admin can delete this file.')
+}
+
+// rename / move = uploader or admin (W4-C: aligned with delete — the upload
+// gate alone let members rename/move admin uploads). Kept as its own named
+// predicate beside canDeleteDocument for readable call sites; same posture.
+export function canModifyDocument(role: Role, uploaderId: string, userId: string): boolean {
+  return uploaderId === userId || role === 'admin'
+}
+export function assertCanModifyDocument(role: Role, uploaderId: string, userId: string): void {
+  if (!canModifyDocument(role, uploaderId, userId)) throw new PolicyError('forbidden', 'Only the uploader or an admin can rename or move this file.')
 }
 
 // folder rename / delete = creator or admin.

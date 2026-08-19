@@ -6,6 +6,7 @@ import {
   createChannel, getOrCreateDm, addMembers, removeMember, joinPublicChannel,
   archiveChannel, renameChannel, setChannelTopic, isMember, canManage,
   accessibleConversationIds, listConversations, listPublicChannels, totalUnread,
+  setFavorite,
 } from '@/features/chat/conversation-service'
 import { sumUnread } from '@/features/chat/unread'
 import { listMessages, sendMessage } from '@/features/chat/message-service'
@@ -236,6 +237,36 @@ describe('conversation service', () => {
     expect(list[0].mentions).toBe(1)
     const pubs = await listPublicChannels(me.id)
     expect(pubs.find((p) => p.id === ch.id)?.isMember).toBe(true)
+  })
+
+  // W4-A2: favorite is self-service per-user metadata — the setMuted posture.
+  it('setFavorite roundtrips and surfaces on the list read; non-members no-op; guests may favorite', async () => {
+    const me = await makeUser()
+    const guest = await makeUser({ role: 'guest' })
+    const outsider = await makeUser()
+    const ch = await makeChannel()
+    await makeMember(ch.id, me.id)
+    await makeMember(ch.id, guest.id)
+
+    // Roundtrip via the service: favorite → true, unfavorite → false.
+    expect((await setFavorite({ conversationId: ch.id, userId: me.id, favorite: true })).ok).toBe(true)
+    expect((await listConversations(me.id)).find((c) => c.id === ch.id)?.favorite).toBe(true)
+    expect((await setFavorite({ conversationId: ch.id, userId: me.id, favorite: false })).ok).toBe(true)
+    expect((await listConversations(me.id)).find((c) => c.id === ch.id)?.favorite).toBe(false)
+
+    // Guests favorite too (per-user and harmless — identical policy to mute).
+    expect((await setFavorite({ conversationId: ch.id, userId: guest.id, favorite: true })).ok).toBe(true)
+    expect((await listConversations(guest.id)).find((c) => c.id === ch.id)?.favorite).toBe(true)
+
+    // A non-member's setFavorite is a no-op (updateMany matches no row): nothing
+    // is created and the outsider's list never includes the conversation — the
+    // route's isMember gate is what 403s, same as mute.
+    expect((await setFavorite({ conversationId: ch.id, userId: outsider.id, favorite: true })).ok).toBe(true)
+    expect(await prisma.conversationMember.count({ where: { conversationId: ch.id } })).toBe(2)
+    expect((await listConversations(outsider.id)).find((c) => c.id === ch.id)).toBeUndefined()
+
+    // Favoriting is invisible to the other member's own row state.
+    expect((await listConversations(me.id)).find((c) => c.id === ch.id)?.favorite).toBe(false)
   })
 })
 
