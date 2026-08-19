@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-08-19
+
 ### Fixed
 - Hovering a grouped chat message no longer makes the history jump. The per-message clock that appears in the left gutter was taking up space when revealed — two wrapped lines taller than the row itself — so every message below shifted down the moment you hovered. The clock now floats over the gutter without affecting layout, on mouse hover and on touch focus alike.
 
