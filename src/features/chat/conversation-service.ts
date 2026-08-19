@@ -6,7 +6,7 @@ import { emitEvent } from '@/lib/events'
 export type ConvResult = { ok: true; conversationId: string } | { ok: false; message: string }
 export type ConversationListItem = {
   id: string; type: 'CHANNEL' | 'DM'; name: string | null; topic: string; isPrivate: boolean
-  archived: boolean; muted: boolean; memberIds: string[]
+  archived: boolean; muted: boolean; favorite: boolean; memberIds: string[]
   members: { id: string; image: string | null }[]
   unread: number; mentions: number; lastMessageAt: string | null
 }
@@ -164,6 +164,15 @@ export async function setMuted(args: { conversationId: string; userId: string; m
   return { ok: true }
 }
 
+// W4-A2: per-user favorite, byte-mirrors setMuted — self-service for any member
+// (guests included, like mute); the rail partitions favorites first per section.
+export async function setFavorite(args: { conversationId: string; userId: string; favorite: boolean }): Promise<{ ok: boolean }> {
+  await prisma.conversationMember.updateMany({
+    where: { conversationId: args.conversationId, userId: args.userId }, data: { favorite: args.favorite },
+  })
+  return { ok: true }
+}
+
 export async function isMember(userId: string, conversationId: string): Promise<boolean> {
   return !!(await prisma.conversationMember.findUnique({
     where: { conversationId_userId: { conversationId, userId } },
@@ -193,7 +202,7 @@ export async function listConversations(userId: string): Promise<ConversationLis
       ])
       return {
         id: m.conversationId, type: m.conversation.type, name: m.conversation.name, topic: m.conversation.topic,
-        isPrivate: m.conversation.isPrivate, archived: !!m.conversation.archivedAt, muted: m.muted,
+        isPrivate: m.conversation.isPrivate, archived: !!m.conversation.archivedAt, muted: m.muted, favorite: m.favorite,
         memberIds: m.conversation.members.map((x) => x.userId),
         members: m.conversation.members.map((x) => ({ id: x.userId, image: x.user.image })),
         unread, mentions, lastMessageAt: last?.createdAt.toISOString() ?? null,

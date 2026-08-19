@@ -7,7 +7,7 @@ import { useEvents, type ClientEvent } from '@/components/use-events'
 export type ChatUser = { id: string; name: string; role: string; image: string | null; isSystem: boolean }
 export type ConversationItem = {
   id: string; type: 'CHANNEL' | 'DM'; name: string | null; topic: string; isPrivate: boolean
-  archived: boolean; muted: boolean; memberIds: string[]
+  archived: boolean; muted: boolean; favorite: boolean; memberIds: string[]
   members: { id: string; image: string | null }[]
   unread: number; mentions: number; lastMessageAt: string | null
 }

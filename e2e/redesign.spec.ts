@@ -377,6 +377,42 @@ test('chat: row-level Mute/Unmute from the conversation list', async ({ browser 
   await page.context().close()
 })
 
+// W4-A2: row-level Favorite — the Star glyph appears and the row floats above
+// unfavorited channels in the SAME section; unfavorite restores the position.
+test('chat: row-level Favorite floats the channel above unfavorited ones', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  await createChannel(page, 'aaa-unfaved')
+  await createChannel(page, 'zzz-faved')
+  const rowA = page.getByRole('link', { name: /aaa-unfaved/ })
+  const rowZ = page.getByRole('link', { name: /zzz-faved/ })
+  await expect(rowA).toBeVisible()
+  await expect(rowZ).toBeVisible()
+
+  // Alphabetical baseline: aaa renders above zzz.
+  expect((await rowA.boundingBox())!.y).toBeLessThan((await rowZ.boundingBox())!.y)
+
+  // Favorite 'zzz-faved' from its row menu → star glyph + floats above aaa.
+  await rowZ.hover()
+  await page.getByRole('button', { name: 'zzz-faved actions' }).click()
+  await page.getByRole('menuitem', { name: 'Favorite' }).click()
+  await expect(rowZ.locator('[aria-label="Favorited"]')).toBeVisible()
+  await expect(async () => {
+    expect((await rowZ.boundingBox())!.y).toBeLessThan((await rowA.boundingBox())!.y)
+  }).toPass({ timeout: 10_000 })
+
+  // Unfavorite from the same row menu → star gone, alphabetical order restored.
+  await rowZ.hover()
+  await page.getByRole('button', { name: 'zzz-faved actions' }).click()
+  await page.getByRole('menuitem', { name: 'Unfavorite' }).click()
+  await expect(rowZ.locator('[aria-label="Favorited"]')).toHaveCount(0)
+  await expect(async () => {
+    expect((await rowA.boundingBox())!.y).toBeLessThan((await rowZ.boundingBox())!.y)
+  }).toPass({ timeout: 10_000 })
+
+  await page.context().close()
+})
+
 // F2: Leave channel via the row menu. Leaving a NON-open row keeps the current
 // pane; leaving the open conversation lands back on the chat index.
 test('chat: leave via the row menu — other rows keep the pane, the open row returns to /chat', async ({ browser }) => {
