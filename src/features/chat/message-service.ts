@@ -188,7 +188,8 @@ export async function deleteMessage(args: { messageId: string; userId: string })
   const attachments = await prisma.chatAttachment.findMany({ where: { messageId: msg.id }, select: { path: true } })
   await prisma.message.update({
     where: { id: msg.id },
-    data: { deletedAt: new Date(), body: '', mentionUserIds: [], mentionsChannel: false },
+    // pinnedAt: null — a tombstone must not linger in the pinned list.
+    data: { deletedAt: new Date(), body: '', mentionUserIds: [], mentionsChannel: false, pinnedAt: null },
   })
   await prisma.chatAttachment.deleteMany({ where: { messageId: msg.id } })
   await Promise.all(attachments.map((a) => removeUpload(a.path).catch(() => {}))) // file removal is best-effort

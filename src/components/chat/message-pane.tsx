@@ -88,8 +88,9 @@ export default function MessagePane({ conversationId, conversationType, channelN
   const [membersOpen, setMembersOpen] = useState(false)
   // W4-A1 pinned messages: the header "Pinned (n)" popover list. Fetched from the
   // dedicated /pinned route (not the loaded window) because pins can be older
-  // than the current page; refreshed on mount and on every msg_edit SSE event
-  // for this conversation (pin/unpin emits msg_edit).
+  // than the current page; refreshed on mount and on every msg_edit / msg_del
+  // SSE event for this conversation (pin/unpin emits msg_edit; a deleted pin
+  // must drop out immediately).
   const [pinned, setPinned] = useState<Msg[]>([])
   const [pinnedOpen, setPinnedOpen] = useState(false)
   const pinnedWrapRef = useRef<HTMLDivElement>(null)
@@ -154,12 +155,18 @@ export default function MessagePane({ conversationId, conversationType, channelN
   // announces and keyboard users can tab through its rows.
   useEffect(() => {
     if (!pinnedOpen) return
+    // Capture the opener BEFORE moving focus into the panel, and restore it in
+    // the cleanup on close (Escape/outside-click/unmount) — the emoji-picker
+    // idiom; focus() on a detached control is a silent no-op.
+    const opener = document.activeElement as HTMLElement | null
     pinnedPanelRef.current?.focus()
     const onClick = (e: MouseEvent) => { if (pinnedWrapRef.current && !pinnedWrapRef.current.contains(e.target as Node)) setPinnedOpen(false) }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPinnedOpen(false) }
+    // stopPropagation so an open thread panel isn't closed by the same keypress
+    // (emoji-picker precedent).
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setPinnedOpen(false) } }
     document.addEventListener('click', onClick)
     document.addEventListener('keydown', onKey)
-    return () => { document.removeEventListener('click', onClick); document.removeEventListener('keydown', onKey) }
+    return () => { document.removeEventListener('click', onClick); document.removeEventListener('keydown', onKey); opener?.focus() }
   }, [pinnedOpen])
 
   // Unpin from the popover: POST, then refetch the list (the route's msg_edit
@@ -248,8 +255,9 @@ export default function MessagePane({ conversationId, conversationType, channelN
     if (e.t === 'reconnect') { void loadLatest(); return }
     if (!('cid' in e) || e.cid !== conversationId) return
     if (e.t === 'msg' || e.t === 'msg_edit' || e.t === 'msg_del' || e.t === 'rx') {
-      // Pin/unpin rides msg_edit — refresh the header Pinned (n) count too.
-      if (e.t === 'msg_edit') void loadPinned()
+      // Pin/unpin rides msg_edit, and deleting a pinned message drops it from
+      // the list server-side — refresh the header Pinned (n) count for both.
+      if (e.t === 'msg_edit' || e.t === 'msg_del') void loadPinned()
       const isNew = e.t === 'msg'
       void fetch(`/api/chat/messages/${e.mid}`).then(async (r) => {
         if (!r.ok) return
