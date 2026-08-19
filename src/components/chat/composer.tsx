@@ -11,6 +11,14 @@ import { useChat } from './chat-store'
 import { EmojiPicker } from './emoji-picker'
 import type { Msg } from './message-item'
 
+// W4-B: the textarea grows with its content up to this cap (~8–9 wrapped lines
+// at text-sm), then scrolls internally instead. WHY a cap at all: an unbounded
+// composer eats the message list on short viewports, and 200px keeps ~2/3 of a
+// laptop viewport for history while still showing a full paragraph of context.
+// One constant for main AND thread composers (ComposerBody backs both); the
+// JS clamp replaces the old max-h-40 CSS clamp so there is one source of truth.
+const COMPOSER_MAX_PX = 200
+
 type Props = {
   conversationId: string
   selfRole: string
@@ -105,6 +113,19 @@ function ComposerBody({ draftKey, conversationId, selfRole, memberIds, parentId,
       else window.sessionStorage.removeItem(draftKey)
     } catch { /* private mode / quota — drafts are best-effort */ }
   }, [draftKey, raw])
+
+  // W4-B auto-grow: fit the textarea to its content whenever the draft changes.
+  // Runs on mount too, sizing a draft restored from sessionStorage (and the
+  // per-draft-key remount gives each channel/thread a fresh pass). The
+  // height:'auto' reset first lets scrollHeight re-measure the unstretched
+  // content; only then is the clamped height written. No transition — the
+  // absence of animation is the reduced-motion story.
+  useEffect(() => {
+    const el = taRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, COMPOSER_MAX_PX)}px`
+  }, [raw])
 
   // Refresh the autocomplete menu from the caret: `@` mentions first, then the
   // `:emoji:` completion. Both share one trigger scanner (`detectTrigger`) and the
@@ -329,7 +350,7 @@ function ComposerBody({ draftKey, conversationId, selfRole, memberIds, parentId,
             const files = Array.from(e.clipboardData?.files ?? [])
             if (files.length) { e.preventDefault(); void onFiles(files) }
           }}
-          className="max-h-40 min-h-[2.5rem] flex-1 resize-none rounded-md border border-border bg-surface px-3 py-2 text-sm text-default placeholder:text-subtle focus-visible:border-[var(--border-focus)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
+          className="min-h-[2.5rem] flex-1 resize-none overflow-y-auto rounded-md border border-border bg-surface px-3 py-2 text-sm text-default placeholder:text-subtle focus-visible:border-[var(--border-focus)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
         {/* `disabled` derives from `raw`, which is '' during SSR but restored from a
             sessionStorage draft on the client — an intentional divergence, like the
             textarea value above, so the hydration warning is suppressed. */}

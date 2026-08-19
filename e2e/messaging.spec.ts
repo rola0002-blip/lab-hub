@@ -516,3 +516,34 @@ test('11: guests get no pin affordance but a view-only popover', async ({ browse
   await pageG.context().close()
   await page.context().close()
 })
+
+// W4-B composer auto-grow: typing real newlines (keyboard, not fill — each
+// keystroke re-runs the growth effect) grows the textarea with its content up
+// to COMPOSER_MAX_PX (200), then it scrolls internally (scrollHeight exceeds
+// clientHeight) instead of pushing the message pane taller. The thread
+// composer shares ComposerBody, so it inherits the behaviour for free.
+test('12: composer auto-grows to a 200px cap, then scrolls internally', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  await createChannel(page, 'lab')
+
+  const box = page.getByPlaceholder('Write a message…')
+  await box.click()
+  const initial = await box.evaluate((el) => el.offsetHeight)
+
+  // Twelve lines via the keyboard; Shift+Enter inserts the newlines (bare
+  // Enter would send).
+  for (let i = 1; i <= 12; i++) {
+    await page.keyboard.type(`line ${i}`)
+    await page.keyboard.press('Shift+Enter')
+  }
+
+  // Grew past the one-line height, clamped at the cap…
+  await expect.poll(() => box.evaluate((el) => el.offsetHeight)).toBeGreaterThan(initial)
+  const metrics = await box.evaluate((el) => ({ offsetHeight: el.offsetHeight, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight }))
+  expect(metrics.offsetHeight).toBeLessThanOrEqual(200)
+  // …and at the cap the overflow scrolls INSIDE the textarea.
+  expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight)
+
+  await page.context().close()
+})
