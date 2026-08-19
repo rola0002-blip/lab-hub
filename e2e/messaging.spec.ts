@@ -551,3 +551,39 @@ test('12: composer auto-grows to a 200px cap, then scrolls internally', async ({
 
   await page.context().close()
 })
+
+// Wave-5 regression: on grouped rows (2nd+ message from the same author within
+// 5 min) the hover-only gutter clock used to render in-flow inside the 36px
+// column-1 track, where "9:14 AM" wrapped to two lines (44px vs a ~24px row) —
+// so hovering grew the row and shoved every message below down. The clock is
+// now absolute over the gutter + nowrap, so revealing it must not change the
+// row's height at all.
+test('13: grouped-row hover clock reveals without shifting layout', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  await createChannel(page, 'lab')
+
+  // Two quick messages from the same author → the second row renders grouped.
+  // Wait for each REAL row (optimistic temps carry tmp-* ids) between sends:
+  // the composer guards Enter while a send is in-flight and clears the draft
+  // on 201, so a back-to-back fill+Enter races the first POST and is dropped.
+  const realRow = (text: string) => page.locator('[data-msg-id]:not([data-msg-id^="tmp-"])', { hasText: text })
+  await send(page, 'first of the pair')
+  await expect(realRow('first of the pair')).toBeVisible()
+  await send(page, 'second of the pair')
+  await expect(realRow('second of the pair')).toBeVisible()
+  const row = realRow('second of the pair')
+
+  // Playwright 1.61's Locator is non-generic — annotate the evaluate element
+  // param as HTMLElement to reach offsetHeight (test 12's convention).
+  const before = await row.evaluate((el: HTMLElement) => el.offsetHeight)
+
+  await row.hover()
+  // The grouped clock (the aria-hidden <time>) really did reveal on hover…
+  await expect(row.locator('time[aria-hidden]')).toBeVisible()
+  // …and the reveal left the row's height strictly unchanged.
+  const after = await row.evaluate((el: HTMLElement) => el.offsetHeight)
+  expect(after).toBe(before)
+
+  await page.context().close()
+})
