@@ -529,7 +529,11 @@ test('12: composer auto-grows to a 200px cap, then scrolls internally', async ({
 
   const box = page.getByPlaceholder('Write a message…')
   await box.click()
-  const initial = await box.evaluate((el) => el.offsetHeight)
+  // Playwright 1.61's Locator is non-generic (its evaluate element param
+  // defaults to SVGElement | HTMLElement, which lacks layout metrics), so each
+  // callback below annotates HTMLElement explicitly to reach
+  // offsetHeight/scrollHeight/clientHeight.
+  const initial = await box.evaluate((el: HTMLElement) => el.offsetHeight)
 
   // Twelve lines via the keyboard; Shift+Enter inserts the newlines (bare
   // Enter would send).
@@ -539,8 +543,8 @@ test('12: composer auto-grows to a 200px cap, then scrolls internally', async ({
   }
 
   // Grew past the one-line height, clamped at the cap…
-  await expect.poll(() => box.evaluate((el) => el.offsetHeight)).toBeGreaterThan(initial)
-  const metrics = await box.evaluate((el) => ({ offsetHeight: el.offsetHeight, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight }))
+  await expect.poll(() => box.evaluate((el: HTMLElement) => el.offsetHeight)).toBeGreaterThan(initial)
+  const metrics = await box.evaluate((el: HTMLElement) => ({ offsetHeight: el.offsetHeight, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight }))
   expect(metrics.offsetHeight).toBeLessThanOrEqual(200)
   // …and at the cap the overflow scrolls INSIDE the textarea.
   expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight)
