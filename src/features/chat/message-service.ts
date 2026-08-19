@@ -15,6 +15,9 @@ export type MessageDto = {
   kind: 'user' | 'system'
   author: { id: string; name: string; image: string | null }
   body: string; deleted: boolean; editedAt: string | null; createdAt: string
+  // W4-A1: set when pinned (members/admins only), null = unpinned. Drives the
+  // toolbar Pin active state and the header "Pinned (n)" popover list.
+  pinnedAt: string | null
   replyCount: number
   // Thread facepile (root messages only): the distinct authors of replies, newest
   // first and capped at 5, plus the time of the most recent reply. Replies carry
@@ -76,6 +79,7 @@ function toDto(m: Loaded): MessageDto {
     author: { id: m.user.id, name: m.user.name, image: m.user.image },
     body: m.deletedAt ? '' : m.body, deleted: !!m.deletedAt,
     editedAt: m.editedAt?.toISOString() ?? null, createdAt: m.createdAt.toISOString(),
+    pinnedAt: m.pinnedAt?.toISOString() ?? null,
     replyCount: m._count.replies,
     replyParticipants,
     lastReplyAt: m.replies.length > 0 ? m.replies[0].createdAt.toISOString() : null,
@@ -205,6 +209,32 @@ export async function toggleReaction(args: { messageId: string; userId: string; 
   else await prisma.reaction.create({ data: { messageId: msg.id, userId: args.userId, emoji } })
   await emitEvent({ t: 'rx', cid: msg.conversationId, mid: msg.id })
   return { ok: true }
+}
+
+// ── pinning (W4-A1: members+admins pin; guests view-only; header popover) ────
+export type PinResult = { ok: true; message: MessageDto } | { ok: false; error: 'forbidden' | 'invalid'; message: string }
+
+export async function setPinned(args: { messageId: string; userId: string; role: string; pinned: boolean }): Promise<PinResult> {
+  const msg = await prisma.message.findUnique({ where: { id: args.messageId } })
+  // Missing message and non-member raise the SAME shape (no existence leak).
+  if (!msg || !(await isMember(args.userId, msg.conversationId))) return { ok: false, error: 'forbidden', message: 'Message not found.' }
+  if (args.role === 'guest') return { ok: false, error: 'forbidden', message: 'Guests cannot pin messages.' }
+  if (msg.deletedAt && args.pinned) return { ok: false, error: 'invalid', message: 'Deleted messages cannot be pinned.' }
+  if (msg.deletedAt && !args.pinned) return { ok: true, message: (await getMessageDto(msg.id))! } // unpin on a tombstone: no-op success
+  const updated = await prisma.message.update({ where: { id: msg.id }, data: { pinnedAt: args.pinned ? new Date() : null }, include: MSG_INCLUDE })
+  // Reuse the EXISTING msg_edit event — other tabs refetch the message (and the
+  // pane refetches the pinned list); no new SSE member.
+  await emitEvent({ t: 'msg_edit', cid: msg.conversationId, mid: msg.id })
+  return { ok: true, message: toDto(updated) }
+}
+
+export async function listPinned(args: { conversationId: string; userId: string }): Promise<MessageDto[] | null> {
+  if (!(await isMember(args.userId, args.conversationId))) return null
+  const rows = await prisma.message.findMany({
+    where: { conversationId: args.conversationId, pinnedAt: { not: null }, deletedAt: null },
+    orderBy: { pinnedAt: 'desc' }, include: MSG_INCLUDE,
+  })
+  return rows.map(toDto)
 }
 
 export async function listMessages(args: { userId: string; conversationId: string; before?: string; take?: number }):

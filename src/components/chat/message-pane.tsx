@@ -1,9 +1,10 @@
 'use client'
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowDown, ArrowLeft, Hash, MessageSquare } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { ArrowDown, ArrowLeft, Hash, MessageSquare, Pin } from 'lucide-react'
 import { messageToPlainText } from '@/features/chat/markdown'
-import { dayLabel } from '@/lib/humanize'
+import { dayLabel, humanTime } from '@/lib/humanize'
 import { Avatar } from '@/components/ui/avatar'
 import { EmptyState } from '@/components/ui/empty-state'
 import { useGlobalHotkey } from '@/components/hooks/use-global-hotkey'
@@ -63,6 +64,7 @@ function NewMessagesDivider() {
 }
 
 export default function MessagePane({ conversationId, conversationType, channelName, topic, archived, selfRole, manage, memberIds, deepLinkMsgId = null }: Props) {
+  const router = useRouter()
   const { users, online, selfId, registerConversationHandler } = useChat()
   const coarse = useMediaQuery('(pointer: coarse)')
   const [messages, setMessages] = useState<Msg[]>([])
@@ -84,6 +86,14 @@ export default function MessagePane({ conversationId, conversationType, channelN
   const [activeMsgId, setActiveMsgId] = useState<string | null>(null)
   // Channel-intro "Add people" opens the same members dialog the ⋯ menu uses.
   const [membersOpen, setMembersOpen] = useState(false)
+  // W4-A1 pinned messages: the header "Pinned (n)" popover list. Fetched from the
+  // dedicated /pinned route (not the loaded window) because pins can be older
+  // than the current page; refreshed on mount and on every msg_edit SSE event
+  // for this conversation (pin/unpin emits msg_edit).
+  const [pinned, setPinned] = useState<Msg[]>([])
+  const [pinnedOpen, setPinnedOpen] = useState(false)
+  const pinnedWrapRef = useRef<HTMLDivElement>(null)
+  const pinnedPanelRef = useRef<HTMLDivElement>(null)
   // F1 pane-level drop: files dropped anywhere over the message area funnel into
   // the composer's shared attach intake via its imperative handle.
   const composerRef = useRef<ComposerHandle>(null)
@@ -122,6 +132,47 @@ export default function MessagePane({ conversationId, conversationType, channelN
   // loadLatest only setStates after awaiting fetch — async, never a synchronous cascading render.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadLatest() }, [loadLatest])
+
+  const loadPinned = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/chat/conversations/${conversationId}/pinned`)
+      if (!r.ok) return // transient or non-member; the next msg_edit retries
+      const d = await r.json()
+      setPinned(d.messages)
+      // Empty-after-unpin: hide the affordance entirely (count 0) and close the
+      // now-empty popover.
+      if (d.messages.length === 0) setPinnedOpen(false)
+    } catch { /* transient network error; SSE reconciles */ }
+  }, [conversationId])
+
+  // loadPinned only setStates after awaiting fetch — async, never a synchronous cascading render.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void loadPinned() }, [loadPinned])
+
+  // Popover dismissal: outside click (wrapper containment, the ConversationMenu
+  // idiom) + Escape. Focus moves into the labelled panel on open so the dialog
+  // announces and keyboard users can tab through its rows.
+  useEffect(() => {
+    if (!pinnedOpen) return
+    pinnedPanelRef.current?.focus()
+    const onClick = (e: MouseEvent) => { if (pinnedWrapRef.current && !pinnedWrapRef.current.contains(e.target as Node)) setPinnedOpen(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPinnedOpen(false) }
+    document.addEventListener('click', onClick)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('click', onClick); document.removeEventListener('keydown', onKey) }
+  }, [pinnedOpen])
+
+  // Unpin from the popover: POST, then refetch the list (the route's msg_edit
+  // also refreshes the row + every other tab).
+  const unpin = useCallback(async (messageId: string) => {
+    try {
+      const r = await fetch(`/api/chat/messages/${messageId}/pin`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pinned: false }),
+      })
+      if (!r.ok) throw new Error('unpin failed')
+      await loadPinned()
+    } catch { /* best-effort; SSE reconciles */ }
+  }, [loadPinned])
 
   // Reset the first-load flag when the conversation changes so the next load opens at newest.
   useEffect(() => { firstLoad.current = true }, [conversationId])
@@ -197,6 +248,8 @@ export default function MessagePane({ conversationId, conversationType, channelN
     if (e.t === 'reconnect') { void loadLatest(); return }
     if (!('cid' in e) || e.cid !== conversationId) return
     if (e.t === 'msg' || e.t === 'msg_edit' || e.t === 'msg_del' || e.t === 'rx') {
+      // Pin/unpin rides msg_edit — refresh the header Pinned (n) count too.
+      if (e.t === 'msg_edit') void loadPinned()
       const isNew = e.t === 'msg'
       void fetch(`/api/chat/messages/${e.mid}`).then(async (r) => {
         if (!r.ok) return
@@ -241,7 +294,7 @@ export default function MessagePane({ conversationId, conversationType, channelN
       if (typingTimer.current) clearTimeout(typingTimer.current)
       typingTimer.current = setTimeout(() => setTyping(null), 4000)
     }
-  }), [conversationId, registerConversationHandler, loadLatest, upsert, markRead, selfId])
+  }), [conversationId, registerConversationHandler, loadLatest, loadPinned, upsert, markRead, selfId])
 
   useEffect(() => { // first load opens at newest; afterwards stick to bottom only when near it
     const el = scroller.current
@@ -407,6 +460,48 @@ export default function MessagePane({ conversationId, conversationType, channelN
               ? <p className="truncate text-xs text-muted">{peerOnline ? 'Active' : 'Away'}</p>
               : topic && <p className="truncate text-xs text-muted">{topic}</p>}
           </div>
+          {pinned.length > 0 && (
+            <div className="relative shrink-0" ref={pinnedWrapRef}>
+              <button type="button" onClick={() => setPinnedOpen((v) => !v)}
+                aria-haspopup="dialog" aria-expanded={pinnedOpen}
+                className="flex h-7 items-center gap-1 rounded-md border border-border px-2 text-xs font-medium text-muted transition-colors duration-100 hover:bg-hover hover:text-default">
+                <Pin size={13} aria-hidden />
+                Pinned ({pinned.length})
+              </button>
+              {pinnedOpen && (
+                // MembersDialog visual idiom as an anchored panel: labelled dialog
+                // region, focus moves in on open, Escape/outside-click close (the
+                // effects above). Guests see it too — view-only (no Unpin rows).
+                <div ref={pinnedPanelRef} role="dialog" aria-label="Pinned messages" tabIndex={-1}
+                  className="absolute right-0 z-30 mt-1 max-h-80 w-[22rem] overflow-y-auto rounded-md border border-border bg-surface py-1 shadow-menu focus:outline-none">
+                  {pinned.map((m) => {
+                    // Plain-text slice (~120 chars) of the pinned body for the row preview.
+                    const flat = messageToPlainText(m.body, (id) => names.get(id))
+                    const preview = flat.length > 120 ? `${flat.slice(0, 120).trimEnd()}…` : flat
+                    return (
+                      <div key={m.id} className="flex items-start gap-2 px-2 py-1.5 hover:bg-hover">
+                        <Avatar name={m.author.name} id={m.author.id} image={m.author.image} size={24} />
+                        <button type="button" className="min-w-0 flex-1 text-left"
+                          onClick={() => { setPinnedOpen(false); router.push(`/chat/${conversationId}?msg=${m.id}`) }}>
+                          <span className="flex items-baseline gap-1.5">
+                            <span className="truncate text-sm font-semibold text-default">{m.author.name}</span>
+                            {m.pinnedAt && <time className="shrink-0 text-2xs text-subtle" dateTime={m.pinnedAt}>{humanTime(m.pinnedAt, now)}</time>}
+                          </span>
+                          <span className="mt-0.5 block truncate text-xs text-muted">{preview || 'message deleted'}</span>
+                        </button>
+                        {selfRole !== 'guest' && (
+                          <button type="button" onClick={() => void unpin(m.id)}
+                            className="mt-0.5 shrink-0 text-xs text-muted hover:text-default hover:underline">
+                            Unpin
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
           <ConversationMenu conversationId={conversationId} conversationType={conversationType}
             channelName={channelName} archived={archived} manage={manage} />
         </header>

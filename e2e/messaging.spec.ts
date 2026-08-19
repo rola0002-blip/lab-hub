@@ -431,3 +431,88 @@ test('9: thread reply → bell + deep-link', async ({ browser }) => {
   await pageB.context().close()
   await page.context().close()
 })
+
+// W4-A1 pinned messages: pin from the toolbar → the header "Pinned (n)" button
+// appears live (msg_edit SSE) → the popover lists a preview → a row click
+// deep-links ?msg= → Unpin from the popover removes the button (count 0).
+test('10: pin a message → header popover → deep link → unpin', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  const cid = await createChannel(page, 'lab')
+  await send(page, 'pin this for the crew')
+  await expect(logMsg(page, 'pin this for the crew')).toBeVisible()
+
+  // Toolbar Pin replaces the old disabled Bookmark placeholder (members only).
+  await logMsg(page, 'pin this for the crew').hover()
+  await page.getByTitle('Pin message').click()
+  await expect(page.getByRole('button', { name: /Pinned \(1\)/ })).toBeVisible()
+
+  // Open the popover: the row preview is visible; clicking it deep-links.
+  await page.getByRole('button', { name: /Pinned \(1\)/ }).click()
+  const popover = page.getByRole('dialog', { name: 'Pinned messages' })
+  await expect(popover).toBeVisible()
+  await expect(popover.getByText('pin this for the crew')).toBeVisible()
+  const msg = await db.message.findFirstOrThrow({ where: { conversationId: cid, pinnedAt: { not: null } } })
+  await popover.getByRole('button', { name: /pin this for the crew/ }).click()
+  // router.push is a soft navigation (no full load event), so assert the URL by
+  // polling rather than waitForURL's default waitUntil:'load'.
+  await expect(page).toHaveURL(new RegExp(`/chat/${cid}\\?msg=${msg.id}$`))
+
+  // Reopen and Unpin → the header button disappears entirely (count 0).
+  await page.getByRole('button', { name: /Pinned \(1\)/ }).click()
+  await page.getByRole('dialog', { name: 'Pinned messages' }).getByRole('button', { name: 'Unpin' }).click()
+  await expect(page.getByRole('button', { name: /Pinned \(/ })).toHaveCount(0)
+
+  await page.context().close()
+})
+
+// W4-A1 guest leg: no Pin affordance in the toolbar (or the ⋯ menu), but the
+// header popover IS visible to guests — view-only, with no Unpin per row.
+test('11: guests get no pin affordance but a view-only popover', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  const pageG = await joinAs(page, browser, GUEST, 'guest')
+  await createChannel(page, 'lab')
+
+  // Admin adds the guest via the Members… dialog (journey 4 idiom).
+  await page.getByRole('button', { name: 'Conversation menu' }).click()
+  await page.getByRole('button', { name: 'Members' }).click()
+  await page.getByRole('button', { name: 'Gina Guest' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: /^Add/ }).click()
+  // The Members dialog intentionally stays open after adding — close it so its
+  // modal backdrop stops intercepting the later hover on the message row.
+  await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click()
+  await send(page, 'guest sees this')
+
+  // The guest opens the channel (fresh navigation; membership already landed).
+  await pageG.goto('/chat')
+  const chan = pageG.getByRole('link', { name: 'lab' })
+  await expect(chan).toBeVisible()
+  await chan.click()
+  await expect(pageG.getByRole('heading', { name: '#lab' })).toBeVisible()
+  await expect(logMsg(pageG, 'guest sees this')).toBeVisible()
+
+  // Admin pins; the guest's header count updates live via msg_edit SSE.
+  await logMsg(page, 'guest sees this').hover()
+  await page.getByTitle('Pin message').click()
+  await expect(pageG.getByRole('button', { name: /Pinned \(1\)/ })).toBeVisible()
+
+  // Guest toolbar: no Pin/Unpin button; ⋯ menu has no Pin item.
+  await logMsg(pageG, 'guest sees this').hover()
+  await expect(pageG.getByTitle('Pin message')).toHaveCount(0)
+  await expect(pageG.getByTitle('Unpin message')).toHaveCount(0)
+  await pageG.getByRole('button', { name: 'More actions' }).click()
+  await expect(pageG.getByRole('menuitem', { name: 'Pin', exact: true })).toHaveCount(0)
+  await expect(pageG.getByRole('menuitem', { name: 'Unpin', exact: true })).toHaveCount(0)
+  await pageG.keyboard.press('Escape')
+
+  // The popover opens for the guest — row visible, but no Unpin affordance.
+  await pageG.getByRole('button', { name: /Pinned \(1\)/ }).click()
+  const dlg = pageG.getByRole('dialog', { name: 'Pinned messages' })
+  await expect(dlg).toBeVisible()
+  await expect(dlg.getByText('guest sees this')).toBeVisible()
+  await expect(dlg.getByRole('button', { name: 'Unpin' })).toHaveCount(0)
+
+  await pageG.context().close()
+  await page.context().close()
+})
