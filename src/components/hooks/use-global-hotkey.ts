@@ -12,6 +12,11 @@ export function useGlobalHotkey(key: string, handler: (e: KeyboardEvent) => void
       if (e.key.toLowerCase() !== key.toLowerCase()) return
       if (opts.meta && !(e.metaKey || e.ctrlKey)) return
       if (!opts.meta) {
+        // Plain-key hotkeys must be BARE keypresses: Cmd/Ctrl+C is key 'c' with
+        // a modifier — matching it fired the issue composer AND preventDefault
+        // blocked the copy itself (wave-6 BUG). Shift stays allowed (Shift+C is
+        // still a deliberate press).
+        if (e.metaKey || e.ctrlKey || e.altKey) return
         const t = e.target as HTMLElement
         if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable) return
       }

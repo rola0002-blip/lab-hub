@@ -170,6 +170,46 @@ test('c shortcut: global quick-capture that respects the typing and modal guards
   await expect(page.getByRole('heading', { name: 'New issue' })).toHaveCount(0)
 })
 
+// Wave-6 regression: Ctrl+C (key 'c' + modifier) used to hit the plain-key branch —
+// it opened the composer over the chat AND the hook's preventDefault killed the
+// copy itself. Modifier combos now pass through to the browser untouched, while
+// the BARE `c` press keeps opening the composer.
+test('c shortcut: Ctrl+C on selected chat text copies instead of opening the composer', async ({ page }) => {
+  test.setTimeout(120_000)
+  await runWizard(page)
+  await signIn(page, ADMIN.email, ADMIN.password)
+
+  // A channel with a message on screen; dbclick selects a word of the body (the
+  // selection target is a <p>, so neither the typing guard nor focus state can
+  // mask the modifier bug — exactly the original repro).
+  await page.goto('/chat')
+  await page.getByRole('button', { name: 'Browse or create channels' }).click()
+  await page.getByRole('button', { name: 'New channel' }).click()
+  await page.getByPlaceholder('e.g. cvd-lab').fill('copy-guard')
+  await page.getByRole('button', { name: 'Create channel', exact: true }).click()
+  await page.waitForURL(/\/chat\/[^/]+$/)
+  const box = page.getByPlaceholder('Write a message…')
+  await box.fill('select and copy this sentence')
+  await box.press('Enter')
+  const row = page.getByRole('log', { name: 'Messages' }).getByText('select and copy this sentence')
+  await expect(row).toBeVisible()
+  await row.dblclick() // word selected; Ctrl+C now means COPY
+
+  const composer = page.getByRole('dialog', { name: 'New issue' })
+  await page.keyboard.down('Control')
+  await page.keyboard.press('c')
+  await page.keyboard.up('Control')
+  await expect(composer).toHaveCount(0) // the browser kept the keypress: no composer
+
+  // The bare `c` press still quick-captures (listener live on this page).
+  await expect(async () => {
+    await page.keyboard.press('c')
+    await expect(composer).toBeVisible({ timeout: 1000 })
+  }).toPass({ timeout: 10_000 })
+  await page.keyboard.press('Escape')
+  await expect(composer).toHaveCount(0)
+})
+
 test('quick-capture defaults the assignee to the current user; New issue button leaves it unset', async ({ page }) => {
   test.setTimeout(90_000)
   await runWizard(page)
