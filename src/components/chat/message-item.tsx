@@ -268,11 +268,16 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
         {leading ? (
           <Avatar name={msg.author.name} id={msg.author.id} image={msg.author.image} size={36} presence={authorPresence} />
         ) : (
+          // Out-of-flow (absolute over the gutter) + nowrap: revealing the clock
+          // must never change the row's height — in-flow it wrapped to two lines
+          // (44px vs ~24px row) and shoved every message below down on hover
+          // (wave-5 BUG). Row is `relative`; left-4/top-0.5/w-9 mirror px-4,
+          // py-0.5 and the 36px column — pixel-identical placement, zero layout.
           <time
             aria-hidden
             dateTime={msg.createdAt}
             title={msg.createdAt}
-            className="hidden text-right text-2xs leading-[22px] tabular-nums text-subtle group-hover:block group-focus-within:block"
+            className="absolute left-4 top-0.5 w-9 whitespace-nowrap text-right text-2xs leading-[22px] tabular-nums text-subtle hidden group-hover:block group-focus-within:block"
           >{clockTime(msg.createdAt)}</time>
         )}
 
