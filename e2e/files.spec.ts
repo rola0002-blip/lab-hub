@@ -114,6 +114,34 @@ test('a guest sees the Files nav + table but no upload or row-menu affordances',
   await guestCtx.close()
 })
 
+// W4-C: rename/move is uploader-or-admin. A member's own upload keeps the
+// affordances; the admin's upload (seeded by test 1) loses Rename/Move… while
+// keeping the row menu itself (Download) — mayUpload renders the menu, the
+// canModifyDocument predicate gates the items.
+test('a member can rename/move their own upload but has no Rename/Move on the admin\'s file (W4-C)', async ({ browser }) => {
+  const ap = await newPage(browser)
+  await signIn(ap, ADMIN.email, ADMIN.password)
+  const token = await createMemberViaInvite(ap, 'member@lab.test', 'member')
+  ipSeq += 1
+  const memberCtx = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': `10.50.${ipSeq}.7` } })
+  const mp = await memberCtx.newPage()
+  await acceptInvite(mp, token, 'Membra', 'Str0ngPass!123')
+  await mp.goto('/files')
+  // Own upload → Rename + Move… are offered.
+  await mp.locator('input[type=file]').setInputFiles({ name: 'member notes.pdf', mimeType: 'application/pdf', buffer: PDF })
+  await expect(mp.getByRole('link', { name: 'member notes.pdf' })).toBeVisible()
+  await mp.getByRole('button', { name: 'File member notes.pdf actions' }).click()
+  await expect(mp.getByRole('menuitem', { name: 'Rename' })).toBeVisible()
+  await expect(mp.getByRole('menuitem', { name: 'Move…' })).toBeVisible()
+  await mp.keyboard.press('Escape')
+  // Admin's upload → the row menu still opens, but Rename/Move… are absent.
+  await mp.getByRole('button', { name: 'File graphene SOP.pdf actions' }).click()
+  await expect(mp.getByRole('menuitem', { name: 'Rename' })).toHaveCount(0)
+  await expect(mp.getByRole('menuitem', { name: 'Move…' })).toHaveCount(0)
+  await expect(mp.getByRole('menuitem', { name: 'Download' })).toBeVisible()
+  await memberCtx.close()
+})
+
 // ── v0.15 §5.3 — project ↔ Files folder ──────────────────────────────────────
 test('a project links a Files folder and shows that folder on its page', async ({ browser }) => {
   const page = await newPage(browser)

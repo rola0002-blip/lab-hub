@@ -62,7 +62,32 @@ describe('document-service', () => {
   it('a guest cannot upload/create-folder (assertCanUpload throws)', async () => {
     const g = await makeUser({ role: 'guest' })
     await expect(createFolder({ userId: g.id, role: 'guest', name: 'x' })).rejects.toThrow(PolicyError)
-    await expect(renameDocument({ userId: g.id, role: 'guest', id: 'anything', name: 'x' })).rejects.toThrow(PolicyError)
+  })
+
+  it('rename/move is uploader-or-admin (W4-C): a member cannot touch an admin upload', async () => {
+    const admin = await makeUser({ role: 'admin' })
+    const member = await makeUser({ role: 'member' })
+    const folder = await makeDocumentFolder({ createdById: admin.id })
+    const doc = await makeDocument(admin.id)
+    // member × admin upload → forbidden (the row exists — this is the 403 arm, not 404)
+    const err = await renameDocument({ userId: member.id, role: 'member', id: doc.id, name: 'nope.pdf' }).catch((e) => e)
+    expect(err).toBeInstanceOf(PolicyError)
+    expect(err.code).toBe('forbidden')
+    await expect(moveDocument({ userId: member.id, role: 'member', id: doc.id, folderId: folder.id })).rejects.toMatchObject({ code: 'forbidden' })
+    // nothing was mutated by the rejected calls
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: doc.id } })).name).toBe(doc.name)
+    // admin × any → ok
+    await renameDocument({ userId: admin.id, role: 'admin', id: doc.id, name: 'admin-renamed.pdf' })
+    await moveDocument({ userId: admin.id, role: 'admin', id: doc.id, folderId: folder.id })
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: doc.id } })).folderId).toBe(folder.id)
+    // member × own upload → ok (rename + move)
+    const own = await makeDocument(member.id)
+    await renameDocument({ userId: member.id, role: 'member', id: own.id, name: 'own-renamed.pdf' })
+    await moveDocument({ userId: member.id, role: 'member', id: own.id, folderId: folder.id })
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: own.id } })).folderId).toBe(folder.id)
+    // admin can also move the member's file back (admin × member upload → ok)
+    await moveDocument({ userId: admin.id, role: 'admin', id: own.id, folderId: null })
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: own.id } })).folderId).toBeNull()
   })
 
   it('a guest gets a 403 on EVERY mutation seam (full policy matrix)', async () => {
@@ -70,8 +95,10 @@ describe('document-service', () => {
     const g = await makeUser({ role: 'guest' })
     const doc = await makeDocument(owner.id)                       // member-owned → guest hits `forbidden`, not `not_found`
     const folder = await makeDocumentFolder({ createdById: owner.id })
-    // assertCanUpload seams (role-gated before any lookup)
+    // assertCanUpload seam (role-gated before any lookup)
     await expect(createFolder({ userId: g.id, role: 'guest', name: 'g' })).rejects.toThrow(PolicyError)
+    // assertCanModifyDocument seams (W4-C: lookup-first like delete — the row exists,
+    // and a guest is neither its uploader nor an admin → forbidden)
     await expect(renameDocument({ userId: g.id, role: 'guest', id: doc.id, name: 'g' })).rejects.toThrow(PolicyError)
     await expect(moveDocument({ userId: g.id, role: 'guest', id: doc.id, folderId: null })).rejects.toThrow(PolicyError)
     // assertCanDeleteDocument seam (uploader-or-admin) — guest is neither
@@ -86,8 +113,9 @@ describe('document-service', () => {
 
   it('not_found + folder edge branches throw typed PolicyErrors (covers the gated error arms)', async () => {
     const u = await makeUser({ role: 'member' })
-    // document not_found on rename/move/delete — a member reaches the lookup (a guest would
-    // throw at assertCanUpload first), so these exercise the `!doc` throw arms.
+    // document not_found on rename/move/delete — every mutation is lookup-first
+    // (W4-C moved rename/move onto the same ordering as delete), so these
+    // exercise the `!doc` throw arms.
     await expect(renameDocument({ userId: u.id, role: 'member', id: 'ghost', name: 'x' })).rejects.toThrow(PolicyError)
     await expect(moveDocument({ userId: u.id, role: 'member', id: 'ghost', folderId: null })).rejects.toThrow(PolicyError)
     await expect(deleteDocument({ userId: u.id, role: 'member', id: 'ghost' })).rejects.toThrow(PolicyError)

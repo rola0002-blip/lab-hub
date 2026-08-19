@@ -8,7 +8,7 @@ import { Modal } from '@/components/ui/modal'
 import { EmptyState } from '@/components/ui/empty-state'
 import { toast } from '@/lib/toast-store'
 import type { Role } from '@/lib/session'
-import { canUpload, canDeleteDocument, canManageFolder } from '@/features/documents/documents-policy'
+import { canUpload, canDeleteDocument, canModifyDocument, canManageFolder } from '@/features/documents/documents-policy'
 import {
   createFolderAction, renameFolderAction, deleteFolderAction,
   renameDocumentAction, moveDocumentAction, deleteDocumentAction,
@@ -235,7 +235,7 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
                 {!hits && <span className="hidden w-44 shrink-0 truncate text-subtle lg:block">{d.created}</span>}
                 {!hits && (mayUpload || canDeleteDocument(role, d.uploaderId, selfId)) && (
                   <Menu label={`File ${d.name} actions`} button={<MoreHorizontal size={16} aria-hidden />} items={[
-                    ...(mayUpload ? [
+                    ...(mayUpload && canModifyDocument(role, d.uploaderId, selfId) ? [
                       { label: 'Rename', onSelect: () => openDialog({ kind: 'renamedoc', id: d.id, name: d.name }) },
                       { label: 'Move…', onSelect: () => openDialog({ kind: 'movedoc', id: d.id, name: d.name, folderId: d.folderId }) },
                     ] : []),
