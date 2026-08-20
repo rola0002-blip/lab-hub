@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-08-20
+
 ### Fixed
 - Zip files can be attached in chat from Chrome. Chromium's file picker labels a `.zip` as `application/x-zip-compressed`, which both the client and server attachment gates rejected — Firefox and Safari users could send archives, Chrome users got "file type not allowed". Both gates now accept the Chrome MIME alongside `application/zip` (the Files library and issue/project-update attachments share the same allowlist, so they gain the fix too).
 
