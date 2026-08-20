@@ -53,6 +53,14 @@ export async function wipe() {
 
 export const ADMIN = { email: 'pi@lab.test', password: 'Str0ngPass!123', name: 'Roland' }
 
+// Wait until React hydration completes on the CURRENT page (the root layout's
+// HydrationMark sets the attribute in an effect). Slow CI runners can serve
+// SSR markup seconds before client listeners attach; without this gate, a
+// synthesized event or keypress dispatched in the gap is silently swallowed.
+export async function waitForHydration(page: Page) {
+  await page.waitForFunction(() => document.documentElement.dataset.appHydrated === '1')
+}
+
 export async function runWizard(page: Page) {
   await page.goto('/setup')
   await page.fill('input[name=orgName]', 'LabHub')

@@ -1,6 +1,6 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
 import pkg from '../package.json'
-import { wipe, runWizard, signIn, signOut, ADMIN, createMemberViaInvite, acceptInvite } from './helpers'
+import { wipe, runWizard, signIn, signOut, ADMIN, createMemberViaInvite, acceptInvite, waitForHydration } from './helpers'
 
 // Per-context client IP so better-auth's per-IP sign-in/up rate limit never trips
 // across this serial suite (mirrors messaging.spec.ts). Offset the sequence so it
@@ -32,6 +32,7 @@ async function createChannel(page: Page, name: string): Promise<string> {
   await page.getByPlaceholder('e.g. cvd-lab').fill(name)
   await page.getByRole('button', { name: 'Create channel', exact: true }).click()
   await page.waitForURL(/\/chat\/[^/]+$/)
+  await waitForHydration(page)
   return new URL(page.url()).pathname.split('/').pop()!
 }
 

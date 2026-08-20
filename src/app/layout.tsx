@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Lato } from "next/font/google";
+import { HydrationMark } from "@/components/hydration-mark";
 import "./globals.css";
 
 const lato = Lato({
@@ -55,7 +56,11 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {/* e2e hydration signal — see src/components/hydration-mark.tsx */}
+        <HydrationMark />
+        {children}
+      </body>
     </html>
   );
 }
