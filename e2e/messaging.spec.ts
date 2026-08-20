@@ -359,7 +359,7 @@ test('7: a failed reaction / edit / delete surfaces a toast (no silent failure)'
 // the attachment link chip in the timeline.
 const TXT = { name: 'dropped-notes.txt', type: 'text/plain', body: 'dropped payload' }
 
-function dispatchDrag(page: Page, type: 'dragover' | 'drop', file?: { name: string; type: string; body: string }) {
+function dispatchDrag(page: Page, type: 'dragover' | 'dragleave' | 'drop', file?: { name: string; type: string; body: string }) {
   return page.locator('[data-chat-pane]').evaluate((el, { type, file }) => {
     const dt = new DataTransfer()
     if (file) dt.items.add(new File([file.body], file.name, { type: file.type }))
@@ -373,7 +373,25 @@ test('8: drop a file onto the pane to attach, then send', async ({ browser }) =>
   const page = await admin(browser)
   await createChannel(page, 'lab')
 
-  // A text-only drag must NOT raise the drop overlay (files only).
+  // Hydration gate: createChannel's last step is a FRESH SSR load of the
+  // channel, so at this point only the server-rendered DOM is proven visible.
+  // On GitHub's 2-core ubuntu runner, a one-shot synthetic dragover dispatched
+  // here can beat React hydration — the pane's onDragOver is not attached to
+  // the fiber tree yet, the event is swallowed, and no amount of waiting
+  // recovers it (a raw DOM listener on the pane sees dataTransfer.types
+  // ['Files'] while the overlay never appears; fast machines always win the
+  // race, which is why this only failed on CI). Retry dispatch+assert until
+  // React actually answers, then clear the overlay via dragleave.
+  await expect(async () => {
+    await dispatchDrag(page, 'dragover', TXT)
+    await expect(page.getByText('Drop to attach')).toBeVisible({ timeout: 2_000 })
+  }).toPass({ timeout: 20_000 })
+  await dispatchDrag(page, 'dragleave')
+  await expect(page.getByText('Drop to attach')).toHaveCount(0)
+
+  // A text-only drag must NOT raise the drop overlay (files only). Now a
+  // GENUINE negative: the gate above proved the pane is interactive, so a
+  // no-overlay result really means the Files-only gate held.
   await dispatchDrag(page, 'dragover')
   await expect(page.getByText('Drop to attach')).toHaveCount(0)
 
