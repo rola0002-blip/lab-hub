@@ -317,7 +317,7 @@ test('7: a failed reaction / edit / delete surfaces a toast (no silent failure)'
 
   // Reaction: abort the POST → a toast, and the picker closes without a lozenge.
   await page.route(REACTIONS_URL, (r) => r.abort())
-  await page.getByText('network will fail').hover()
+  await logMsg(page, 'network will fail').hover()
   await page.getByTitle('Add reaction').click()
   await page.getByRole('button', { name: 'react 👍' }).click()
   await expect(page.getByText('Could not update your reaction. Please try again.')).toBeVisible()
@@ -326,7 +326,7 @@ test('7: a failed reaction / edit / delete surfaces a toast (no silent failure)'
   // Edit: abort the PATCH (let the GET refresh through) → a toast, and the editor stays
   // open with the draft intact (Save still visible). Cancel to restore the plain row.
   await page.route(MESSAGE_URL, (r) => (r.request().method() === 'PATCH' ? r.abort() : r.continue()))
-  await page.getByText('network will fail').hover()
+  await logMsg(page, 'network will fail').hover()
   await page.getByRole('button', { name: 'More actions' }).click()
   await page.getByRole('menuitem', { name: 'Edit' }).click()
   const editBox = page.locator('textarea:not([placeholder])')
@@ -339,7 +339,7 @@ test('7: a failed reaction / edit / delete surfaces a toast (no silent failure)'
 
   // Delete: abort the DELETE → a toast, and the message is NOT tombstoned.
   await page.route(MESSAGE_URL, (r) => (r.request().method() === 'DELETE' ? r.abort() : r.continue()))
-  await page.getByText('network will fail').hover()
+  await logMsg(page, 'network will fail').hover()
   await page.getByRole('button', { name: 'More actions' }).click()
   await page.getByRole('menuitem', { name: 'Delete' }).click()
   await page.getByRole('button', { name: 'Delete', exact: true }).click()
