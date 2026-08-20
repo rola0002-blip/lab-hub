@@ -22,11 +22,12 @@ export function extractReleaseNotes(changelog, version) {
 }
 
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop())) {
-  const version = normalizeVersion(process.argv[2])
-  if (!version) {
+  const raw = process.argv[2]
+  if (!raw) {
     console.error('usage: node scripts/release-notes.mjs <version>')
     process.exit(2)
   }
+  const version = normalizeVersion(raw)
   const notes = extractReleaseNotes(readFileSync('CHANGELOG.md', 'utf8'), version)
   if (notes === null) {
     console.error(`no dated CHANGELOG section for ${version}`)
