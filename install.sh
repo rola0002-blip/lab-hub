@@ -90,7 +90,7 @@ fi
 
 # Postgres host port (raw TCP — curl can't speak it; probe via alpine + host network).
 DB_PROBE=0
-if docker run --rm --network host alpine sh -c 'nc -z 127.0.0.1 "${DB_PORT:-5432}"' >/dev/null 2>&1; then
+if docker run --rm --network host -e "DB_PORT=${DB_PORT:-5432}" alpine sh -c 'nc -z 127.0.0.1 "$DB_PORT"' >/dev/null 2>&1; then
   DB_PROBE=1
 fi
 if [ "$DB_PROBE" -eq 1 ]; then
