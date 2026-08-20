@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-08-20
+
 ### Fixed
 - Pasting a screenshot into chat no longer degrades to the literal text "image.png". On macOS the paste event can arrive with its file list empty even though the image is on the clipboard; the browser's fallback then typed the synthesized filename into the message instead of attaching. Paste now reads every clipboard channel — the file list, the file items, and images copied from web pages as data URLs — and when a file is claimed but nothing readable arrives, the junk insert is blocked with a message pointing at the attach button instead of failing silently.
 
