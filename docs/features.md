@@ -165,7 +165,7 @@ it never touches your existing LabHub data.
 Public channels always import; private channels import only if your Slack export
 tier includes them (with `members[]`); DMs are not part of a standard export.
 For the full freeze → export → verify → announce → rollback procedure, see
-[docs/slack-cutover.md](docs/slack-cutover.md).
+[slack-cutover.md](slack-cutover.md).
 
 ## Beta release & Windows-server deployment (SP6)
 
