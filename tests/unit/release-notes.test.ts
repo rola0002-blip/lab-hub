@@ -5,13 +5,13 @@ const CHANGELOG = `# Changelog
 
 ## [Unreleased]
 
-## [v0.20.0] - 2026-08-20
+## [0.20.0] - 2026-08-20
 
 ### Fixed
 
 - Bare-keypress hotkeys.
 
-## [v0.19.0] - 2026-08-19
+## [0.19.0] - 2026-08-19
 
 ### Added
 
@@ -20,7 +20,11 @@ const CHANGELOG = `# Changelog
 
 describe('extractReleaseNotes', () => {
   it('returns the body of the named version section', () => {
-    expect(extractReleaseNotes(CHANGELOG, 'v0.20.0')).toBe(
+    expect(extractReleaseNotes(CHANGELOG, '0.20.0')).toBe(
+      '### Fixed\n\n- Bare-keypress hotkeys.',
+    )
+    expect(extractReleaseNotes(CHANGELOG, '0.19.0')).toBe('### Added\n\n- Something else.')
+    expect(extractReleaseNotes(CHANGELOG, normalizeVersion('v0.20.0'))).toBe(
       '### Fixed\n\n- Bare-keypress hotkeys.',
     )
   })
