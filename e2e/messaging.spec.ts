@@ -752,3 +752,35 @@ test('18: attach a zip with the Chrome picker MIME (application/x-zip-compressed
 
   await page.context().close()
 })
+
+// Wave-7.1 (paste degrade): the normal clipboard write populates .files, but a
+// real macOS screenshot paste can arrive with .files EMPTY while the image
+// rides items or an html data-URL. A real DataTransfer with only text/html set
+// is the closest synthesizable analog (its .files stays empty), so this pins
+// the extractor's html leg end-to-end — and proves an image paste never
+// degrades to junk filename text in the textarea (the reported symptom).
+test('19: paste an image copied from a web page (html data-URL flavor) — attaches, never junk text', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  await createChannel(page, 'lab')
+
+  const box = page.getByPlaceholder('Write a message…')
+  await box.click()
+  await page.evaluate((b64) => {
+    const dt = new DataTransfer()
+    dt.setData('text/html', `<img src="data:image/png;base64,${b64}" alt="copied figure">`)
+    document.querySelector('textarea[aria-label="Write a message"]')!.dispatchEvent(
+      new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt }))
+  }, PNG_BODY.toString('base64'))
+
+  // The decoded image joins the intake: a pending chip, and the textarea stays
+  // EMPTY — no literal "image.png"/filename text (the wave-7.1 bug).
+  await expect(page.getByText('pasted-image.png')).toBeVisible()
+  await expect(box).toHaveValue('')
+
+  // Send: the timeline shows the view-image affordance like any image paste.
+  await send(page, 'figure from the web')
+  await expect(page.getByRole('button', { name: 'View image: pasted-image.png' })).toBeVisible()
+
+  await page.context().close()
+})

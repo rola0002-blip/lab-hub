@@ -7,6 +7,7 @@ import { searchEmoji } from '@/features/chat/emoji'
 import { wrapSelection, detectTrigger } from '@/features/chat/compose-format'
 import { humanUsers } from '@/features/chat/roster'
 import { validateAttachmentFiles } from '@/features/chat/attachment-input'
+import { extractClipboardFiles } from '@/features/chat/clipboard-files'
 import { useChat } from './chat-store'
 import { EmojiPicker } from './emoji-picker'
 import type { Msg } from './message-item'
@@ -345,10 +346,19 @@ function ComposerBody({ draftKey, conversationId, selfRole, memberIds, parentId,
           onChange={(e) => { setRaw(e.target.value); updateMenu(e.target.value, e.target.selectionStart); maybeTyping() }}
           onKeyDown={onKeyDown} onBlur={() => setTimeout(() => setMenu(null), 100)}
           onPaste={(e) => {
-            // F1: pasted FILES (e.g. screenshots) join the same validated intake.
-            // Plain-text paste is untouched — no files means no preventDefault.
-            const files = Array.from(e.clipboardData?.files ?? [])
-            if (files.length) { e.preventDefault(); void onFiles(files) }
+            // Wave-7.1: route through the shared extractor (.files → items →
+            // data-URL html) — a bare .files read missed macOS screenshot
+            // pastes, and Chrome's default insert then degraded them to the
+            // literal "image.png" text. Plain-text paste is untouched.
+            const pasted = extractClipboardFiles(e.clipboardData)
+            if (pasted.length) { e.preventDefault(); void onFiles(pasted); return }
+            // A file flavor was CLAIMED (types has 'Files') but nothing
+            // readable materialized: kill the default insert too — it is the
+            // junk filename text — and tell the user what to do instead.
+            if (e.clipboardData?.types?.includes('Files')) {
+              e.preventDefault()
+              setError("Couldn't read the image from your clipboard — re-copy it or use the attach button.")
+            }
           }}
           className="min-h-[2.5rem] flex-1 resize-none overflow-y-auto rounded-md border border-border bg-surface px-3 py-2 text-sm text-default placeholder:text-subtle focus-visible:border-[var(--border-focus)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
         {/* `disabled` derives from `raw`, which is '' during SSR but restored from a
