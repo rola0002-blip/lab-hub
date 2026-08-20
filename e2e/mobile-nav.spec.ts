@@ -15,8 +15,6 @@ import { wipe, runWizard, signIn, ADMIN } from './helpers'
 // prev.focus() runs; otherwise the toggle (inside the still-inert #app-content) can't be
 // focused and focus is lost. Asserted on the Esc path and the route-change path.
 
-const DIR = '/private/tmp/claude-501/-Users-roland/3031bedc-03e3-46c7-9ffc-be261f3c6dc0/scratchpad/fix-repro'
-const TAG = process.env.REPRO_TAG ?? 'after'
 const PHONE = { width: 375, height: 812 }
 
 // Per-context client IP (see status-menu.spec.ts); a distinct range from the other suites.
@@ -52,7 +50,6 @@ test('mobile nav drawer auto-closes after navigating to another tab', async ({ b
   await expect(page.locator('#app-content')).not.toHaveAttribute('inert', '')
   // Closing on route change restores keyboard focus to the hamburger toggle (not <body>).
   await expect(page.getByRole('button', { name: 'Open navigation' })).toBeFocused()
-  await page.screenshot({ path: `${DIR}/fix3-afternav-${TAG}.png` })
 
   // Re-open, then tap the CURRENT tab (same route → no pathname change): the nav-link
   // click path must still dismiss it (and clear inert).

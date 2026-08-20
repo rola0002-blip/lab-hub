@@ -7,14 +7,23 @@ const TEST_DB = process.env.TEST_DATABASE_URL ?? 'postgresql://labhub:labhub@loc
 
 export default defineConfig({
   testDir: './e2e',
-  timeout: 60_000,
+  timeout: Number(process.env.E2E_TEST_TIMEOUT_MS ?? 60_000),
+  // Env-overridable expect budget (CI sets E2E_EXPECT_TIMEOUT_MS): ubuntu-latest's
+  // 2-core dev-mode runner can take >5s to round-trip a mutation and re-render, so
+  // the first CI run failed three specs at the 5s default.
+  expect: { timeout: Number(process.env.E2E_EXPECT_TIMEOUT_MS ?? 5_000) },
   workers: 1, // journeys share one database
   use: { baseURL: 'http://localhost:3100' },
   webServer: {
-    command: 'npx prisma migrate deploy && npm run dev -- --port 3100',
+    // CI (E2E_WEB_SERVER=build) serves a production build: `next dev`'s
+    // on-demand route/action compilation makes first-hit waits exceed any
+    // sane expect budget on 2-core runners. Local runs keep the dev server.
+    command: process.env.E2E_WEB_SERVER === 'build'
+      ? 'npx prisma migrate deploy && npm run build && npm run start -- --port 3100'
+      : 'npx prisma migrate deploy && npm run dev -- --port 3100',
     port: 3100,
     reuseExistingServer: false,
-    timeout: 120_000,
+    timeout: process.env.E2E_WEB_SERVER === 'build' ? 600_000 : 120_000,
     env: {
       DATABASE_URL: TEST_DB,
       DISABLE_JOBS: '1',

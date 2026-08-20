@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Public distribution (SP10): multi-arch images on GHCR, one-line installer
+  with `labhub` management wrapper, GitHub Actions CI (lint / contrast /
+  coverage / e2e) and release automation, MIT license, public docs.
+
 ## [0.20.0] - 2026-08-20
 
 ### Added

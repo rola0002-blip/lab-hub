@@ -1,6 +1,6 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
 import pkg from '../package.json'
-import { wipe, runWizard, signIn, signOut, ADMIN, createMemberViaInvite, acceptInvite } from './helpers'
+import { wipe, runWizard, signIn, signOut, ADMIN, createMemberViaInvite, acceptInvite, waitForHydration } from './helpers'
 
 // Per-context client IP so better-auth's per-IP sign-in/up rate limit never trips
 // across this serial suite (mirrors messaging.spec.ts). Offset the sequence so it
@@ -32,6 +32,7 @@ async function createChannel(page: Page, name: string): Promise<string> {
   await page.getByPlaceholder('e.g. cvd-lab').fill(name)
   await page.getByRole('button', { name: 'Create channel', exact: true }).click()
   await page.waitForURL(/\/chat\/[^/]+$/)
+  await waitForHydration(page)
   return new URL(page.url()).pathname.split('/').pop()!
 }
 
@@ -159,10 +160,13 @@ test('grouped message body fills the content column, not the 36px avatar gutter 
   await createChannel(page, 'grouping')
   const box = page.getByPlaceholder('Write a message…')
 
-  // Leading message (has the avatar in column 1).
+  // Leading message (has the avatar in column 1). Scope to the log: an unscoped
+  // getByText also matches the composer textarea's own content during the
+  // optimistic-append → POST-confirm window (cleared only after the 201).
+  const log = page.getByLabel('Messages', { exact: true })
   await box.fill('first message in the run')
   await box.press('Enter')
-  await expect(page.getByText('first message in the run')).toBeVisible()
+  await expect(log.getByText('first message in the run')).toBeVisible()
   await expect(box).toHaveValue('')
 
   // Second message from the SAME author within 5 min → renders GROUPED: no avatar,
@@ -200,9 +204,12 @@ test('keyboard-only reply: ↑ into the log, r opens the thread, type + send', a
   const page = await admin(browser)
   await createChannel(page, 'keys')
   const box = page.getByPlaceholder('Write a message…')
+  // Scoped to the log — see the grouped-message test: an unscoped getByText also
+  // matches the composer's own draft during the optimistic-append → 201 window.
+  const log = page.getByLabel('Messages', { exact: true })
   await box.fill('root message for keyboard reply')
   await box.press('Enter')
-  await expect(page.getByText('root message for keyboard reply')).toBeVisible()
+  await expect(log.getByText('root message for keyboard reply')).toBeVisible()
   // Wait for the send to settle so the composer is genuinely empty — the ↑ guard
   // only fires on an empty composer (the message renders optimistically first).
   await expect(box).toHaveValue('')
@@ -220,7 +227,7 @@ test('keyboard-only reply: ↑ into the log, r opens the thread, type + send', a
   // Wait for the reply to settle so the thread composer clears — otherwise
   // getByText would also match the textarea's lingering value.
   await expect(threadBox).toHaveValue('')
-  await expect(page.getByText('keyboard-only reply body')).toBeVisible()
+  await expect(page.getByText('keyboard-only reply body')).toBeVisible() // safe: composer already settled
   await expect(page.getByRole('button', { name: /1 reply/ })).toBeVisible()
   await page.context().close()
 })
@@ -301,7 +308,8 @@ test('mobile 320px: no horizontal overflow and the thread opens as a focus-trapp
   const box = page.getByPlaceholder('Write a message…')
   await box.fill('mobile root message')
   await box.press('Enter')
-  await expect(page.getByText('mobile root message')).toBeVisible()
+  // Scoped to the log (optimistic-append window can match the composer draft).
+  await expect(page.getByLabel('Messages', { exact: true }).getByText('mobile root message')).toBeVisible()
   await expect(box).toHaveValue('')
 
   const docScrollWidth = () => page.evaluate(() => document.documentElement.scrollWidth)
