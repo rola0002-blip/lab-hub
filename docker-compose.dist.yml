@@ -1,0 +1,62 @@
+# Standalone LabHub stack — prebuilt image, no repo checkout required.
+# Fetched by install.sh; run everything through the `labhub` wrapper it installs.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: labhub
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-labhub}
+      POSTGRES_DB: labhub
+    ports:
+      # Loopback-only: reachable on-box for psql/backup, never from the LAN.
+      - '127.0.0.1:${DB_PORT:-5432}:5432'
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U labhub -d labhub']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  app:
+    image: ghcr.io/rola0002-blip/lab-hub:${LABHUB_VERSION:-latest}
+    profiles: ['prod']
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://labhub:${POSTGRES_PASSWORD:-labhub}@db:5432/labhub
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      UPLOADS_DIR: /data/uploads
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-LabHub <no-reply@localhost>}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-10}
+      AUTH_TRUSTED_IP_HEADER: ${AUTH_TRUSTED_IP_HEADER:-}
+      SETUP_TOKEN: ${SETUP_TOKEN:-}
+    volumes:
+      - uploads:/data/uploads
+    ports:
+      # Loopback-only health/poll port; public ingress is the optional tunnel.
+      - '127.0.0.1:${APP_PORT:-3000}:3000'
+    restart: unless-stopped
+
+  cloudflared:
+    # Pinned for reproducibility; matches the repo compose file.
+    image: cloudflare/cloudflared:2026.7.2
+    profiles: ['tunnel']
+    command: tunnel run --token ${TUNNEL_TOKEN}
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  uploads:
