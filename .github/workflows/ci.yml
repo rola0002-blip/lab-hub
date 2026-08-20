@@ -66,7 +66,7 @@ jobs:
       # (60s test / 5s expect): on the first CI run, post-mutation re-renders and
       # SSE-driven list updates exceeded the 5s expect window on three specs.
       E2E_TEST_TIMEOUT_MS: '180000'
-      E2E_EXPECT_TIMEOUT_MS: '20000'
+      E2E_EXPECT_TIMEOUT_MS: '30000'
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5

@@ -12,6 +12,10 @@ export default defineConfig({
   // 2-core dev-mode runner can take >5s to round-trip a mutation and re-render, so
   // the first CI run failed three specs at the 5s default.
   expect: { timeout: Number(process.env.E2E_EXPECT_TIMEOUT_MS ?? 5_000) },
+  // One retry on CI only: 2-core runners can exceed the expect budget on a
+  // route's or server action's FIRST invocation (dev-mode on-demand compile);
+  // the warm retry passes. Local runs stay zero-retry strict.
+  retries: process.env.CI ? 1 : 0,
   workers: 1, // journeys share one database
   use: { baseURL: 'http://localhost:3100' },
   webServer: {
