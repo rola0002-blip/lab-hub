@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowDown, ArrowLeft, Hash, MessageSquare, Pin } from 'lucide-react'
 import { messageToPlainText } from '@/features/chat/markdown'
-import { extractClipboardFiles } from '@/features/chat/clipboard-files'
+import { extractClipboardFiles, looksLikeSynthesizedFilename, tryClipboardReadImage } from '@/features/chat/clipboard-files'
 import { toast } from '@/lib/toast-store'
 import { dayLabel, humanTime } from '@/lib/humanize'
 import { Avatar } from '@/components/ui/avatar'
@@ -454,12 +454,14 @@ export default function MessagePane({ conversationId, conversationType, channelN
           composerRef.current?.acceptFiles(Array.from(e.dataTransfer.files))
         }}
         onPaste={(e) => {
-          // Wave-7.1: Slack-style paste-anywhere — extraction covers every
-          // clipboard channel (.files → items → data-URL html; the composer's
-          // macOS-screenshot quirk fix applies here too). The composer's own
-          // textarea handler stays the sole path for editables (the editable
-          // guard is what prevents a double attach), and text-only pastes are
-          // untouched. Archived conversations match the drop posture: no-op.
+          // Wave-7.2: extraction covers every clipboard channel (.files →
+          // items → data-URL html) and a claimed-but-unreadable or
+          // filename-only paste escalates to a direct OS clipboard read
+          // (tryClipboardReadImage — the Slack approach) before erroring. The
+          // composer's own textarea handler stays the sole path for editables
+          // (the editable guard prevents a double attach), and plain-text
+          // pastes are untouched. Archived conversations match the drop
+          // posture: no-op.
           if (archived) return
           const t = e.target as HTMLElement
           const editable = t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable
@@ -470,14 +472,15 @@ export default function MessagePane({ conversationId, conversationType, channelN
             composerRef.current?.acceptFiles(pasted)
             return
           }
-          // Claimed-but-unreadable file flavor OUTSIDE the composer: the
-          // default insert is the junk filename text, so kill it and say so —
-          // a silent dead paste reads as broken. (Inside an editable the
-          // composer's own handler surfaces the inline error instead.)
-          if (!editable && e.clipboardData?.types?.includes('Files')) {
-            e.preventDefault()
-            toast("Couldn't read the image from your clipboard — re-copy it or use the attach button.")
-          }
+          const claimed = e.clipboardData?.types?.includes('Files') ?? false
+          const junkText = looksLikeSynthesizedFilename(e.clipboardData?.getData('text/plain') ?? '')
+          if (!claimed && !junkText) return
+          if (editable) return // the composer's own handler owns this surface
+          e.preventDefault()
+          void tryClipboardReadImage().then((f) => {
+            if (f) composerRef.current?.acceptFiles([f])
+            else toast("Couldn't read the image from your clipboard — re-copy it or use the attach button.")
+          })
         }}>
         {dragOver && !archived && (
           <div className="pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-xl border-2 border-dashed border-[var(--border-focus)] bg-hover/90 text-sm font-medium text-default" role="status">

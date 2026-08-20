@@ -71,3 +71,39 @@ export function extractClipboardFiles(dt: ClipboardDataLike | null): File[] {
   const html = dt.getData?.('text/html') ?? ''
   return html ? filesFromHtml(html) : []
 }
+
+// Wave-7.2: Chromium's synthesized filename for a pasted image is a small
+// family of tokens ("image.png", "image (1).png", "screenshot.png",
+// "pasted image.png", …). When a paste carries NOTHING but text shaped like
+// one of these, the image failed to materialize in ANY clipboard channel —
+// treat it as a suspicious paste (kill the junk insert, try clipboard.read()).
+const SYNTH_NAME = /^(?:image|screenshot|screen shot|pasted[ -]?image)(?:\s*\(\d+\))?\.(?:png|jpe?g|webp|gif|tiff?)$/i
+export function looksLikeSynthesizedFilename(text: string): boolean {
+  return SYNTH_NAME.test(text.trim())
+}
+
+// Wave-7.2 escalation: read the OS clipboard DIRECTLY (navigator.clipboard.read),
+// bypassing the paste event's DataTransfer entirely — the Slack approach. Every
+// synthesizable clipboard shape attaches via the paste event on this machine's
+// Chrome 151, yet a real-world paste still degraded to filename text, so some
+// source (clipboard manager, remote/universal clipboard, extension) delivers a
+// shape the event never surfaces. This reads the actual clipboard image.
+// Chrome prompts for read permission the first time (per-site); denial or an
+// unavailable API rejects/throws — callers surface the fallback error.
+export async function tryClipboardReadImage(): Promise<File | null> {
+  if (typeof navigator === 'undefined' || !navigator.clipboard?.read) return null
+  try {
+    const items = await navigator.clipboard.read()
+    for (const item of items) {
+      const type = item.types.find((t) => t.startsWith('image/'))
+      if (!type) continue
+      const blob = await item.getType(type)
+      const ext = EXT_OF[type] ?? 'png'
+      return new File([blob], `pasted-image.${ext}`, { type })
+    }
+    return null
+  } catch {
+    // Permission denied / not allowed in this context / no clipboard data.
+    return null
+  }
+}
