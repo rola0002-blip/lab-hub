@@ -59,3 +59,6 @@ data/
 
 # SDD per-plan workspaces (scratch — briefs, reports, review packages)
 .sdd/
+
+# local installer smoke-test installs
+.smoke-labhub/
