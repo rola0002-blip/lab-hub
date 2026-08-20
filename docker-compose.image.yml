@@ -1,7 +1,10 @@
 # Dogfood override: layer on docker-compose.yml to run the published image
 # instead of building locally, reusing the existing labhub_* volumes.
 #   LABHUB_VERSION=vX.Y.Z docker compose -f docker-compose.yml \
-#     -f docker-compose.image.yml --profile prod up -d --no-build --pull always
+#     -f docker-compose.image.yml --profile prod up -d --pull always
+# `!reset null` removes the base build: key (Compose ≥ v2.24) so the merged
+# config is image-only — no accidental local builds even without --no-build.
 services:
   app:
     image: ghcr.io/rola0002-blip/lab-hub:${LABHUB_VERSION:-latest}
+    build: !reset null
