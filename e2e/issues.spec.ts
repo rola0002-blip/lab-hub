@@ -475,3 +475,84 @@ test('project labels: create on the project page, apply via the properties menu,
   await page.getByLabel('Label', { exact: true }).selectOption(procurement.id)
   await expect(page.getByText('Procure boron source')).toHaveCount(0)
 })
+
+// Wave-8 (feedback cmt13v3ca): labels assignable at creation, in the +New issue
+// composer itself — the picker mirrors the properties panel (scope filter on
+// the selected project, toggles, quick-create), the backend has taken labelIds
+// since v0.16. Covers: select-and-create (global + scoped), the project-switch
+// honesty filter, and quick-create auto-select.
+test('composer labels: assign at creation, scope filter on project switch, quick-create', async ({ page }) => {
+  test.setTimeout(150_000)
+  await runWizard(page)
+  await signIn(page, ADMIN.email, ADMIN.password)
+
+  // Seed two projects and labels of both scopes (the F5 test's seeding shape).
+  await page.goto('/projects')
+  await page.getByRole('button', { name: 'New project' }).click()
+  await page.getByLabel('Name').fill('W8 Alpha')
+  await page.getByRole('button', { name: 'Create project' }).click()
+  await page.waitForURL(/\/projects\/[^/]+$/)
+  const alpha = await db.project.findFirstOrThrow({ where: { name: 'W8 Alpha' } })
+  await db.project.create({ data: { name: 'W8 Beta', rank: 'zz' } })
+  await db.label.create({ data: { name: 'triage', color: '--status-done' } }) // workspace-global
+  await db.label.create({ data: { name: 'alpha-only', color: '--status-info', projectId: alpha.id } })
+
+  // (a) Create with labels: select the global + the scoped label (project picked
+  // FIRST so the scoped label is pickable), then create.
+  await page.goto('/issues')
+  await page.getByRole('button', { name: 'New issue' }).first().click()
+  const composer = page.getByRole('dialog', { name: 'New issue' })
+  await composer.getByLabel('Issue title').fill('Labelled at birth')
+  await composer.getByRole('button', { name: 'Project' }).click()
+  await page.getByRole('menuitem', { name: 'W8 Alpha' }).click()
+  await composer.getByRole('button', { name: 'Labels' }).click()
+  await page.getByRole('menuitem', { name: 'triage', exact: true }).click()
+  // The Menu closes on pick (one selection per open, the properties-panel
+  // posture) — re-open for the second label.
+  await composer.getByRole('button', { name: 'Labels' }).click()
+  await page.getByRole('menuitem', { name: 'alpha-only', exact: true }).click()
+  // Close the labels menu by focusing elsewhere — a global Escape would also
+  // close the composer itself (the Modal's document-level listener).
+  await composer.getByLabel('Issue title').click()
+  await expect(composer.getByRole('button', { name: 'Labels' })).toContainText('triage')
+  await expect(composer.getByRole('button', { name: 'Labels' })).toContainText('alpha-only')
+  await composer.getByRole('button', { name: 'Create issue' }).click()
+  await page.waitForURL(/\/issues\/LAB-\d+$/)
+  // The detail's properties panel carries both labels — they SAVED, not just showed.
+  await expect(page.getByRole('button', { name: 'Set labels' })).toContainText('triage')
+  await expect(page.getByRole('button', { name: 'Set labels' })).toContainText('alpha-only')
+
+  // (b) Project-switch honesty: a second issue picks the scoped label, then
+  // switches to Beta — the scoped chip drops (the save would drop it anyway),
+  // the global one stays.
+  await page.goto('/issues')
+  await page.getByRole('button', { name: 'New issue' }).first().click()
+  const composer2 = page.getByRole('dialog', { name: 'New issue' })
+  await composer2.getByLabel('Issue title').fill('Scope-drift issue')
+  await composer2.getByRole('button', { name: 'Project' }).click()
+  await page.getByRole('menuitem', { name: 'W8 Alpha' }).click()
+  await composer2.getByRole('button', { name: 'Labels' }).click()
+  await page.getByRole('menuitem', { name: 'alpha-only', exact: true }).click()
+  await composer2.getByRole('button', { name: 'Labels' }).click()
+  await page.getByRole('menuitem', { name: 'triage', exact: true }).click()
+  await composer2.getByLabel('Issue title').click() // close the labels menu (no global Escape)
+  await composer2.getByRole('button', { name: 'Project' }).click()
+  await page.getByRole('menuitem', { name: 'W8 Beta' }).click()
+  await expect(composer2.getByRole('button', { name: 'Labels' })).toContainText('triage')
+  await expect(composer2.getByRole('button', { name: 'Labels' })).not.toContainText('alpha-only')
+
+  // (c) Quick-create from the composer: mints a BETA-scoped label (the current
+  // project), auto-selects it, and the created issue carries it.
+  await composer2.getByRole('button', { name: 'Labels' }).click()
+  await page.getByRole('menuitem', { name: 'New label…' }).click()
+  const quick = page.getByRole('dialog', { name: 'New label' })
+  await expect(quick.getByText('Creates in the W8 Beta scope.')).toBeVisible()
+  await quick.getByLabel('Label name').fill('beta-minted')
+  await quick.getByRole('button', { name: 'Create label' }).click()
+  await expect(quick).toHaveCount(0)
+  await expect(composer2.getByRole('button', { name: 'Labels' })).toContainText('beta-minted')
+  await composer2.getByRole('button', { name: 'Create issue' }).click()
+  await page.waitForURL(/\/issues\/LAB-\d+$/)
+  await expect(page.getByRole('button', { name: 'Set labels' })).toContainText('triage')
+  await expect(page.getByRole('button', { name: 'Set labels' })).toContainText('beta-minted')
+})
