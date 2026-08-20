@@ -3,6 +3,7 @@ import { requireUser } from '@/lib/session'
 import { prisma } from '@/lib/db'
 import { totalUnread } from '@/features/chat/conversation-service'
 import { listProjectOptions } from '@/features/issues/project-service'
+import { listLabels } from '@/features/issues/issue-service'
 import { Sidebar } from '@/components/sidebar'
 import { APP_VERSION } from '@/lib/version'
 import Bell from '@/components/bell'
@@ -34,9 +35,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // (raised by the `c` shortcut, the ⌘K "Create issue" command, and any
   // "New issue" button); the modal itself gates opening for guests. The project
   // list is ONE source — the project-update composer reads the same array.
-  const [issueUsers, issueProjects] = await Promise.all([
+  // Labels (wave 8) feed the composer's Labels picker — same one-query posture
+  // at lab scale as the issue pages' listLabels().
+  const [issueUsers, issueProjects, issueLabels] = await Promise.all([
     prisma.user.findMany({ where: { banned: false, isSystem: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
     listProjectOptions(),
+    listLabels(),
   ])
 
   return (
@@ -87,7 +91,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </div>
       {/* Global create-issue composer + `c` shortcut — mounted once so any page
           (or the ⌘K palette) can raise the modal. Hotkey is role-gated. */}
-      <CreateIssueModal users={issueUsers} projects={issueProjects} currentUserId={user.id} />
+      <CreateIssueModal users={issueUsers} projects={issueProjects} labels={issueLabels} currentUserId={user.id} />
       {/* Global project-update composer — same one-source option list, so a chat
           message's "Post as project update" can raise it from any page. */}
       <ProjectUpdateModal projects={issueProjects} />

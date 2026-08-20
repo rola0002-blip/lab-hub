@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Labels can be assigned when creating an issue, not just afterwards. The "New issue" composer gains a Labels picker matching the issue page's: it offers workspace labels plus the chosen project's own, switching projects drops the labels that wouldn't survive the move, and "New label…" mints one on the spot in the selected project's scope (or the workspace's, if no project is chosen) and applies it immediately.
+
 ## [0.19.2] - 2026-08-20
 
 ### Fixed
