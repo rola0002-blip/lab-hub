@@ -20,6 +20,9 @@ describe('validateUpload', () => {
     expect(() => validateUpload('application/x-msdownload', 1024, 'chat')).toThrow('invalid_upload')
     expect(() => validateUpload('application/pdf', 1024)).toThrow('invalid_upload') // logo kind unchanged
   })
+  it('chat kind accepts the Chrome picker zip MIME and stores it as .zip (wave-7)', () => {
+    expect(validateUpload('application/x-zip-compressed', 24 * 1024 * 1024, 'chat')).toBe('.zip')
+  })
   it('project-updates kind rides DOC_KINDS: office allowlist + the 25 MB doc cap', () => {
     expect(() => validateUpload('application/pdf', 24 * 1024 * 1024, 'project-updates')).not.toThrow()
     expect(() => validateUpload('application/vnd.openxmlformats-officedocument.wordprocessingml.document', 1024, 'project-updates')).not.toThrow()
@@ -77,6 +80,16 @@ describe('saveUpload + readUpload', () => {
   it('returns null for an unknown extension and for a missing file', async () => {
     expect(await readUpload(['equipment', 'note.txt'])).toBeNull()
     expect(await readUpload(['logo', 'does-not-exist.png'])).toBeNull()
+  })
+
+  it('serves a .zip saved under the Chrome alias MIME as application/zip (first-match order)', async () => {
+    // 'application/zip' precedes 'application/x-zip-compressed' in CHAT_ALLOWED,
+    // so readUpload's extension→mime find is deterministic even with two zip keys.
+    const url = await saveUpload(new File([new Uint8Array([7, 7])], 'a.zip', { type: 'application/x-zip-compressed' }), 'chat')
+    const rel = url.replace('/uploads/', '').split('/')
+    expect(url.endsWith('.zip')).toBe(true)
+    const read = await readUpload(rel)
+    expect(read?.mime).toBe('application/zip')
   })
 
   it('removeUpload deletes a saved file and is a no-op on a missing one', async () => {

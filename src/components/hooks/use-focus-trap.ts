@@ -19,6 +19,11 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, active: boolean
       else if (!e.shiftKey && document.activeElement === lastEl) { e.preventDefault(); firstEl.focus() }
     }
     node.addEventListener('keydown', onKey)
-    return () => { node.removeEventListener('keydown', onKey); prev?.focus() }
+    // Restore only to a node still in the document: a row-scoped trigger can
+    // unmount while the trap is active (chat's optimistic temp is replaced by
+    // the server message); focusing a detached node is a silent no-op, so the
+    // guard just makes that explicit — focus then stays where the browser put
+    // it (body), never a dead reference.
+    return () => { node.removeEventListener('keydown', onKey); if (prev?.isConnected) prev.focus() }
   }, [ref, active])
 }

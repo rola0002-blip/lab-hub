@@ -9,7 +9,11 @@ Project management arrives in a later release on this same foundation.
 Built-in team chat. Channels (public or private) and direct messages, threaded
 replies, `@mentions` (and `@channel`), emoji reactions, and 25 MB file
 attachments — dragging files onto the message pane and pasting screenshots
-both attach. Members and admins can pin messages; a "Pinned (n)" button in
+both attach, from anywhere in the pane (focus on a message row included).
+Images sent in chat render inline and open full-size in a viewer when clicked.
+Zip archives attach in every browser, Chrome included (whose file picker
+labels them `application/x-zip-compressed`). Members and admins can pin
+messages; a "Pinned (n)" button in
 the conversation header lists them with deep links to each one, and guests
 see the list but cannot pin. Conversations can be favorited — a star that
 floats them to the top of their section in the sidebar. The composer grows

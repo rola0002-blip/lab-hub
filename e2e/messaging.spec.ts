@@ -622,3 +622,133 @@ test('14: unread messages bell the tab title "(N)"; opening the channel restores
   await pageB.context().close()
   await page.context().close()
 })
+
+// Wave-7 (feedback cmt0zfclu / cmt0zijpf): paste-anywhere images + the image
+// lightbox + the Chrome picker zip MIME. Paste, like the F1 drag above, cannot
+// be synthesized as a real OS clipboard action — build the DataTransfer in page
+// context and dispatch a ClipboardEvent. On the composer textarea it exercises
+// the composer's own onPaste; on a message ROW it exercises the pane-level
+// forwarding added in wave-7 (focus lives on the row via the roving tabIndex,
+// and the event bubbles to [data-chat-pane]).
+const PNG_BODY = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
+
+function dispatchPaste(page: Page, target: 'textarea' | 'row', file: { name: string; type: string; body: Buffer }) {
+  return page.evaluate(({ target, file }) => {
+    const dt = new DataTransfer()
+    const bytes = Uint8Array.from(atob(file.body), (c) => c.charCodeAt(0))
+    dt.items.add(new File([bytes], file.name, { type: file.type }))
+    const el = target === 'textarea'
+      ? document.querySelector('textarea[aria-label="Write a message"]')!
+      : document.querySelector('[data-msg-id]')!
+    el.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt }))
+  }, { target, file: { name: file.name, type: file.type, body: file.body.toString('base64') } })
+}
+
+test('15: paste an image into the composer, send, then view it full-size in the lightbox', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  await createChannel(page, 'lab')
+
+  // Paste lands in the shared validated intake: a pending chip with the filename.
+  await page.getByPlaceholder('Write a message…').click()
+  await dispatchPaste(page, 'textarea', { name: 'pasted-figure.png', type: 'image/png', body: PNG_BODY })
+  await expect(page.getByText('pasted-figure.png')).toBeVisible()
+
+  // Send and let the optimistic temp settle into the real message row before
+  // clicking (the remount leg below exercises the racy window deliberately).
+  await send(page, 'figure from the clipboard')
+  await expect(page.locator('[data-msg-id]:not([data-msg-id^="tmp-"])', { hasText: 'figure from the clipboard' })).toBeVisible()
+  const viewBtn = page.getByRole('button', { name: 'View image: pasted-figure.png' })
+  await expect(viewBtn).toBeVisible()
+
+  // Click → the lightbox dialog opens with the image at full size.
+  await viewBtn.click()
+  const dialog = page.getByRole('dialog', { name: 'pasted-figure.png' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('img', { name: 'pasted-figure.png' })).toBeVisible()
+
+  // Escape closes it and focus returns to the trigger (useFocusTrap restore).
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  await expect(viewBtn).toBeFocused()
+
+  await page.context().close()
+})
+
+// Wave-7 regression: the viewer lives in an EXTERNAL store (image-viewer-store)
+// precisely because the timeline row REMOUNTS when the optimistic temp
+// (data-msg-id="tmp-…") is replaced by the server message — a per-row lightbox
+// closed itself the instant the real row landed. Hold the POST response until
+// after the dialog opens to make that window deterministic.
+test('16: the lightbox survives the optimistic-temp row being replaced mid-view', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  await createChannel(page, 'lab')
+
+  let release!: () => void
+  const held = new Promise<void>((r) => { release = r })
+  await page.route('**/api/chat/messages', async (route) => {
+    if (route.request().method() === 'POST') { await held; }
+    await route.continue()
+  })
+
+  await page.getByPlaceholder('Write a message…').click()
+  await dispatchPaste(page, 'textarea', { name: 'temp-figure.png', type: 'image/png', body: PNG_BODY })
+  await expect(page.getByText('temp-figure.png')).toBeVisible()
+
+  // Send: the temp row (with its image) renders while the POST is held.
+  await send(page, 'race window open')
+  const tempBtn = page.getByRole('button', { name: 'View image: temp-figure.png' })
+  await expect(tempBtn).toBeVisible()
+  await expect(page.locator('[data-msg-id^="tmp-"]')).toHaveCount(1)
+
+  // Open the viewer ON the temp row, then let the real message replace it.
+  await tempBtn.click()
+  const dialog = page.getByRole('dialog', { name: 'temp-figure.png' })
+  await expect(dialog).toBeVisible()
+  release()
+  await expect(page.locator('[data-msg-id]:not([data-msg-id^="tmp-"])', { hasText: 'race window open' })).toBeVisible()
+
+  // The dialog is STILL open — the store outlived the row remount.
+  await expect(dialog).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+
+  await page.context().close()
+})
+
+test('17: pasting with focus on a message row attaches via the pane (Slack-style)', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  await createChannel(page, 'lab')
+
+  // One message in the log; click its row to park focus there (roving tabIndex).
+  await send(page, 'focus lands on this row')
+  await expect(logMsg(page, 'focus lands on this row')).toBeVisible()
+  await page.locator('[data-msg-id]').first().click()
+
+  // A clipboard paste with FILES on the row bubbles to the pane handler, which
+  // forwards it into the composer intake — no textarea focus required.
+  await dispatchPaste(page, 'row', { name: 'row-paste.png', type: 'image/png', body: PNG_BODY })
+  await expect(page.getByText('row-paste.png')).toBeVisible()
+
+  await page.context().close()
+})
+
+test('18: attach a zip with the Chrome picker MIME (application/x-zip-compressed)', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  await createChannel(page, 'lab')
+
+  // Chromium's file picker types .zip as application/x-zip-compressed — the
+  // wave-7 bug: both gates rejected it, so Chrome users could not attach zips.
+  const ZIP = Buffer.from('PK\x03\x04wave-7-zip-payload')
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'dataset.zip', mimeType: 'application/x-zip-compressed', buffer: ZIP })
+  await expect(page.getByText('dataset.zip')).toBeVisible()
+
+  // Send: the timeline renders the download chip (non-image attachment).
+  await send(page, 'zip inbound')
+  await expect(page.getByRole('link', { name: /dataset\.zip/ })).toBeVisible()
+
+  await page.context().close()
+})
