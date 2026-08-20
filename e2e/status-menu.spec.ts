@@ -12,8 +12,6 @@ import { wipe, runWizard, signIn, ADMIN } from './helpers'
 // clipped popover reports a negative x and fails Playwright actionability). Detail +
 // create-modal status menus were never clipped and stay covered by issues.spec.ts.
 
-const DIR = '/private/tmp/claude-501/-Users-roland/3031bedc-03e3-46c7-9ffc-be261f3c6dc0/scratchpad/fix-repro'
-const TAG = process.env.REPRO_TAG ?? 'after'
 const PHONE = { width: 375, height: 812 }
 
 // Per-context client IP so better-auth's per-IP sign-in limit never trips across this
@@ -33,12 +31,11 @@ async function seed(page: Page, n: number, status: string) {
 }
 
 // The open status popover must sit fully inside the viewport — the bug pushed it to x<0.
-async function expectMenuOnScreen(page: Page, shot: string) {
+async function expectMenuOnScreen(page: Page) {
   const menu = page.getByRole('menu')
   await expect(menu).toBeVisible()
   const vp = page.viewportSize()!
   const box = (await menu.boundingBox())!
-  await page.screenshot({ path: `${DIR}/${shot}-${TAG}.png` })
   expect(box.x).toBeGreaterThanOrEqual(0)
   expect(box.x + box.width).toBeLessThanOrEqual(vp.width + 1)
   expect(box.y).toBeGreaterThanOrEqual(0)
@@ -58,7 +55,7 @@ test('list-row status menu is not clipped off-screen at phone width', async ({ b
   await page.goto('/issues')
   // First list row's status chip (the leftmost interactive cluster — worst case).
   await page.getByRole('button', { name: /^Status: / }).first().click()
-  await expectMenuOnScreen(page, 'fix2-list-375')
+  await expectMenuOnScreen(page)
   // Clickable (Playwright actionability fails on a clipped/occluded target) → the
   // status is applied and the row re-groups under the new status.
   await page.getByRole('menuitem', { name: 'In Progress' }).click()
@@ -77,7 +74,7 @@ test('board-card status menu is not clipped off-screen at phone width', async ({
   await page.goto('/issues')
   await page.getByRole('button', { name: 'Board' }).click()
   await page.getByRole('button', { name: /^Status: / }).first().click()
-  await expectMenuOnScreen(page, 'fix2-board-375')
+  await expectMenuOnScreen(page)
   // Selecting an item proves it is reachable (not clipped).
   await page.getByRole('menuitem', { name: 'In Progress' }).click()
   await expect(page.getByRole('menu')).toBeHidden()

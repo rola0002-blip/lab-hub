@@ -7,7 +7,11 @@ const TEST_DB = process.env.TEST_DATABASE_URL ?? 'postgresql://labhub:labhub@loc
 
 export default defineConfig({
   testDir: './e2e',
-  timeout: 60_000,
+  timeout: Number(process.env.E2E_TEST_TIMEOUT_MS ?? 60_000),
+  // Env-overridable expect budget (CI sets E2E_EXPECT_TIMEOUT_MS): ubuntu-latest's
+  // 2-core dev-mode runner can take >5s to round-trip a mutation and re-render, so
+  // the first CI run failed three specs at the 5s default.
+  expect: { timeout: Number(process.env.E2E_EXPECT_TIMEOUT_MS ?? 5_000) },
   workers: 1, // journeys share one database
   use: { baseURL: 'http://localhost:3100' },
   webServer: {
