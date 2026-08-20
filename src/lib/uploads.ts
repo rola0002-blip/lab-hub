@@ -17,6 +17,12 @@ export const CHAT_ALLOWED: Record<string, string> = {
   'text/plain': '.txt',
   'text/csv': '.csv',
   'application/zip': '.zip',
+  // Wave-7: Chromium's file picker types .zip as 'application/x-zip-compressed'
+  // (net/base/mime_util.cc), Firefox/Safari as 'application/zip' — both must pass
+  // or Chrome users cannot attach zips at all. MUST stay AFTER 'application/zip':
+  // readUpload resolves extension→mime with a first-match find, so this ordering
+  // keeps serving .zip deterministically as 'application/zip'.
+  'application/x-zip-compressed': '.zip',
 }
 const IMAGE_MAX = 2 * 1024 * 1024
 export const CHAT_MAX = 25 * 1024 * 1024

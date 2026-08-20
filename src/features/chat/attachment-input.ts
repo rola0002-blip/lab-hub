@@ -8,6 +8,9 @@ export const CHAT_MIMES = new Set([
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'text/plain', 'text/csv', 'application/zip',
+  // Wave-7: Chrome's picker MIME for .zip — mirrors the CHAT_ALLOWED alias in
+  // uploads.ts (the drift test below enforces the key sets stay in sync).
+  'application/x-zip-compressed',
 ])
 // Must equal CHAT_MAX in src/lib/uploads.ts — the drift test enforces the sync.
 export const CHAT_MAX_SIZE = 25 * 1024 * 1024

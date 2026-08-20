@@ -12,6 +12,7 @@ import { openProjectUpdateComposer } from '@/lib/project-update-composer-store'
 import { toast } from '@/lib/toast-store'
 import { useChat } from './chat-store'
 import { EmojiPicker } from './emoji-picker'
+import { openImageViewer } from '@/lib/image-viewer-store'
 import { renderTokens, type Names } from './render-tokens'
 import { useIssueRefs } from './issue-ref-store'
 
@@ -328,8 +329,18 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
           {!msg.deleted && !editing && msg.attachments.map((a) => (
             a.mime.startsWith('image/')
               ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={a.id} src={a.path} alt={a.name} className="mt-1 max-h-64 rounded-lg border border-border" />
+                // Wave-7: the thumbnail raises the global full-size viewer
+                // (image-viewer-store) — the timeline cap (max-h-64) is for
+                // density; the dialog is where the content is actually viewable.
+                // A store, not row state: rows remount when the optimistic temp
+                // is replaced by the server message, which closed a just-opened
+                // lightbox mid-view. Button chrome reset so only the image shows.
+                <button key={a.id} type="button" onClick={() => openImageViewer({ name: a.name, path: a.path })}
+                  aria-label={`View image: ${a.name}`}
+                  className="mt-1 block cursor-zoom-in rounded-lg border-0 bg-transparent p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={a.path} alt={a.name} className="max-h-64 rounded-lg border border-border" />
+                </button>
               ) : (
                 <a key={a.id} href={a.path} target="_blank" rel="noreferrer" download={a.name}
                   className="mt-1 flex w-fit items-center gap-2 rounded-md border border-border px-2 py-1 text-xs text-muted hover:bg-hover">

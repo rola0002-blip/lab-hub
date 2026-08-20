@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-08-20
+
+### Fixed
+- Zip files can be attached in chat from Chrome. Chromium's file picker labels a `.zip` as `application/x-zip-compressed`, which both the client and server attachment gates rejected — Firefox and Safari users could send archives, Chrome users got "file type not allowed". Both gates now accept the Chrome MIME alongside `application/zip` (the Files library and issue/project-update attachments share the same allowlist, so they gain the fix too).
+
+### Added
+- Images pasted into chat work the Slack way, from anywhere in the pane. A paste carrying files used to attach only when the composer textarea itself held focus — after clicking a message, Cmd+V silently did nothing. Now any file paste on the message pane routes into the same validated intake the composer uses.
+- Images sent in chat can be viewed full-size: clicking the inline thumbnail opens a viewer with the image at natural size (viewport-capped), closed by Escape or clicking the backdrop. The viewer is driven by a global store, so it stays open even while the just-sent message settles from its optimistic placeholder into the delivered row.
+
 ## [0.18.0] - 2026-08-19
 
 ### Fixed

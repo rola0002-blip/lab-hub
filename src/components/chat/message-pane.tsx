@@ -450,6 +450,21 @@ export default function MessagePane({ conversationId, conversationType, channelN
           if (!e.dataTransfer.files.length) return
           e.preventDefault()
           composerRef.current?.acceptFiles(Array.from(e.dataTransfer.files))
+        }}
+        onPaste={(e) => {
+          // Wave-7: Slack-style paste-anywhere — a paste carrying FILES with focus
+          // on anything but an editable (a message row via the roving focus, the
+          // log surface) routes into the composer's shared validated intake. The
+          // composer's own textarea handler stays the sole path for editables
+          // (this guard is what prevents a double attach), and text-only pastes
+          // are untouched. Archived conversations match the drop posture: no-op.
+          if (archived) return
+          const files = e.clipboardData?.files
+          if (!files?.length) return
+          const t = e.target as HTMLElement
+          if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable) return
+          e.preventDefault()
+          composerRef.current?.acceptFiles(Array.from(files))
         }}>
         {dragOver && !archived && (
           <div className="pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-xl border-2 border-dashed border-[var(--border-focus)] bg-hover/90 text-sm font-medium text-default" role="status">

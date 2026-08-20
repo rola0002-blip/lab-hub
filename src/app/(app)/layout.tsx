@@ -12,6 +12,7 @@ import { ChatProvider } from '@/components/chat/chat-store'
 import { CommandPalette } from '@/components/command-palette'
 import { CreateIssueModal } from '@/components/issues/create-issue-modal'
 import { FeedbackDialog } from '@/components/feedback-dialog'
+import { ImageViewerDialog } from '@/components/chat/image-viewer-dialog'
 import { ProjectUpdateModal } from '@/components/issues/project-update-modal'
 import { IssueHotkeys } from '@/components/issues/issue-hotkeys'
 import { ChatTitleBadge } from '@/components/chat-title-badge'
@@ -93,6 +94,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {/* Global "Give feedback" dialog — raised from the sidebar footer or the ⌘K
           palette on any page. Deliberately NOT role-gated: guests submit too. */}
       <FeedbackDialog version={APP_VERSION} />
+      {/* Global chat-image viewer (wave-7) — raised by any message row's
+          "View image" affordance; state is external (image-viewer-store) so the
+          dialog survives the optimistic-temp → server-message row remount. */}
+      <ImageViewerDialog />
       <IssueHotkeys role={user.role} />
       {/* Unread-chats "(N)" tab title — mounted once in the app shell (inside
           ChatProvider); same live derivation as the sidebar Chat badge. */}
