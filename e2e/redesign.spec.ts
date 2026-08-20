@@ -160,10 +160,13 @@ test('grouped message body fills the content column, not the 36px avatar gutter 
   await createChannel(page, 'grouping')
   const box = page.getByPlaceholder('Write a message…')
 
-  // Leading message (has the avatar in column 1).
+  // Leading message (has the avatar in column 1). Scope to the log: an unscoped
+  // getByText also matches the composer textarea's own content during the
+  // optimistic-append → POST-confirm window (cleared only after the 201).
+  const log = page.getByLabel('Messages', { exact: true })
   await box.fill('first message in the run')
   await box.press('Enter')
-  await expect(page.getByText('first message in the run')).toBeVisible()
+  await expect(log.getByText('first message in the run')).toBeVisible()
   await expect(box).toHaveValue('')
 
   // Second message from the SAME author within 5 min → renders GROUPED: no avatar,
