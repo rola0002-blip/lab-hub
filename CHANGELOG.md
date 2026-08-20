@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Pasting a screenshot into chat now falls back to reading the clipboard directly when the paste event arrives without usable image data — the approach Slack uses — so a paste that would have degraded to the literal "image.png" text attaches the image instead. When even the direct read finds nothing readable, the junk filename insert is blocked and a message points at the attach button. Chrome may ask once for permission to read the clipboard image ("see what you copy"); allowing it makes the fallback instant.
+
 ## [0.19.1] - 2026-08-20
 
 ### Fixed

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractClipboardFiles, EXT_MIME } from './clipboard-files'
+import { extractClipboardFiles, EXT_MIME, looksLikeSynthesizedFilename } from './clipboard-files'
 import { CHAT_MIMES } from './attachment-input'
 
 const file = (name: string, type: string) => new File([new Uint8Array([1, 2, 3])], name, { type })
@@ -66,5 +66,19 @@ describe('extractClipboardFiles', () => {
   it('returns [] for text-only pastes and null clipboard data', () => {
     expect(extractClipboardFiles(fakeDt({ items: [{ kind: 'string', getAsFile: () => null }] }))).toEqual([])
     expect(extractClipboardFiles(null)).toEqual([])
+  })
+})
+
+describe('looksLikeSynthesizedFilename', () => {
+  it('matches Chromium synthesized image filenames', () => {
+    for (const s of ['image.png', 'image.PNG', 'image (1).png', 'image (12).jpg', 'screenshot.png',
+      'screen shot.png', 'screen shot.jpeg', 'pasted image.png', 'Pasted-Image.webp', 'pastedimage.gif', 'image.tiff']) {
+      expect(looksLikeSynthesizedFilename(s), s).toBe(true)
+    }
+  })
+  it('does not match ordinary text a user might legitimately paste', () => {
+    for (const s of ['', 'image.png is attached', 'see image.png below', 'the PNG file', 'imaging.png', 'my-screenshot.png notes', 'plain sentence']) {
+      expect(looksLikeSynthesizedFilename(s), s).toBe(false)
+    }
   })
 })

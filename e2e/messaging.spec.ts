@@ -784,3 +784,47 @@ test('19: paste an image copied from a web page (html data-URL flavor) — attac
 
   await page.context().close()
 })
+
+// Wave-7.2 (unreproducible degrade): every synthesizable clipboard shape
+// attaches via the paste event, yet a real-world paste still degraded to the
+// literal "image.png" text. The escalation: a paste that yields NO file but
+// CLAIMS a Files flavor or carries ONLY synthesized-filename text is killed
+// (the default insert IS that junk) and escalated to a direct clipboard.read().
+// This pins the filename-only shape: no junk text lands, and the fallback error
+// shows (headless Chromium denies clipboard-read → deterministic error branch).
+test('20: filename-only paste never types junk; escalates and surfaces feedback', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  await createChannel(page, 'lab')
+
+  const box = page.getByPlaceholder('Write a message…')
+  await box.click()
+  await page.evaluate(() => {
+    const dt = new DataTransfer()
+    dt.setData('text/plain', 'image.png')
+    document.querySelector('textarea[aria-label="Write a message"]')!.dispatchEvent(
+      new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt }))
+  })
+
+  // The junk insert is dead: the textarea stays empty…
+  await expect(box).toHaveValue('')
+  // …and the escalation resolved to the honest fallback (clipboard-read is
+  // unavailable in this context), shown inline in the composer.
+  await expect(page.getByText(/Couldn't read the image from your clipboard/)).toBeVisible()
+
+  // A NORMAL text paste is still untouched: no escalation fires. NB a
+  // synthetic (untrusted) paste performs no default insert, so the proof is
+  // behavioral — the already-shown error is neither duplicated nor replaced,
+  // and no attachment chip appears. NB the error from leg 1 stays (inline
+  // errors clear on the next attach/send, not on plain pastes) — count stays 1.
+  await page.evaluate(() => {
+    const dt = new DataTransfer()
+    dt.setData('text/plain', 'image.png is attached, see below')
+    document.querySelector('textarea[aria-label="Write a message"]')!.dispatchEvent(
+      new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt }))
+  })
+  await page.waitForTimeout(300)
+  await expect(page.getByText(/Couldn't read the image from your clipboard/)).toHaveCount(1)
+
+  await page.context().close()
+})
