@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extractReleaseNotes } from '../../scripts/release-notes.mjs'
+import { extractReleaseNotes, normalizeVersion } from '../../scripts/release-notes.mjs'
 
 const CHANGELOG = `# Changelog
 
@@ -31,5 +31,12 @@ describe('extractReleaseNotes', () => {
 
   it('returns null for the Unreleased section (not a release)', () => {
     expect(extractReleaseNotes(CHANGELOG, 'Unreleased')).toBeNull()
+  })
+})
+
+describe('normalizeVersion', () => {
+  it('strips one leading v from tag names', () => {
+    expect(normalizeVersion('v0.20.0')).toBe('0.20.0')
+    expect(normalizeVersion('0.20.0')).toBe('0.20.0')
   })
 })

@@ -4,6 +4,11 @@
 // Exits 1 with a stderr message when the version has no dated section.
 import { readFileSync } from 'node:fs'
 
+/** Map a git tag name (v0.20.0) to the bare version the CHANGELOG headings use (0.20.0). */
+export function normalizeVersion(version) {
+  return version.replace(/^v/, '')
+}
+
 /** Return the body of CHANGELOG's `## [<version>] - <date>` section, or null. */
 export function extractReleaseNotes(changelog, version) {
   const lines = changelog.split('\n')
@@ -17,7 +22,7 @@ export function extractReleaseNotes(changelog, version) {
 }
 
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop())) {
-  const version = process.argv[2]
+  const version = normalizeVersion(process.argv[2])
   if (!version) {
     console.error('usage: node scripts/release-notes.mjs <version>')
     process.exit(2)
