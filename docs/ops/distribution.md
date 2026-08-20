@@ -54,11 +54,15 @@ docker run --rm -i -v labhub_uploads:/data alpine \
 ## Maintainer: cutting a release
 
 1. `npm run release -- patch|minor|major` — bumps version, changelog, tag (never pushes).
-2. Push branch → PR → merge; then `git push origin main --follow-tags`.
-3. `release.yml` publishes the multi-arch image (`vX.Y.Z` + `latest`) and
-   creates the GitHub Release with the changelog section as notes.
+2. Push branch → PR → merge; then confirm the repo and the GHCR package are
+   PUBLIC (see docs/ops/public-flip.md) — the installer and the smoke
+   runners fetch anonymously, so the smoke can only go green post-flip.
+3. `git push origin main --follow-tags` — `release.yml` publishes the
+   multi-arch image (`vX.Y.Z` + `latest`) and creates the GitHub Release
+   with the changelog section as notes.
 4. `installer-smoke.yml` installs from scratch on clean runners and asserts
-   `/api/health` — green smoke = release good.
+   `/api/health` — green smoke = release good. (If it was red from the
+   pre-flip anonymity gap, re-run it via workflow_dispatch once public.)
 
 ## Maintainer: dogfooding the image (this repo's own deployment)
 

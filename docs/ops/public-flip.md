@@ -24,10 +24,15 @@ Audit-driven procedure for flipping rola0002-blip/lab-hub to public.
 
 ## Personal-detail sweep (manual, before flipping)
 
-- [ ] `docs/ops/*.md` reviewed for hostnames, IPs, room numbers, personal
-      laptop details you do not want public (edit or generalize).
+- [ ] `docs/ops/*.md` AND `docs/superpowers/**` reviewed for hostnames, IPs,
+      room numbers, personal laptop details you do not want public (edit or
+      generalize). specs/plans are internal dev narratives — review, and
+      either accept publishing or move them out of the repo before flipping.
 - [ ] `git log --format='%ae %ce' | sort -u` committer emails reviewed —
       confirm they are the ones you intend to publish.
+- [ ] DECISION: docs/superpowers/** contains internal dev narratives (specs,
+      plans, wave notes). Reviewed for sensitive detail AND a conscious
+      keep-public vs move-private decision made and recorded here.
 
 ## Flip
 

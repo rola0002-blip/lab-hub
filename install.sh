@@ -11,8 +11,6 @@ if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi
 # Documented target of the published image; not otherwise referenced yet.
 # shellcheck disable=SC2034
 IMAGE_REPO="ghcr.io/rola0002-blip/lab-hub"
-COMPOSE_URL="https://raw.githubusercontent.com/rola0002-blip/lab-hub/main/docker-compose.dist.yml"
-WRAPPER_URL="https://raw.githubusercontent.com/rola0002-blip/lab-hub/main/templates/labhub-wrapper.sh"
 LABHUB_DIR="${LABHUB_DIR:-$HOME/labhub}"
 LABHUB_VERSION="${LABHUB_VERSION:-latest}"
 APP_URL=""
@@ -33,7 +31,7 @@ usage: install.sh [--url <app-url>] [--tunnel-token <tok>] [--dir <path>]
   --tunnel-token  Cloudflare Tunnel connector token (optional; enables the
                   tunnel profile for public HTTPS access)
   --dir           Install directory (default: ~/labhub)
-  --version       Image tag to pin (default: latest)
+  --version       Image tag to pin, v-prefixed or bare (default: latest)
   --port          Loopback port for the app (default: 3000; must match --url port if nonstandard)
   DB_PORT (env)   Host loopback port for Postgres (default 5432) — set when
                   5432 is taken, e.g. DB_PORT=5433 sh install.sh ...
@@ -54,6 +52,18 @@ while [ $# -gt 0 ]; do
     *) echo "unknown option: $1" >&2; usage ;;
   esac
 done
+
+# Fetch compose/wrapper from the tag when a version is pinned (no skew with
+# the image); from main for 'latest'. GHCR tags are vX.Y.Z — normalize a bare
+# x.y.z so `--version 0.21.0` doesn't try to pull a nonexistent tag.
+FETCH_REF="main"
+case "$LABHUB_VERSION" in
+  latest) : ;;
+  v*) FETCH_REF="$LABHUB_VERSION" ;;
+  *) LABHUB_VERSION="v$LABHUB_VERSION"; FETCH_REF="$LABHUB_VERSION" ;;
+esac
+COMPOSE_URL="https://raw.githubusercontent.com/rola0002-blip/lab-hub/${FETCH_REF}/docker-compose.dist.yml"
+WRAPPER_URL="https://raw.githubusercontent.com/rola0002-blip/lab-hub/${FETCH_REF}/templates/labhub-wrapper.sh"
 
 command -v docker >/dev/null 2>&1 \
   || fail "Docker is not installed. Install it from https://docs.docker.com/get-docker/ then re-run."
@@ -105,9 +115,26 @@ if [ -f "$LABHUB_DIR/.env" ]; then  # --force path
 fi
 
 # --- Secrets -----------------------------------------------------------------
+# Carry forward POSTGRES_PASSWORD and TUNNEL_TOKEN from an existing .env (the
+# --force path): the db-data volume keeps whatever password created it, and
+# re-minting would break auth; the tunnel token is infrastructure the operator
+# set up once and would not want silently dropped.
+OLD_ENV="$LABHUB_DIR/.env"
+carry_forward() { # $1 = var name; prints value from OLD_ENV if non-empty
+  [ -f "$OLD_ENV" ] || return 1
+  val="$(grep -E "^$1=" "$OLD_ENV" | tail -1 | cut -d= -f2-)"
+  [ -n "$val" ] && printf '%s' "$val"
+}
 note "Minting secrets (openssl) ..."
 SECRET="$(openssl rand -hex 32)"
-PGPASS="$(openssl rand -hex 24)"
+if PGPASS="$(carry_forward POSTGRES_PASSWORD)"; then
+  echo "==> Keeping existing POSTGRES_PASSWORD (database volume retains it)"
+else
+  PGPASS="$(openssl rand -hex 24)"
+fi
+if TUNNEL_TOKEN="$(carry_forward TUNNEL_TOKEN)"; then
+  echo "==> Keeping existing TUNNEL_TOKEN"
+fi
 SETUP_TOKEN="$(openssl rand -hex 32)"
 
 note "Minting VAPID web-push keys (pulls node:22-alpine once) ..."

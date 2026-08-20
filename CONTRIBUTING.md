@@ -9,9 +9,10 @@ for its own members.
 Requirements: Node 22+, Docker, Docker Compose v2.
 
 ```
+cp .env.example .env        # first: env for prisma.config.ts + local dev
 docker compose up -d db     # local Postgres on 127.0.0.1:5432
 npm install
-cp .env.example .env        # then edit for local dev
+npx prisma generate         # Prisma 7 has no postinstall generate
 npm run dev
 ```
 
