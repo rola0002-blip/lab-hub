@@ -66,9 +66,12 @@ jobs:
       #              macos/LabHub.app.tar.gz{,.sig}
       #   Windows: desktop/src-tauri/target/release/bundle/nsis/
       #              LabHub_<version>_x64-setup.exe{,.sig}
+      # @tauri-apps/cli is a pinned root devDependency; --no-install
+      # guarantees the build uses exactly that version (fails loudly if
+      # npm ci somehow skipped it).
       - name: Build, bundle and sign updater artifacts
         shell: bash
-        run: npx --yes @tauri-apps/cli build ${{ matrix.args }}
+        run: npx --no-install tauri build ${{ matrix.args }}
       - name: Upload artifacts (macos)
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v4

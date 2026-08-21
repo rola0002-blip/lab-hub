@@ -23,10 +23,16 @@ externally. No file system, no arbitrary commands, no event spoofing.
 
 ## Auto-update
 
-The updater checks `latest.json` on the latest GitHub Release 30 s after
-launch and via the tray menu. Artifacts are minisign-signed; the public key
-is embedded in `desktop/src-tauri/tauri.conf.json`. macOS updates ship as
-`LabHub.app.tar.gz` (the .dmg is for humans); Windows as the NSIS installer.
+The app checks for updates in the background (30 s after launch); use the
+tray's Check for Updates to download, install, and restart. The manifest
+is `latest.json` on the latest GitHub Release. Artifacts are
+minisign-signed; the public key is embedded in
+`desktop/src-tauri/tauri.conf.json`. macOS updates ship as
+`LabHub.app.tar.gz` (the .dmg is for humans); Windows as the NSIS
+installer. The background check intentionally stops at "available" —
+installing unattended would force-quit the app on Windows (the NSIS
+installer restarts and exits the process), so acting on an update stays
+user-initiated.
 
 ### Maintainer: updater signing key
 

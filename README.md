@@ -36,7 +36,8 @@ the latest `.dmg` / `-setup.exe` from
 open it, and add your lab's URL. Sign in once per lab; the app remembers
 each workspace side by side (like a Slack workspace switcher), shows unread
 badges on the dock icon and sidebar, and sends native notifications for
-mentions and DMs. Updates install themselves.
+mentions and DMs. It checks for updates automatically; installing one is
+a click in the tray menu.
 
 - **macOS 14+**: first launch of an unsigned app — right-click the app →
   Open → Open (once), or run
