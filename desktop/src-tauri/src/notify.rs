@@ -27,7 +27,7 @@ use std::collections::VecDeque;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, Webview};
 use tauri_plugin_notification::NotificationExt;
 
 use crate::config::AppConfig;
@@ -149,14 +149,17 @@ pub fn truncate_chars(s: &str, max_chars: usize) -> String {
 }
 
 /// Remote-page -> native toast bridge, invoked by the notify shim
-/// (`desktop/ui/notify-shim.js`). `url` is the calling page's origin and
-/// only routes the click; it is never displayed.
+/// (`desktop/ui/notify-shim.js`). The calling webview is injected by
+/// Tauri, and its CURRENT url — never any caller-supplied value — is the
+/// only input trusted for click routing; a hostile page cannot name
+/// another server as its origin. If the webview url cannot be read,
+/// click routing is skipped (server `None`) but the toast still delivers.
 #[tauri::command]
 pub fn desktop_notify(
     app: AppHandle,
+    webview: Webview,
     title: String,
     body: String,
-    url: String,
 ) -> Result<(), String> {
     let state = app.state::<NotifyState>();
 
@@ -171,15 +174,22 @@ pub fn desktop_notify(
     let title = truncate_chars(&title, MAX_TEXT_CHARS);
     let body = truncate_chars(&body, MAX_TEXT_CHARS);
 
-    // Click routing: resolve the calling page's origin to a configured
-    // server. Foreign origins still notify, they just have no switch target.
-    let target = {
-        let config_state = app.state::<Mutex<AppConfig>>();
-        let config = config_state
-            .lock()
-            .map_err(|_| "Config state poisoned".to_string())?
-            .clone();
-        server_for_url(&config, &url)
+    // Click routing: resolve the calling webview's own origin to a
+    // configured server. Foreign origins still notify, they just have no
+    // switch target.
+    let target = match webview.url() {
+        Ok(url) => {
+            let config_state = app.state::<Mutex<AppConfig>>();
+            let config = config_state
+                .lock()
+                .map_err(|_| "Config state poisoned".to_string())?
+                .clone();
+            server_for_url(&config, url.as_str())
+        }
+        Err(e) => {
+            log::warn!("desktop_notify: webview url unreadable ({e}); click routing skipped");
+            None
+        }
     };
     state.set_pending_target(target.clone());
 

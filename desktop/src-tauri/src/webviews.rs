@@ -125,7 +125,11 @@ pub fn sync(app: &AppHandle) -> Result<(), String> {
         map.insert(server.id.clone(), wv.label().to_string());
     }
 
-    // Visibility: only the active server is shown.
+    // Visibility: only the active server is shown. resolve_active self-heals
+    // a None/unknown active_server to the first server (visibility only —
+    // the persisted config is left alone; the next explicit selection or
+    // add_server rewrites it).
+    let active = resolve_active(&config);
     for server in &config.servers {
         let Some(label) = map.get(&server.id) else {
             continue;
@@ -133,7 +137,7 @@ pub fn sync(app: &AppHandle) -> Result<(), String> {
         let Some(wv) = app.get_webview(label) else {
             continue;
         };
-        let is_active = config.active_server.as_deref() == Some(server.id.as_str());
+        let is_active = active.as_deref() == Some(server.id.as_str());
         if is_active {
             wv.show().map_err(|e| format!("show {label}: {e}"))?;
         } else {
@@ -198,14 +202,13 @@ fn create_content_webview(
     let nav_label = label.clone();
     let opener_app = app.clone();
 
-    #[allow(unused_mut)]
     let mut builder = WebviewBuilder::new(&label, WebviewUrl::External(url))
         .initialization_script(NOTIFY_SHIM)
         .on_navigation(move |nav| {
             let allowed = navigation_allowed(&nav_server, nav);
             if !allowed {
                 log::warn!(
-                    "blocked navigation in {nav_label}: {nav} (server {} allows only its own origin)",
+                    "blocked navigation in {nav_label}: {nav} (server {} allows only its own origin or an https upgrade of it)",
                     nav_server
                 );
             }
@@ -280,10 +283,11 @@ pub fn note_title(app: &AppHandle, server_id: &str, title: &str) {
 }
 
 /// Navigation guard for content webviews: allow the server's own origin
-/// (scheme+host+port), `about:blank` (wry's initial document), and
-/// tauri-internal endpoints; block everything else (OAuth popup farms,
-/// phishing redirects, ...). External opens still reach the user via the
-/// new-window handler / normal links targeting `_blank`.
+/// (scheme+host+port), an http→https upgrade of it, `about:blank` (wry's
+/// initial document), and tauri-internal endpoints; block everything else
+/// (OAuth popup farms, phishing redirects, ...). External opens still
+/// reach the user via the new-window handler / normal links targeting
+/// `_blank`.
 fn navigation_allowed(server: &Url, nav: &Url) -> bool {
     if nav.as_str() == "about:blank" {
         return true;
@@ -294,7 +298,34 @@ fn navigation_allowed(server: &Url, nav: &Url) -> bool {
     if nav.host_str() == Some("ipc.localhost") {
         return true;
     }
-    same_origin(server, nav)
+    same_origin(server, nav) || is_scheme_upgrade(server, nav)
+}
+
+/// http→https upgrade of the SAME host+port: a server configured over
+/// plain http commonly 301s its first visit to the https form (TLS-
+/// terminating proxy), and blocking that would strand the webview on an
+/// error page. Only the upgrade direction is allowed — https→http is
+/// always a downgrade — and the host and explicit port must be unchanged,
+/// so an "upgrade" cannot smuggle the navigation to a different endpoint.
+/// Implicit ports (`http://h` → `https://h`) upgrade too: no explicit port
+/// is stated on either side, only the scheme default differs.
+fn is_scheme_upgrade(server: &Url, nav: &Url) -> bool {
+    server.scheme() == "http"
+        && nav.scheme() == "https"
+        && server.host_str() == nav.host_str()
+        && server.port() == nav.port()
+}
+
+/// Which server's webview should be VISIBLE: the configured active server
+/// when it still exists, else the first server. Pure so the fallback is
+/// unit-testable; `sync` uses it so a stale/missing `active_server`
+/// (hand-edited config, legacy file) can never leave every content webview
+/// hidden behind a blank content area.
+fn resolve_active(config: &AppConfig) -> Option<String> {
+    match config.active_server.as_deref() {
+        Some(id) if config.servers.iter().any(|s| s.id == id) => Some(id.to_string()),
+        _ => config.servers.first().map(|s| s.id.clone()),
+    }
 }
 
 #[cfg(test)]
@@ -384,5 +415,112 @@ mod tests {
             &server,
             &url("http://localhost:9090/app")
         ));
+    }
+
+    // --- http→https scheme upgrade ---
+
+    #[test]
+    fn scheme_upgrade_same_host_is_allowed() {
+        let server = url("http://lab.example.com");
+        assert!(navigation_allowed(
+            &server,
+            &url("https://lab.example.com/sign-in")
+        ));
+        // Explicit ports upgrade only to the SAME port.
+        let server = url("http://localhost:8080");
+        assert!(navigation_allowed(
+            &server,
+            &url("https://localhost:8080/app")
+        ));
+    }
+
+    #[test]
+    fn scheme_downgrade_https_to_http_is_blocked() {
+        let server = url("https://lab.example.com");
+        assert!(!navigation_allowed(
+            &server,
+            &url("http://lab.example.com/app")
+        ));
+    }
+
+    #[test]
+    fn plain_http_cross_host_stays_blocked() {
+        let server = url("http://a.example.org");
+        assert!(!navigation_allowed(
+            &server,
+            &url("http://b.example.org/app")
+        ));
+    }
+
+    #[test]
+    fn upgrade_to_a_different_host_is_blocked() {
+        let server = url("http://a.example.org");
+        assert!(!navigation_allowed(
+            &server,
+            &url("https://b.example.org/app")
+        ));
+        // Host suffix tricks are different hosts, upgrade or not.
+        assert!(!navigation_allowed(
+            &server,
+            &url("https://a.example.org.evil.org/app")
+        ));
+    }
+
+    #[test]
+    fn upgrade_cannot_change_the_explicit_port() {
+        let server = url("http://localhost:8080");
+        assert!(!navigation_allowed(
+            &server,
+            &url("https://localhost:9090/app")
+        ));
+        // ... nor silently drop an explicit port for the scheme default.
+        assert!(!navigation_allowed(&server, &url("https://localhost/app")));
+    }
+
+    // --- resolve_active (visibility self-heal) ---
+
+    fn server_cfg(id: &str) -> crate::config::ServerConfig {
+        crate::config::ServerConfig {
+            id: id.to_string(),
+            name: id.to_string(),
+            url: format!("https://{id}.example.org"),
+        }
+    }
+
+    #[test]
+    fn resolve_active_prefers_a_valid_configured_active_server() {
+        let config = AppConfig {
+            servers: vec![server_cfg("a"), server_cfg("b")],
+            active_server: Some("b".into()),
+            close_to_tray: false,
+        };
+        assert_eq!(resolve_active(&config).as_deref(), Some("b"));
+    }
+
+    #[test]
+    fn resolve_active_falls_back_to_first_when_none() {
+        let config = AppConfig {
+            servers: vec![server_cfg("a"), server_cfg("b")],
+            active_server: None,
+            close_to_tray: false,
+        };
+        assert_eq!(resolve_active(&config).as_deref(), Some("a"));
+    }
+
+    #[test]
+    fn resolve_active_falls_back_to_first_when_stale() {
+        // active_server pointing at a since-removed server id must not
+        // leave every webview hidden (blank content area).
+        let config = AppConfig {
+            servers: vec![server_cfg("a"), server_cfg("b")],
+            active_server: Some("gone".into()),
+            close_to_tray: false,
+        };
+        assert_eq!(resolve_active(&config).as_deref(), Some("a"));
+    }
+
+    #[test]
+    fn resolve_active_is_none_with_no_servers() {
+        assert_eq!(resolve_active(&AppConfig::default()), None);
     }
 }

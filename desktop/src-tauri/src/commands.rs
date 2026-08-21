@@ -59,6 +59,12 @@ pub async fn add_server(
     };
     {
         let mut config = lock(&state)?;
+        // Re-check dedupe under the INSERT lock: the early check above ran
+        // with the mutex released for the health probe, so two concurrent
+        // add_server calls for the same URL could both pass it (TOCTOU).
+        if config.servers.iter().any(|s| s.id == server.id) {
+            return Err("Already added".into());
+        }
         config.servers.push(server.clone());
         // A freshly added server becomes the active one: the user just
         // asked for it, so show it immediately.
@@ -75,6 +81,12 @@ pub fn remove_server(
     state: State<'_, Mutex<AppConfig>>,
     id: String,
 ) -> Result<(), String> {
+    // Session data is deliberately KEPT: the per-server data store
+    // (data_store_identifier / data_directory) is keyed by server id and
+    // survives removal, so re-adding the same URL resurrects the previous
+    // login — a feature (accidental removes cost nothing). Nothing to
+    // clean up here; a future "forget this lab" affordance would delete
+    // the store. Documented for the user-facing docs (T10).
     {
         let mut config = lock(&state)?;
         let had_active = config.active_server.as_deref() == Some(id.as_str());

@@ -38,6 +38,33 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        // Production logger: everything the shell already logs via `log::`
+        // (nav-guard blocks, rate-limit drops, webview lifecycle) goes to
+        // stderr plus a rotating file in the OS app-log dir (5 MB x 3
+        // files). Debug in dev builds, info in release. Rust-side only —
+        // no JS capability needed.
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                // Defaults are [Stdout, LogDir{None}]; clear so exactly the
+                // two targets below are installed (no duplicate log file).
+                .clear_targets()
+                .target(tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::Stderr,
+                ))
+                .target(tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("labhub-desktop.log".into()),
+                    },
+                ))
+                .max_file_size(5 * 1024 * 1024)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(3))
+                .level(if cfg!(debug_assertions) {
+                    log::LevelFilter::Debug
+                } else {
+                    log::LevelFilter::Info
+                })
+                .build(),
+        )
         .setup(|app| bootstrap(app))
         .on_window_event(handle_window_event)
         .invoke_handler(tauri::generate_handler![

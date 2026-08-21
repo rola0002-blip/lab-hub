@@ -189,7 +189,7 @@ fn eval_wait(webview: &Webview, js: &str, timeout_secs: f64) -> Result<String, S
     }
 }
 
-const NOTIFY_PROBE: &str = "(function(){window.__SMOKE__={s:'pending'};window.__TAURI__.core.invoke('desktop_notify',{title:'smoke',body:'smoke body',url:location.origin}).then(function(){window.__SMOKE__={s:'ok'}},function(e){window.__SMOKE__={s:'err',e:String(e)}});return 'dispatched'})()";
+const NOTIFY_PROBE: &str = "(function(){window.__SMOKE__={s:'pending'};window.__TAURI__.core.invoke('desktop_notify',{title:'smoke',body:'smoke body'}).then(function(){window.__SMOKE__={s:'ok'}},function(e){window.__SMOKE__={s:'err',e:String(e)}});return 'dispatched'})()";
 
 /// Asserts the notify shim replaced window.Notification on `webview`:
 /// typeof check, permission read, and a real construct through the shim
@@ -399,9 +399,10 @@ fn timeline(app: tauri::AppHandle) {
             probe_remote_ipc(&wv, LABHUB_URL),
             "desktop_notify invoke allowed from server origin",
         );
-        // Click-routing seam: the shim passes location.origin, so the
-        // pending click target must be the labhub server id (a toast click
-        // itself is GUI-only; this is the state the focus hook consumes).
+        // Click-routing seam: desktop_notify derives the calling webview's
+        // url Rust-side, so the pending click target must be the labhub
+        // server id (a toast click itself is GUI-only; this is the state
+        // the focus hook consumes).
         let mut target_ok = false;
         for _ in 0..15 {
             if app.state::<NotifyState>().pending_target().as_deref() == Some(id.as_str()) {

@@ -32,8 +32,11 @@
 
   function ShimNotification(title, options) {
     // Nothing user-visible is captured in-page; the shell owns rendering,
-    // rate limiting, and click routing. Invoke is resolved lazily so a page
-    // that grabs the constructor early still bridges correctly.
+    // rate limiting, and click routing (the origin is derived Rust-side
+    // from the calling webview — never sent from the page). Invoke is
+    // resolved lazily so a page that grabs the constructor early still
+    // bridges correctly. A missing title defaults to '' (never the string
+    // "undefined").
     var body = ''
     try {
       body = options && options.body != null ? String(options.body) : ''
@@ -41,9 +44,8 @@
     try {
       window.__TAURI__.core
         .invoke('desktop_notify', {
-          title: String(title),
+          title: title == null ? '' : String(title),
           body: body,
-          url: location.origin,
         })
         .catch(function (err) {
           console.warn('desktop_notify failed', err)

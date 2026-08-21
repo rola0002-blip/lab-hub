@@ -40,7 +40,9 @@ pub struct HealthInfo {
 }
 
 /// GETs `<url>/api/health` (10 s timeout, at most 3 redirects). A server is
-/// healthy iff it answers HTTP 200 with a JSON body where `"ok"` is `true`.
+/// healthy iff it answers HTTP 200 with a JSON body where `"ok"` is `true`,
+/// WITHOUT being redirected off its own origin (an off-origin 200 means a
+/// proxy/CDN answered for the host — not the lab the user meant to add).
 /// All failures map to user-friendly strings.
 pub async fn check_health(normalized_url: &str) -> Result<HealthInfo, String> {
     let client = reqwest::Client::builder()
@@ -48,11 +50,20 @@ pub async fn check_health(normalized_url: &str) -> Result<HealthInfo, String> {
         .redirect(reqwest::redirect::Policy::limited(3))
         .build()
         .map_err(|e| format!("Unreachable: {e}"))?;
+    let requested: Url = format!("{normalized_url}/api/health")
+        .parse()
+        .map_err(|e| format!("Invalid server URL: {e}"))?;
     let response = client
-        .get(format!("{normalized_url}/api/health"))
+        .get(requested.clone())
         .send()
         .await
         .map_err(|e| format!("Unreachable: {e}"))?;
+    // Redirect containment (M4): the final URL after redirects must sit on
+    // the requested origin — same_origin is the shared origin-compare
+    // helper (unit-tested below and in webviews.rs).
+    if !same_origin(&requested, response.url()) {
+        return Err(format!("Server redirected elsewhere ({})", response.url()));
+    }
     if response.status().as_u16() != 200 {
         return Err("Not a LabHub server (no /api/health)".into());
     }
@@ -95,9 +106,10 @@ pub fn same_origin(a: &Url, b: &Url) -> bool {
 /// Finds the id of the configured server whose origin (scheme+host+port)
 /// matches `url`'s, ignoring path/query/fragment. `desktop_notify` uses
 /// this to route a notification click back to the server whose page raised
-/// it — the shim always passes `location.origin`. `None` when the URL is
-/// unparseable or belongs to no configured server (foreign page): the
-/// notification still shows, it just has no switch target.
+/// it — the command passes the calling WEBVIEW's url, so a page can never
+/// claim a foreign origin. `None` when the URL is unparseable or belongs
+/// to no configured server (foreign page): the notification still shows,
+/// it just has no switch target.
 pub fn server_for_url(config: &AppConfig, url: &str) -> Option<String> {
     let parsed = Url::parse(url).ok()?;
     config.servers.iter().find_map(|server| {
@@ -313,6 +325,53 @@ mod tests {
         assert!(!same_origin(
             &"https://a.example.org".parse().unwrap(),
             &"http://a.example.org".parse().unwrap()
+        ));
+    }
+
+    // --- check_health redirect containment (M4) ---
+    // The network redirect itself is not unit-testable here; these pin the
+    // pure origin-compare decision check_health applies to the final URL.
+
+    fn health_url(s: &str) -> Url {
+        format!("{s}/api/health").parse().unwrap()
+    }
+
+    #[test]
+    fn redirect_to_same_origin_path_is_contained() {
+        let requested = health_url("https://lab.example.com");
+        // trailing-slash / path reshapes stay on-origin: fine
+        let final_url: Url = "https://lab.example.com/api/health/".parse().unwrap();
+        assert!(same_origin(&requested, &final_url));
+    }
+
+    #[test]
+    fn redirect_to_other_host_is_rejected() {
+        let requested = health_url("https://lab.example.com");
+        for redirected in [
+            "https://cdn.example.net/api/health",
+            "https://lab.example.com.evil.org/api/health",
+            "https://elsewhere.example.com/api/health",
+        ] {
+            let final_url: Url = redirected.parse().unwrap();
+            assert!(
+                !same_origin(&requested, &final_url),
+                "{redirected} must be flagged as elsewhere"
+            );
+        }
+    }
+
+    #[test]
+    fn redirect_that_changes_scheme_or_port_is_rejected() {
+        let requested = health_url("https://lab.example.com");
+        // https -> http downgrade ...
+        assert!(!same_origin(
+            &requested,
+            &"http://lab.example.com/api/health".parse().unwrap()
+        ));
+        // ... and a different explicit port are both "elsewhere".
+        assert!(!same_origin(
+            &requested,
+            &"https://lab.example.com:8443/api/health".parse().unwrap()
         ));
     }
 }
