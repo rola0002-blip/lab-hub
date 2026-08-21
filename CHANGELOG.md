@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-08-21
+
 ### Added
 - Desktop app (SP11): native macOS (universal, 14+) and Windows shells over
   the web app — multi-server workspace switcher with isolated sessions,
