@@ -148,11 +148,13 @@ jobs:
           set -euo pipefail
           tag="${{ github.ref_name }}"
           node scripts/release-notes.mjs "$tag" > release-notes.md
-          dmg=$(ls dist/dist-macos/*.dmg)
-          app_tgz=$(ls dist/dist-macos/*.app.tar.gz)
-          app_sig=$(ls dist/dist-macos/*.app.tar.gz.sig)
-          exe=$(ls dist/dist-windows/*-setup.exe)
-          exe_sig=$(ls dist/dist-windows/*.exe.sig)
+          # upload-artifact preserves the least-common-ancestor dirs (dmg/, macos/,
+          # nsis/) inside each artifact — locate files with find, not flat globs.
+          dmg=$(find dist/dist-macos -name '*.dmg')
+          app_tgz=$(find dist/dist-macos -name '*.app.tar.gz')
+          app_sig=$(find dist/dist-macos -name '*.app.tar.gz.sig')
+          exe=$(find dist/dist-windows -name '*-setup.exe')
+          exe_sig=$(find dist/dist-windows -name '*.exe.sig')
           node scripts/desktop-updater-manifest.mjs --tag "$tag" \
             --asset darwin-aarch64="$(basename "$app_tgz")" --sig darwin-aarch64="$app_sig" \
             --asset darwin-x86_64="$(basename "$app_tgz")" --sig darwin-x86_64="$app_sig" \
