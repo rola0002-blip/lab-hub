@@ -21,7 +21,9 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::badges;
 use crate::config::{AppConfig, ServerConfig};
-use crate::servers::{same_origin, store_key};
+use crate::servers::same_origin;
+#[cfg(target_os = "macos")]
+use crate::servers::store_key;
 
 pub const WINDOW_LABEL: &str = "main";
 pub const CHROME_LABEL: &str = "chrome";
