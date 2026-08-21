@@ -70,3 +70,7 @@ data/
 CLAUDE.md
 docs/superpowers/
 docs/handoffs/
+
+# Tauri desktop shell (SP11) — build artifacts and generated schemas
+/desktop/src-tauri/target/
+/desktop/src-tauri/gen/
