@@ -55,7 +55,24 @@ export function main(argv) {
   pkg.version = next
   writeFileSync(PKG, JSON.stringify(pkg, null, 2) + '\n') // preserve 2-space indent
   writeFileSync(CHANGELOG, rolled)
-  git(['add', 'package.json', 'CHANGELOG.md'])
+
+  // Desktop app version sync (SP11): desktop/src-tauri's build.rs asserts all
+  // three files carry the same version — bump them here so the release commit
+  // is complete and the desktop CI never trips on a version skew.
+  const CARGO = 'desktop/src-tauri/Cargo.toml'
+  const CONF = 'desktop/src-tauri/tauri.conf.json'
+  const cargo = readFileSync(CARGO, 'utf8').replace(
+    /^version\s*=\s*"[^"]*"/m,
+    `version = "${next}"`,
+  )
+  const conf = JSON.parse(readFileSync(CONF, 'utf8'))
+  conf.version = next
+  writeFileSync(CARGO, cargo)
+  writeFileSync(CONF, JSON.stringify(conf, null, 2) + '\n')
+  // Cargo.lock pins the crate's own version — refresh it or `--locked` builds fail.
+  execFileSync('cargo', ['update', '--manifest-path', CARGO, '-p', 'labhub-desktop', '--offline'], { stdio: 'pipe' })
+
+  git(['add', 'package.json', 'CHANGELOG.md', CARGO, CONF, 'desktop/src-tauri/Cargo.lock'])
   git(['commit', '-m', `release: v${next}`])
   git(['tag', '-a', `v${next}`, '-m', `v${next}`])
 
