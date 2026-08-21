@@ -22,7 +22,11 @@ export function usePushOptIn(): { show: boolean; busy: boolean; enable: () => Pr
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('Notification' in window) || !('PushManager' in window)) return
+    // Unavailable in the desktop shell (`__TAURI__`): native toasts come from
+    // the shell's notify bridge instead. The explicit check matters on Windows,
+    // where WebView2 ships serviceWorker and the row would otherwise appear —
+    // pointing at push endpoints that never fire inside the shell.
+    if (typeof window === 'undefined' || '__TAURI__' in window || !('serviceWorker' in navigator) || !('Notification' in window) || !('PushManager' in window)) return
     let cancelled = false
     void (async () => {
       try {
