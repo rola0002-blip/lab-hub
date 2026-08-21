@@ -62,3 +62,11 @@ data/
 
 # local installer smoke-test installs
 .smoke-labhub/
+
+# Internal dev narratives stay out of the public repo (SP10 flip decision):
+# specs/plans/handoffs are written locally under docs/superpowers/ and docs/handoffs/,
+# and CLAUDE.md is a local-only agent-conventions file. Pre-flip history lives in the
+# dated archive under ~/Documents/Systems/.
+CLAUDE.md
+docs/superpowers/
+docs/handoffs/
