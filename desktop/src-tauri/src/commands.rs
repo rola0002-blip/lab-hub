@@ -127,11 +127,6 @@ pub fn set_close_to_tray(
     after_mutation(&app, false)
 }
 
-/// Remote-page -> desktop notification bridge (Task 6 implements the real
-/// notification; stubbed here so the remote capability and chrome/remote
-/// wiring can ship and be smoke-tested independently).
-#[tauri::command]
-pub fn desktop_notify(title: String, body: Option<String>) -> Result<(), String> {
-    log::info!("desktop_notify (stub): title={title:?} body={body:?}");
-    Ok(())
-}
+// `desktop_notify` lives in `notify.rs` alongside the rate limiter and the
+// click-routing state it depends on (Task 6); the command name — and
+// therefore the capability grant and the JS seam — is unchanged.

@@ -21,17 +21,18 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::badges;
 use crate::config::{AppConfig, ServerConfig};
-use crate::servers::store_key;
+use crate::servers::{same_origin, store_key};
 
 pub const WINDOW_LABEL: &str = "main";
 pub const CHROME_LABEL: &str = "chrome";
 pub const RAIL_WIDTH: f64 = 240.0;
 
-/// Injected into every content webview before any page script runs.
-/// Task 6 replaces this placeholder with the real desktop-notify shim;
-/// keeping it a named const makes that diff one line.
-pub const NOTIFY_SHIM_PLACEHOLDER: &str =
-    "// LABHUB_NOTIFY_SHIM_PLACEHOLDER (Task 6 fills the real shim here)";
+/// Injected into every content webview before any page script runs: the
+/// desktop-notify shim that replaces `window.Notification` (see
+/// `desktop/ui/notify-shim.js` for the app-usage contract it satisfies).
+/// Bundled at compile time so a UI-only edit cannot ship without a shell
+/// rebuild that re-runs the gates.
+pub const NOTIFY_SHIM: &str = include_str!("../../ui/notify-shim.js");
 
 /// Live content webviews: server_id -> webview label. The active server is
 /// deliberately *not* stored here — it is always read from the managed
@@ -199,7 +200,7 @@ fn create_content_webview(
 
     #[allow(unused_mut)]
     let mut builder = WebviewBuilder::new(&label, WebviewUrl::External(url))
-        .initialization_script(NOTIFY_SHIM_PLACEHOLDER)
+        .initialization_script(NOTIFY_SHIM)
         .on_navigation(move |nav| {
             let allowed = navigation_allowed(&nav_server, nav);
             if !allowed {
@@ -293,13 +294,7 @@ fn navigation_allowed(server: &Url, nav: &Url) -> bool {
     if nav.host_str() == Some("ipc.localhost") {
         return true;
     }
-    origin_eq(server, nav)
-}
-
-fn origin_eq(a: &Url, b: &Url) -> bool {
-    a.scheme() == b.scheme()
-        && a.host_str() == b.host_str()
-        && a.port_or_known_default() == b.port_or_known_default()
+    same_origin(server, nav)
 }
 
 #[cfg(test)]
@@ -308,6 +303,25 @@ mod tests {
 
     fn url(s: &str) -> Url {
         s.parse().unwrap()
+    }
+
+    /// The injected init script is the real shim (compile-time bundle of
+    /// desktop/ui/notify-shim.js), not a leftover placeholder.
+    #[test]
+    fn notify_shim_is_the_real_script() {
+        assert!(
+            NOTIFY_SHIM.contains("desktop_notify"),
+            "shim must invoke desktop_notify"
+        );
+        assert!(!NOTIFY_SHIM.contains("PLACEHOLDER"));
+        assert!(
+            NOTIFY_SHIM.contains("'granted'"),
+            "shim must report permission granted"
+        );
+        assert!(
+            NOTIFY_SHIM.contains("__TAURI__"),
+            "shim must guard on the Tauri global"
+        );
     }
 
     #[test]

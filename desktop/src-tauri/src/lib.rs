@@ -1,6 +1,7 @@
 pub mod badges;
 pub mod commands;
 pub mod config;
+pub mod notify;
 pub mod servers;
 pub mod webviews;
 
@@ -15,15 +16,20 @@ pub fn bootstrap(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
     app.manage(Mutex::new(config));
     app.manage(webviews::WebviewManager::default());
     app.manage(badges::BadgeState::default());
+    app.manage(notify::NotifyState::default());
     webviews::setup(app.handle())?;
     Ok(())
 }
 
-/// Shared window-event hook (resize keeps the rail fixed-width).
+/// Shared window-event hook: resize keeps the rail fixed-width, and a
+/// freshly focused main window consumes a pending notification click
+/// target (desktop toasts give no click callback — see `notify.rs`).
 pub fn handle_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
     if window.label() == webviews::WINDOW_LABEL {
-        if let tauri::WindowEvent::Resized(_) = event {
-            webviews::relayout(window);
+        match event {
+            tauri::WindowEvent::Resized(_) => webviews::relayout(window),
+            tauri::WindowEvent::Focused(true) => notify::consume_pending_click(window.app_handle()),
+            _ => {}
         }
     }
 }
@@ -31,6 +37,7 @@ pub fn handle_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| bootstrap(app))
         .on_window_event(handle_window_event)
         .invoke_handler(tauri::generate_handler![
@@ -40,7 +47,7 @@ pub fn run() {
             commands::set_active,
             commands::get_app_config,
             commands::set_close_to_tray,
-            commands::desktop_notify,
+            notify::desktop_notify,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,14 +1,19 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "labhub-remote",
-  "description": "Server content webviews (children of window 'main'). Users can add arbitrary LabHub servers, so the remote url grant cannot enumerate origins: URLPattern 'https://*' / 'http://*' match any http(s) origin (hostname wildcard; empty pathname auto-widens to '*'). Exposure is still contained: the navigation guard in webviews.rs only ever loads user-configured server origins in these webviews, and this capability deliberately grants ONLY desktop-notify + opener + event defaults - never core:default or config commands. 'windows' matches the parent window label, which covers every child webview (spike S5).",
+  "description": "Server content webviews (children of window 'main'). Users can add arbitrary LabHub servers, so the remote url grant cannot enumerate origins: URLPattern 'https://*' / 'http://*' match any http(s) origin (hostname wildcard; empty pathname auto-widens to '*'). Exposure is still contained: the navigation guard in webviews.rs only ever loads user-configured server origins in these webviews, and this capability deliberately grants ONLY desktop-notify plus a scoped opener open-url - never core:default or config commands. The opener grant is scoped to http/https URLs only (mirrors the plugin's own allow-default-urls glob semantics) so remote pages cannot reveal files in directories (allow-reveal-item-in-dir was dropped from the former opener:default grant) or open arbitrary schemes. core:event was dropped entirely: the notify shim needs only core.invoke, and event emit/listen would let any lab page spoof server-badge:// events at the rail. mailto:/tel: links from content pages still work through the shell's Rust-side on_new_window opener route, which bypasses the IPC ACL. 'windows' matches the parent window label, which covers every child webview (spike S5).",
   "windows": ["main"],
   "remote": {
     "urls": ["https://*", "http://*"]
   },
   "permissions": [
     "allow-desktop-notify",
-    "opener:default",
-    "core:event:default"
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://*" },
+        { "url": "http://*" }
+      ]
+    }
   ]
 }

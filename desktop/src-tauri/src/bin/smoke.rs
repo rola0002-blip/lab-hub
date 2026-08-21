@@ -11,12 +11,17 @@
 //      title handler) with "(5) x — LabHub" emits server-badge://<id>
 //      payload 5 and computes dock total 5; title revert emits 0;
 //      remove_server clears the entry and recomputes the total
-//   6. remote-origin IPC: invoke('desktop_notify') resolves from the
+//   6. notify shim on the content webview: typeof Notification is a
+//      function, Notification.permission reads 'granted', and
+//      constructing one bridges to the real desktop_notify command (the
+//      pending click target becomes the labhub server id)
+//   7. remote-origin IPC: invoke('desktop_notify') resolves from the
 //      server origin AND from a foreign origin (proves the labhub-remote
-//      capability's https://* pattern)
-//   7. Webview::close works (foreign webview) and remove_server closes the
+//      capability's https://* pattern); a GUI toast cannot be asserted
+//      headlessly — the invoke result and command logs are the evidence
+//   8. Webview::close works (foreign webview) and remove_server closes the
 //      managed webview via sync
-//   8. CGWindowList screenshot of rail + content and of the empty rail
+//   9. CGWindowList screenshot of rail + content and of the empty rail
 //
 // Run: cargo run --bin smoke (self-exits ~20 s; exit code 0 = all PASS).
 
@@ -35,6 +40,7 @@ use tauri_plugin_opener::OpenerExt;
 use labhub_desktop::badges::BadgeState;
 use labhub_desktop::commands;
 use labhub_desktop::config::{normalize_url, AppConfig};
+use labhub_desktop::notify::NotifyState;
 use labhub_desktop::servers::server_id;
 use labhub_desktop::webviews;
 
@@ -98,7 +104,10 @@ impl log::Log for SmokeLogger {
                     .push((label.to_string(), title.to_string()));
             }
         }
-        if args.starts_with("desktop_notify (stub)") {
+        if let Some(rest) = args.strip_prefix("desktop_notify ") {
+            // "delivered:", "dropped (rate-limited):", "show failed:" — all
+            // prove the command actually ran (IPC transport-independent).
+            let _ = rest;
             NOTIFY_CALLS
                 .lock()
                 .unwrap()
@@ -180,7 +189,34 @@ fn eval_wait(webview: &Webview, js: &str, timeout_secs: f64) -> Result<String, S
     }
 }
 
-const NOTIFY_PROBE: &str = "(function(){window.__SMOKE__={s:'pending'};window.__TAURI__.core.invoke('desktop_notify',{title:'smoke'}).then(function(){window.__SMOKE__={s:'ok'}},function(e){window.__SMOKE__={s:'err',e:String(e)}});return 'dispatched'})()";
+const NOTIFY_PROBE: &str = "(function(){window.__SMOKE__={s:'pending'};window.__TAURI__.core.invoke('desktop_notify',{title:'smoke',body:'smoke body',url:location.origin}).then(function(){window.__SMOKE__={s:'ok'}},function(e){window.__SMOKE__={s:'err',e:String(e)}});return 'dispatched'})()";
+
+/// Asserts the notify shim replaced window.Notification on `webview`:
+/// typeof check, permission read, and a real construct through the shim
+/// class (which bridges to the desktop_notify command). Returns the number
+/// of shim checks that passed (of 3).
+fn probe_notify_shim(webview: &Webview) -> usize {
+    let mut passed = 0;
+    match eval_wait(webview, "typeof Notification", 3.0) {
+        Ok(p) if p.contains("function") => passed += 1,
+        other => log(&format!("shim typeof Notification: {other:?}")),
+    }
+    match eval_wait(webview, "String(Notification.permission)", 3.0) {
+        Ok(p) if p.contains("granted") => passed += 1,
+        other => log(&format!("shim Notification.permission: {other:?}")),
+    }
+    // Construct through the shim (fire-and-forget invoke inside), then
+    // exercise the settable-onclick / no-op close contract.
+    match eval_wait(
+        webview,
+        "(function(){try{var n=new Notification('smoke shim title',{body:'smoke shim body'});n.onclick=function(){};n.close();return 'constructed'}catch(e){return 'err:'+String(e)}})()",
+        3.0,
+    ) {
+        Ok(p) if p.contains("constructed") => passed += 1,
+        other => log(&format!("shim construct: {other:?}")),
+    }
+    passed
+}
 
 fn notify_call_count() -> usize {
     NOTIFY_CALLS.lock().unwrap().len()
@@ -350,12 +386,33 @@ fn timeline(app: tauri::AppHandle) {
     );
     app.unlisten(badge_listener);
 
-    // t7.0 — remote-origin IPC from the server origin (capability check).
+    // t7.0 — notify shim + remote-origin IPC from the server origin
+    // (capability check). The content webview is the active/visible one,
+    // so eval callbacks fire reliably on it (Task 4 hidden-webview quirk).
     sleep_until(&t0, 7.0);
     if let Some(wv) = app.get_webview(&label) {
         check(
+            probe_notify_shim(&wv) == 3,
+            "notify shim: typeof Notification = function, permission = granted, construct bridges",
+        );
+        check(
             probe_remote_ipc(&wv, LABHUB_URL),
             "desktop_notify invoke allowed from server origin",
+        );
+        // Click-routing seam: the shim passes location.origin, so the
+        // pending click target must be the labhub server id (a toast click
+        // itself is GUI-only; this is the state the focus hook consumes).
+        let mut target_ok = false;
+        for _ in 0..15 {
+            if app.state::<NotifyState>().pending_target().as_deref() == Some(id.as_str()) {
+                target_ok = true;
+                break;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+        check(
+            target_ok,
+            "pending click target = labhub server id after shim notify",
         );
     }
 
@@ -484,6 +541,7 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             commands::list_servers,
             commands::add_server,
@@ -491,7 +549,7 @@ fn main() {
             commands::set_active,
             commands::get_app_config,
             commands::set_close_to_tray,
-            commands::desktop_notify,
+            labhub_desktop::notify::desktop_notify,
         ])
         .on_window_event(labhub_desktop::handle_window_event)
         .setup(move |app| {

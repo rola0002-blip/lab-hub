@@ -1,5 +1,6 @@
 //! Server identity derivation and health probing.
 
+use crate::config::AppConfig;
 use serde::Deserialize;
 use std::time::Duration;
 use url::Url;
@@ -81,6 +82,30 @@ pub fn default_name(normalized_url: &str, _health: &HealthInfo) -> String {
     }
 }
 
+/// Origin equality (scheme + host + port-or-known-default). The single
+/// definition shared by the content-webview navigation guard
+/// (`webviews.rs`) and [`server_for_url`], so "same site" can never mean
+/// two different things on two code paths.
+pub fn same_origin(a: &Url, b: &Url) -> bool {
+    a.scheme() == b.scheme()
+        && a.host_str() == b.host_str()
+        && a.port_or_known_default() == b.port_or_known_default()
+}
+
+/// Finds the id of the configured server whose origin (scheme+host+port)
+/// matches `url`'s, ignoring path/query/fragment. `desktop_notify` uses
+/// this to route a notification click back to the server whose page raised
+/// it — the shim always passes `location.origin`. `None` when the URL is
+/// unparseable or belongs to no configured server (foreign page): the
+/// notification still shows, it just has no switch target.
+pub fn server_for_url(config: &AppConfig, url: &str) -> Option<String> {
+    let parsed = Url::parse(url).ok()?;
+    config.servers.iter().find_map(|server| {
+        let server_url = Url::parse(&server.url).ok()?;
+        same_origin(&parsed, &server_url).then(|| server.id.clone())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -113,5 +138,181 @@ mod tests {
         let key = store_key("not-a-uuid");
         assert_eq!(key.len(), 16);
         assert_eq!(key, store_key("not-a-uuid"));
+    }
+
+    // --- server_for_url (notification click routing) ---
+
+    fn config_with(urls: &[&str]) -> AppConfig {
+        AppConfig {
+            servers: urls
+                .iter()
+                .map(|&u| crate::config::ServerConfig {
+                    id: server_id(u),
+                    name: String::new(),
+                    url: u.to_string(),
+                })
+                .collect(),
+            active_server: None,
+            close_to_tray: false,
+        }
+    }
+
+    fn id_of(url: &str) -> String {
+        server_id(url)
+    }
+
+    #[test]
+    fn server_for_url_matches_exact_origin() {
+        let config = config_with(&["https://lab.example.com"]);
+        assert_eq!(
+            server_for_url(&config, "https://lab.example.com"),
+            Some(id_of("https://lab.example.com"))
+        );
+    }
+
+    /// The shim passes `location.origin`, but any URL form must resolve —
+    /// only the origin participates.
+    #[test]
+    fn server_for_url_ignores_path_query_and_fragment() {
+        let config = config_with(&["https://lab.example.com"]);
+        assert_eq!(
+            server_for_url(&config, "https://lab.example.com/chat/room-7?x=1#unread"),
+            Some(id_of("https://lab.example.com"))
+        );
+    }
+
+    #[test]
+    fn server_for_url_equates_default_ports() {
+        let config = config_with(&["https://lab.example.com"]);
+        assert_eq!(
+            server_for_url(&config, "https://lab.example.com:443"),
+            Some(id_of("https://lab.example.com"))
+        );
+        let config = config_with(&["http://lab.example.com"]);
+        assert_eq!(
+            server_for_url(&config, "http://lab.example.com:80/x"),
+            Some(id_of("http://lab.example.com"))
+        );
+    }
+
+    #[test]
+    fn server_for_url_matches_non_default_ports_only_exactly() {
+        let config = config_with(&["http://localhost:3000"]);
+        assert_eq!(
+            server_for_url(&config, "http://localhost:3000/app"),
+            Some(id_of("http://localhost:3000"))
+        );
+        assert_eq!(server_for_url(&config, "http://localhost:9090"), None);
+        // No port means the known default (80), not the configured 3000.
+        assert_eq!(server_for_url(&config, "http://localhost"), None);
+    }
+
+    #[test]
+    fn server_for_url_requires_scheme_match() {
+        let config = config_with(&["https://localhost"]);
+        assert_eq!(server_for_url(&config, "http://localhost"), None);
+        assert_eq!(server_for_url(&config, "ftp://localhost"), None);
+    }
+
+    #[test]
+    fn server_for_url_host_must_match_exactly() {
+        let config = config_with(&["https://lab.example.com"]);
+        // Classic suffix tricks are different hosts.
+        assert_eq!(
+            server_for_url(&config, "https://lab.example.com.evil.org"),
+            None
+        );
+        assert_eq!(server_for_url(&config, "https://notlab.example.com"), None);
+        assert_eq!(server_for_url(&config, "https://example.com"), None);
+    }
+
+    /// Url::parse lowercases hosts, matching normalize_url's lowercasing.
+    #[test]
+    fn server_for_url_is_host_case_insensitive() {
+        let config = config_with(&["https://lab.example.com"]);
+        assert_eq!(
+            server_for_url(&config, "https://LAB.Example.COM/chat"),
+            Some(id_of("https://lab.example.com"))
+        );
+    }
+
+    #[test]
+    fn server_for_url_returns_none_for_empty_or_foreign_config() {
+        let empty = AppConfig::default();
+        assert_eq!(server_for_url(&empty, "https://lab.example.com"), None);
+        let other = config_with(&["https://other.example.org"]);
+        assert_eq!(server_for_url(&other, "https://lab.example.com"), None);
+    }
+
+    #[test]
+    fn server_for_url_returns_none_for_unparseable_urls() {
+        let config = config_with(&["https://lab.example.com"]);
+        assert_eq!(server_for_url(&config, ""), None);
+        assert_eq!(server_for_url(&config, "not a url"), None);
+        assert_eq!(server_for_url(&config, "https://"), None);
+    }
+
+    /// Defensive: duplicate origins cannot occur via commands (server_id
+    /// dedupes), but a hand-edited config must still resolve deterministically.
+    #[test]
+    fn server_for_url_first_match_wins_on_duplicate_origins() {
+        let first = id_of("https://lab.example.com");
+        let second = "00000000-0000-0000-0000-000000000000".to_string();
+        let config = AppConfig {
+            servers: vec![
+                crate::config::ServerConfig {
+                    id: first.clone(),
+                    name: String::new(),
+                    url: "https://lab.example.com".into(),
+                },
+                crate::config::ServerConfig {
+                    id: second,
+                    name: String::new(),
+                    url: "https://lab.example.com".into(),
+                },
+            ],
+            active_server: None,
+            close_to_tray: false,
+        };
+        assert_eq!(
+            server_for_url(&config, "https://lab.example.com"),
+            Some(first)
+        );
+    }
+
+    /// The click router must find the RIGHT server among several.
+    #[test]
+    fn server_for_url_disambiguates_multiple_servers() {
+        let config = config_with(&["https://a.example.org", "https://b.example.org"]);
+        assert_eq!(
+            server_for_url(&config, "https://b.example.org/x"),
+            Some(id_of("https://b.example.org"))
+        );
+    }
+
+    // --- same_origin (shared with the navigation guard) ---
+
+    #[test]
+    fn same_origin_default_port_equivalents() {
+        assert!(same_origin(
+            &"https://a.example.org".parse().unwrap(),
+            &"https://a.example.org:443".parse().unwrap()
+        ));
+        assert!(!same_origin(
+            &"https://a.example.org".parse().unwrap(),
+            &"https://a.example.org:8443".parse().unwrap()
+        ));
+    }
+
+    #[test]
+    fn same_origin_rejects_host_and_scheme_drift() {
+        assert!(!same_origin(
+            &"https://a.example.org".parse().unwrap(),
+            &"https://b.example.org".parse().unwrap()
+        ));
+        assert!(!same_origin(
+            &"https://a.example.org".parse().unwrap(),
+            &"http://a.example.org".parse().unwrap()
+        ));
     }
 }
