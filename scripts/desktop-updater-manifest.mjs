@@ -1,5 +1,5 @@
-#!/usr/bin/env node
-// desktop-updater-manifest.mjs — build latest.json, the Tauri updater
+
+// desktop-updater-manifest.mjs -- build latest.json, the Tauri updater
 // release manifest (https://v2.tauri.app/plugin/updater/ static server
 // format), from a release tag + per-platform artifacts + signatures.
 //
@@ -21,7 +21,7 @@
 //   --pub-date DATE   optional pub_date override (RFC 3339); defaults to now
 //
 // A macOS universal build ships ONE artifact: both darwin keys then point
-// at the same asset + signature — allowed (and unit-tested).
+// at the same asset + signature -- allowed (and unit-tested).
 //
 // Exit codes: 2 = usage error (bad flags), 1 = bad input (bad tag /
 // platform keys / missing pairing / unreadable file). Pure ESM, no deps.
