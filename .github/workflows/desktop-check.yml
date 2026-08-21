@@ -1,0 +1,70 @@
+name: Desktop check
+
+# Desktop (Tauri) gate: rust fmt/clippy/test, the updater-manifest unit
+# test, and an unsigned full-bundle smoke (dmg on macOS, NSIS on Windows).
+# Runs only when desktop code (or this workflow) changes.
+
+on:
+  pull_request:
+    paths:
+      - 'desktop/**'
+      - 'scripts/desktop-updater-manifest.mjs'
+      - 'tests/unit/desktop-updater-manifest.test.ts'
+      - '.github/workflows/desktop-check.yml'
+      - '.github/workflows/desktop-release.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'desktop/**'
+      - 'scripts/desktop-updater-manifest.mjs'
+      - 'tests/unit/desktop-updater-manifest.test.ts'
+      - '.github/workflows/desktop-check.yml'
+      - '.github/workflows/desktop-release.yml'
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: desktop/src-tauri
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt, clippy
+          cache: false # swatinem/rust-cache below is the cache
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --locked
+      # Node side: build.rs version-syncs against the root package.json, and
+      # the updater-manifest generator has vitest unit tests at the root.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        working-directory: .
+      - run: npm run test:unit -- tests/unit/desktop-updater-manifest.test.ts
+        working-directory: .
+      # FULL bundle build (dmg/nsis packaging proof) WITHOUT updater
+      # signing: no TAURI_SIGNING_PRIVATE_KEY secret is passed, and the
+      # --config override disables updater artifacts because tauri.conf.json
+      # ships `createUpdaterArtifacts: true`, which would otherwise make the
+      # CLI fail on the missing key. Verified locally: unsigned build lands
+      # at target/release/bundle/dmg/LabHub_<version>_aarch64.dmg.
+      # @tauri-apps/cli is a pinned root devDependency (see package.json);
+      # `npx --no-install` resolves it from the root node_modules (npm
+      # walks up from this working-directory) and fails loudly instead of
+      # silently fetching a floating latest from the registry.
+      - name: Bundle smoke (unsigned)
+        shell: bash
+        timeout-minutes: 30
+        run: npx --no-install tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'

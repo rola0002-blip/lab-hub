@@ -60,7 +60,14 @@ docker run --rm -i -v labhub_uploads:/data alpine \
 3. `git push origin main --follow-tags` — `release.yml` publishes the
    multi-arch image (`vX.Y.Z` + `latest`) and creates the GitHub Release
    with the changelog section as notes.
-4. `installer-smoke.yml` installs from scratch on clean runners and asserts
+4. **Desktop artifacts** — the same tag push also runs
+   `desktop-release.yml`: it builds the universal macOS dmg + signed
+   `.app.tar.gz` updater artifact and the Windows NSIS installer
+   (+ `.sig` files), then uploads them plus the updater manifest
+   `latest.json` (which embeds the signatures and the changelog notes)
+   to the release — waiting up to 10 min for `release.yml` to create the
+   release first, so the two workflows never race on `gh release create`.
+5. `installer-smoke.yml` installs from scratch on clean runners and asserts
    `/api/health` — green smoke = release good. (If it was red from the
    pre-flip anonymity gap, re-run it via workflow_dispatch once public.)
 

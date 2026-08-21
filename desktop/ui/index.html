@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LabHub</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="rail-header">
+      <div class="wordmark">LabHub</div>
+      <div class="version" id="header-version"></div>
+    </header>
+
+    <nav id="server-list" aria-label="Servers"></nav>
+
+    <div class="add-zone">
+      <button id="add-toggle" class="add-row" type="button" aria-expanded="false"
+              aria-controls="add-form">+ Add server</button>
+      <form id="add-form" hidden>
+        <input id="add-url" type="text" inputmode="url" placeholder="https://labhub.example.org"
+               autocomplete="off" spellcheck="false" aria-label="Server URL" />
+        <button id="add-submit" type="submit">Add</button>
+        <p id="add-error" class="error" role="alert" hidden></p>
+      </form>
+    </div>
+
+    <footer class="rail-footer">
+      <label class="tray-toggle">
+        <input type="checkbox" id="close-to-tray" />
+        <span>Keep running in background</span>
+      </label>
+      <div class="footer-version" id="footer-version"></div>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>

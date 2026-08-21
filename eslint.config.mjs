@@ -15,6 +15,10 @@ const eslintConfig = defineConfig([
     // Generated coverage report + vitest blob dir (see `npm run coverage`).
     "coverage/**",
     ".vitest/**",
+    // Tauri build artifacts (mirrors .gitignore): codegen emits minified JS
+    // into target/ that no linter should parse.
+    "desktop/src-tauri/target/**",
+    "desktop/src-tauri/gen/**",
   ]),
   // Honor the `_`-prefix convention for intentionally-unused bindings, already
   // used across the codebase (e.g. `_req` in route handlers, `_args` in stubs).

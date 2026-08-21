@@ -127,7 +127,27 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
       setUnread(d.unread); setItems(d.items)
       const r2 = shouldChime(watermark.current, d.items.map((i: Item) => ({ id: i.id, type: i.type, createdAt: i.createdAt })))
       watermark.current = r2.watermark
-      if (r2.chime && soundsRef.current) playChime()
+      if (r2.chime && soundsRef.current) {
+        playChime()
+        // Desktop-shell bridge (SP11): shell-only by construction — `__TAURI__`
+        // exists only in the Tauri webviews, and the app never requests direct
+        // Notification permission in browsers (push opt-in goes through the
+        // service worker). So a 'granted' permission in a normal browser means
+        // a push subscription, whose toasts the SW already shows — gating on
+        // the shell marker prevents a second toast from here.
+        const hit = d.items.find((i: Item) => i.id === r2.hits[0].id)
+        if (hit && '__TAURI__' in window && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          try {
+            const body = typeof hit.payload?.message === 'string' ? hit.payload.message : ''
+            // title/body mirror what the tray and the sw push payload derive
+            // from the same fanout strings (sender + channel/DM + snippet).
+            // tag is passed forward-compatible; the desktop shim does not
+            // implement tag collapse (native Notification may, one day).
+            const toast = new Notification(LABEL[hit.type] ?? hit.type, hit.payload?.conversationId ? { body, tag: hit.payload.conversationId } : { body })
+            toast.onclick = () => window.focus()
+          } catch { /* best-effort */ }
+        }
+      }
     } catch { /* transient network error; next poll retries */ }
   }, [])
 

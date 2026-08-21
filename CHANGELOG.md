@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Desktop app (SP11): native macOS (universal, 14+) and Windows shells over
+  the web app — multi-server workspace switcher with isolated sessions,
+  unread badges on dock/rail, native mention/DM notifications, tray with
+  close-to-tray, and minisign-signed auto-updates from GitHub Releases.
+
 ## [0.21.0] - 2026-08-20
 
 ### Added

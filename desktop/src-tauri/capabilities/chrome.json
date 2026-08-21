@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "chrome",
+  "description": "Local chrome rail webview of window 'main': full app-command allow-list plus core/opener/event defaults. Local-only (no remote field), so nothing here applies to server content pages.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "allow-list-servers",
+    "allow-add-server",
+    "allow-remove-server",
+    "allow-set-active",
+    "allow-get-app-config",
+    "allow-set-close-to-tray",
+    "opener:default",
+    "core:event:default"
+  ]
+}
