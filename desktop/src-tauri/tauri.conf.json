@@ -27,5 +27,17 @@
     "macOS": {
       "minimumSystemVersion": "14.0"
     }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/rola0002-blip/lab-hub/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ1M0I0RUMzMTc2QzY1QUMKUldTc1pXd1h3MDQ3UlQ4UVAxUEJBY1JocHkyTjZISndXODJaZkpDSC9GTit5SDFRUzdlRHZ4OGQK",
+      "dialog": false,
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

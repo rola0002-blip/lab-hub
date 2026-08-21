@@ -58,8 +58,8 @@ pub const QUIT_ID: &str = "quit";
 /// hyphenated UUID, so the split is unambiguous).
 pub const SERVER_ITEM_PREFIX: &str = "server:";
 
-/// Event emitted when the tray "Check for Updates" item is clicked.
-/// v1 only logs and emits — the updater (Task 8) listens for this.
+/// Event emitted when the tray "Check for Updates" item is clicked; the
+/// updater (updater.rs) listens and runs an interactive check.
 pub const CHECK_UPDATES_EVENT: &str = "tray://check-updates";
 
 /// Pure close decision shared with `lib.rs::handle_window_event`: only
@@ -199,9 +199,7 @@ pub fn show_main(app: &AppHandle) {
 fn on_menu_event(app: &AppHandle, event: MenuEvent) {
     match event.id().as_ref() {
         CHECK_UPDATES_ID => {
-            log::info!(
-                "tray check-updates clicked (emitting {CHECK_UPDATES_EVENT}; updater lands in Task 8)"
-            );
+            log::info!("tray check-updates clicked (emitting {CHECK_UPDATES_EVENT})");
             if let Err(e) = app.emit(CHECK_UPDATES_EVENT, ()) {
                 log::warn!("emit {CHECK_UPDATES_EVENT} failed: {e}");
             }

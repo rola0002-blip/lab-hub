@@ -4,6 +4,7 @@ pub mod config;
 pub mod notify;
 pub mod servers;
 pub mod tray;
+pub mod updater;
 pub mod webviews;
 
 use std::sync::Mutex;
@@ -21,6 +22,7 @@ pub fn bootstrap(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
     app.manage(notify::NotifyState::default());
     webviews::setup(app.handle())?;
     tray::init(app.handle())?;
+    updater::init(app.handle());
     Ok(())
 }
 
@@ -93,6 +95,14 @@ pub fn run() {
         .plugin(window_state_plugin())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        // Auto-updater (Task 8): endpoints/pubkey live in
+        // tauri.conf.json `plugins.updater`; all driving is Rust-side
+        // (updater.rs) — no capability grants the JS API, so remote pages
+        // cannot touch it. tauri-plugin-process is the JS-side relaunch
+        // companion (also ungranted); the Rust flow uses core
+        // AppHandle::request_restart.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         // Production logger: everything the shell already logs via `log::`
         // (nav-guard blocks, rate-limit drops, webview lifecycle) goes to
         // stderr plus a rotating file in the OS app-log dir (5 MB x 3

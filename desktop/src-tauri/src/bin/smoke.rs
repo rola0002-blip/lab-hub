@@ -718,6 +718,13 @@ fn main() {
         .plugin(labhub_desktop::window_state_plugin())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        // Updater + process plugins registered so bootstrap's updater::init
+        // runs against the real plugin state (its registration log line is
+        // the Task 8 smoke evidence). No check ever fires here: the
+        // background timer (30 s) outlives the ~21 s run and nothing clicks
+        // the tray item — zero network.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![
             commands::list_servers,
             commands::add_server,
