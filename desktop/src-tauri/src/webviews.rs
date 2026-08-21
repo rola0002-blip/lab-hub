@@ -19,6 +19,7 @@ use tauri::{
 };
 use tauri_plugin_opener::OpenerExt;
 
+use crate::badges;
 use crate::config::{AppConfig, ServerConfig};
 use crate::servers::store_key;
 
@@ -100,6 +101,9 @@ pub fn sync(app: &AppHandle) -> Result<(), String> {
         .collect();
     for id in stale {
         let label = map.remove(&id).expect("key checked above");
+        // Forget the removed server's unread badge and recompute the dock
+        // total (entry clear + recompute on remove-server).
+        badges::clear_server_unread(app, &id);
         match app.get_webview(&label) {
             Some(wv) => {
                 wv.close()
@@ -221,6 +225,12 @@ fn create_content_webview(
         })
         .on_document_title_changed(|wv, title| {
             log::info!("document title [{}]: {title}", wv.label());
+            // Push-driven badges: parse the title and update per-server
+            // badge state + events + dock badge. Content webview labels are
+            // always "srv-<server-id>" (label_for).
+            if let Some(server_id) = wv.label().strip_prefix("srv-") {
+                note_title(wv.app_handle(), server_id, &title);
+            }
         })
         .on_page_load(|wv, payload| {
             log::info!("page load [{}] {:?} {}", wv.label(), payload.event(), payload.url());
@@ -252,6 +262,20 @@ fn create_content_webview(
             LogicalSize::new((w - RAIL_WIDTH).max(0.0), h),
         )
         .map_err(|e| format!("add content webview {label}: {e}"))
+}
+
+/// Push-driven unread-badge seam: parse a content webview's document title
+/// and update badge state, `server-badge://<id>` events, and the dock
+/// badge. Called by the real `on_document_title_changed` handler above AND
+/// by the smoke bin (badge data must come from pushed title events — never
+/// polling evals, whose callbacks may not fire on hidden webviews, the
+/// Task 4 quirk — so this fn is the single entry point both callers share).
+#[doc(hidden)]
+pub fn note_title(app: &AppHandle, server_id: &str, title: &str) {
+    match badges::unread_from_title(title) {
+        Some(n) => badges::set_server_unread(app, server_id, n),
+        None => badges::clear_server_unread(app, server_id),
+    }
 }
 
 /// Navigation guard for content webviews: allow the server's own origin

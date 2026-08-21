@@ -1,3 +1,4 @@
+pub mod badges;
 pub mod commands;
 pub mod config;
 pub mod servers;
@@ -13,6 +14,7 @@ pub fn bootstrap(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
     let config = config::load(app.handle());
     app.manage(Mutex::new(config));
     app.manage(webviews::WebviewManager::default());
+    app.manage(badges::BadgeState::default());
     webviews::setup(app.handle())?;
     Ok(())
 }

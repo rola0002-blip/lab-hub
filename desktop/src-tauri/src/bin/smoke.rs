@@ -7,12 +7,16 @@
 //   2. chrome rail webview exists and loads the rail UI
 //   3. commands::add_server creates the content webview (label srv-<id>)
 //   4. document-title + page-load events fire (via log capture)
-//   5. remote-origin IPC: invoke('desktop_notify') resolves from the
+//   5. badge pipeline: note_title (the push seam shared with the real
+//      title handler) with "(5) x — LabHub" emits server-badge://<id>
+//      payload 5 and computes dock total 5; title revert emits 0;
+//      remove_server clears the entry and recomputes the total
+//   6. remote-origin IPC: invoke('desktop_notify') resolves from the
 //      server origin AND from a foreign origin (proves the labhub-remote
 //      capability's https://* pattern)
-//   6. Webview::close works (foreign webview) and remove_server closes the
+//   7. Webview::close works (foreign webview) and remove_server closes the
 //      managed webview via sync
-//   7. CGWindowList screenshot of rail + content and of the empty rail
+//   8. CGWindowList screenshot of rail + content and of the empty rail
 //
 // Run: cargo run --bin smoke (self-exits ~20 s; exit code 0 = all PASS).
 
@@ -25,12 +29,14 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use log::Log as _;
-use tauri::{Manager, Webview, WebviewBuilder, WebviewUrl};
+use tauri::{Listener, Manager, Webview, WebviewBuilder, WebviewUrl};
 use tauri_plugin_opener::OpenerExt;
 
+use labhub_desktop::badges::BadgeState;
 use labhub_desktop::commands;
 use labhub_desktop::config::{normalize_url, AppConfig};
 use labhub_desktop::servers::server_id;
+use labhub_desktop::webviews;
 
 const LABHUB_URL: &str = "https://labhub.taylabs.org";
 const EXAMPLE_URL: &str = "https://example.org";
@@ -61,6 +67,9 @@ static TITLES: Mutex<Vec<(String, String)>> = Mutex::new(Vec::new());
 /// Timestamps of successful `desktop_notify` IPC arrivals — transport-
 /// independent proof that a remote invoke passed the capability ACL.
 static NOTIFY_CALLS: Mutex<Vec<f64>> = Mutex::new(Vec::new());
+/// Payloads (JSON-encoded u32 strings) seen on `server-badge://<id>`
+/// events, fed by the app.listen badge listener.
+static BADGE_PAYLOADS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 struct SmokeLogger;
 
@@ -284,6 +293,63 @@ fn timeline(app: tauri::AppHandle) {
     log(&format!("observed titles: {titles:?}"));
     check(saw_title, "document-title event fired for content webview");
 
+    // t6.3 — badge pipeline. The live lab needs a login to have unreads, so
+    // drive a title change through note_title — the exact seam the real
+    // on_document_title_changed handler calls (push-driven, per the Task 4
+    // hidden-webview eval quirk). Listen for the event the rail UI gets.
+    sleep_until(&t0, 6.3);
+    let badge_listener = app.listen(format!("server-badge://{id}"), |event| {
+        BADGE_PAYLOADS
+            .lock()
+            .unwrap()
+            .push(event.payload().to_string());
+    });
+    log(&format!("badge listener armed for server-badge://{id}"));
+    webviews::note_title(&app, &id, "(5) x — LabHub");
+    let mut saw_five = false;
+    for _ in 0..15 {
+        if BADGE_PAYLOADS.lock().unwrap().iter().any(|p| p == "5") {
+            saw_five = true;
+            break;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    check(saw_five, "server-badge event emitted with payload 5");
+    {
+        let badges = app.state::<BadgeState>();
+        let total = badges.total();
+        // The dock badge itself is GUI-only to assert; total is the exact
+        // value handed to Window::set_badge_count (logged as
+        // "dock badge total: N" by apply_dock_badge).
+        log(&format!(
+            "badge state after (5): total={total} entries={} (dock target; log-only assert)",
+            badges.entry_count()
+        ));
+        check(total == 5, "badge total = 5 after (5) title");
+        check(badges.entry_count() == 1, "badge state tracks one server");
+    }
+
+    // t6.6 — reverting to a no-unread title must emit 0 (so the rail hides
+    // a stale badge) and drop the entry.
+    webviews::note_title(&app, &id, "LabHub");
+    let mut saw_zero = false;
+    for _ in 0..15 {
+        if BADGE_PAYLOADS.lock().unwrap().iter().any(|p| p == "0") {
+            saw_zero = true;
+            break;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    check(
+        saw_zero,
+        "server-badge event emitted with payload 0 on title revert",
+    );
+    check(
+        app.state::<BadgeState>().total() == 0,
+        "badge total back to 0 after title revert",
+    );
+    app.unlisten(badge_listener);
+
     // t7.0 — remote-origin IPC from the server origin (capability check).
     sleep_until(&t0, 7.0);
     if let Some(wv) = app.get_webview(&label) {
@@ -343,10 +409,29 @@ fn timeline(app: tauri::AppHandle) {
         }
     }
 
-    // t17.0 — remove_server closes the managed webview via sync.
+    // t17.0 — remove_server closes the managed webview via sync. Seed an
+    // unread first so the badge-clearing side of the removal path is
+    // observable (sync must drop the entry and recompute the dock total).
     sleep_until(&t0, 17.0);
+    webviews::note_title(&app, &id, "(2) x — LabHub");
+    {
+        let badges = app.state::<BadgeState>();
+        check(badges.total() == 2, "badge total = 2 before remove");
+    }
     let removed = commands::remove_server(app.clone(), app.state(), id.clone());
     check(removed.is_ok(), "remove_server succeeded");
+    {
+        let badges = app.state::<BadgeState>();
+        log(&format!(
+            "badge state after remove: total={} entries={} (dock target 0)",
+            badges.total(),
+            badges.entry_count()
+        ));
+        check(
+            badges.total() == 0 && badges.entry_count() == 0,
+            "remove_server cleared badge entry and recomputed total",
+        );
+    }
     sleep_until(&t0, 18.5);
     check(
         app.get_webview(&label).is_none(),
