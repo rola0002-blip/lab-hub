@@ -5,8 +5,7 @@ certification gating and approvals, Slack-style team chat, project tracking,
 and a shared file library — one Docker install per lab, no cloud dependency.
 
 Your data stays on hardware your lab controls. Members use it from any
-browser (desktop or phone), install it as a PWA, or — coming soon — as a
-native desktop app.
+browser (desktop or phone), install it as a PWA, or as a native desktop app.
 
 ## Quick install (any lab)
 
@@ -28,6 +27,27 @@ Details and options: [docs/ops/distribution.md](docs/ops/distribution.md).
 
 Prefer git? Classic clone install: `cp .env.example .env`, then
 `docker compose --profile prod up -d --build` — see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Desktop app
+
+LabHub also ships as a native desktop app for macOS and Windows — download
+the latest `.dmg` / `-setup.exe` from
+[GitHub Releases](https://github.com/rola0002-blip/lab-hub/releases/latest),
+open it, and add your lab's URL. Sign in once per lab; the app remembers
+each workspace side by side (like a Slack workspace switcher), shows unread
+badges on the dock icon and sidebar, and sends native notifications for
+mentions and DMs. Updates install themselves.
+
+- **macOS 14+**: first launch of an unsigned app — right-click the app →
+  Open → Open (once), or run
+  `xattr -d com.apple.quarantine /Applications/LabHub.app` after dragging it
+  to /Applications. The first notification asks for permission once.
+- **Windows 10/11**: run the installer; SmartScreen may warn on first run —
+  "More info" → "Run anyway". WebView2 installs itself if missing.
+- The desktop app is a thin shell over the same web app your lab server
+  already serves — no extra server setup.
+
+Details: [docs/desktop.md](docs/desktop.md).
 
 ## What's inside
 
