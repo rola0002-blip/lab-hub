@@ -33,7 +33,11 @@
 //      main window (relayout follows the restored size); explicit save
 //      writes a main entry next to config.json
 //
-// Run: cargo run --bin smoke (self-exits ~21 s; exit code 0 = all PASS).
+// Run: cargo run --example smoke (self-exits ~21 s; exit code 0 = all PASS).
+// An EXAMPLE, not a [[bin]]: tauri bundles every cargo bin into the app
+// (and `--target universal-apple-darwin` only lipo's the main binary,
+// breaking universal bundling with extra bins) — examples stay out of
+// the shipped .app/NSIS installer.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 

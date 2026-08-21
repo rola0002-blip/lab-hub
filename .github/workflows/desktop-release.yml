@@ -1,0 +1,154 @@
+name: Desktop release
+
+# Desktop release artifacts on v* tags: universal macOS dmg + signed
+# .app.tar.gz updater artifact, Windows NSIS installer + .sig, and the
+# `latest.json` updater manifest published to the GitHub Release.
+#
+# macOS updater artifact notes (verified against tauri-plugin-updater
+# 2.10.1 sources and a local universal build):
+# - The updater's macOS install path ONLY understands .app.tar.gz (there
+#   is no dmg handling in the plugin), so the manifest's darwin keys must
+#   point at LabHub.app.tar.gz — the dmg is published for humans only.
+# - .sig files are only produced when bundle.createUpdaterArtifacts is
+#   enabled AND TAURI_SIGNING_PRIVATE_KEY is set (see desktop-check.yml
+#   for the unsigned counterpart).
+# - Windows: the NSIS .exe is itself the updater artifact (signed in
+#   place -> LabHub_<version>_x64-setup.exe.sig; filename convention from
+#   the NSIS bundler — verified-on-first-release, not testable on macOS).
+# - `--target universal-apple-darwin` compiles both arches and lipo's the
+#   main binary; extra cargo [[bin]]s are NOT lipo'd (upstream
+#   limitation), which is why the smoke harness lives in examples/.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    # Manual re-run (GITHUB_TOKEN events don't chain). Dispatch targeting
+    # a non-v* ref is skipped by the `if` guard below — dispatch on the
+    # tag: gh workflow run desktop-release.yml --ref vX.Y.Z
+
+jobs:
+  build:
+    if: startsWith(github.ref_name, 'v')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            args: '--target universal-apple-darwin'
+            rust-targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
+          - os: windows-latest
+            args: ''
+            rust-targets: ''
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          targets: ${{ matrix.rust-targets }}
+          cache: false # swatinem/rust-cache below is the cache
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Bundles (tauri.conf.json targets: app,dmg,nsis) + updater artifacts
+      # + minisign signatures in one pass. Verified local output paths:
+      #   macOS:   desktop/src-tauri/target/universal-apple-darwin/release/bundle/
+      #              dmg/LabHub_0.21.0_universal.dmg
+      #              macos/LabHub.app.tar.gz{,.sig}
+      #   Windows: desktop/src-tauri/target/release/bundle/nsis/
+      #              LabHub_<version>_x64-setup.exe{,.sig}
+      - name: Build, bundle and sign updater artifacts
+        shell: bash
+        run: npx --yes @tauri-apps/cli build ${{ matrix.args }}
+      - name: Upload artifacts (macos)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-macos
+          if-no-files-found: error
+          path: |
+            desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
+            desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig
+      - name: Upload artifacts (windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-windows
+          if-no-files-found: error
+          path: |
+            desktop/src-tauri/target/release/bundle/nsis/*.exe
+            desktop/src-tauri/target/release/bundle/nsis/*.exe.sig
+
+  manifest:
+    needs: build
+    if: startsWith(github.ref_name, 'v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      # ORDERING DEPENDENCY (race with release.yml): on a v* tag push,
+      # release.yml (server image) and this workflow start in parallel and
+      # BOTH target the same GitHub Release. release.yml runs a bare
+      # `gh release create` which FAILS if the release already exists, so
+      # this workflow must never create it first: it polls for up to
+      # 10 min (release.yml's multi-arch image build usually takes a few
+      # minutes before its create step) and only falls back to creating a
+      # placeholder release if that window passes (e.g. a standalone
+      # workflow_dispatch re-run after release.yml already failed).
+      - name: Wait for release.yml to create the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ github.ref_name }}"
+          for i in $(seq 1 20); do
+            if gh release view "$tag" > /dev/null 2>&1; then
+              echo "release $tag exists (poll $i)"
+              exit 0
+            fi
+            if [ "$i" -eq 20 ]; then
+              echo "release $tag still missing after 10 min — creating fallback"
+              gh release create "$tag" --title "$tag" --notes "LabHub $tag"
+            fi
+            sleep 30
+          done
+      # Both darwin keys share the ONE universal .app.tar.gz + .sig; the
+      # .sig files are NOT uploaded as release assets — latest.json embeds
+      # their content and the updater verifies against that.
+      - name: Generate latest.json and upload release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ github.ref_name }}"
+          node scripts/release-notes.mjs "$tag" > release-notes.md
+          dmg=$(ls dist/dist-macos/*.dmg)
+          app_tgz=$(ls dist/dist-macos/*.app.tar.gz)
+          app_sig=$(ls dist/dist-macos/*.app.tar.gz.sig)
+          exe=$(ls dist/dist-windows/*-setup.exe)
+          exe_sig=$(ls dist/dist-windows/*.exe.sig)
+          node scripts/desktop-updater-manifest.mjs --tag "$tag" \
+            --asset darwin-aarch64="$(basename "$app_tgz")" --sig darwin-aarch64="$app_sig" \
+            --asset darwin-x86_64="$(basename "$app_tgz")" --sig darwin-x86_64="$app_sig" \
+            --asset win-x64="$(basename "$exe")" --sig win-x64="$exe_sig" \
+            --notes-file release-notes.md > latest.json
+          cat latest.json
+          gh release upload "$tag" "$dmg" "$app_tgz" "$exe" latest.json --clobber

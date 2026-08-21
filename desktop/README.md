@@ -12,4 +12,11 @@ per configured lab server (see `docs/desktop.md` for the architecture).
 - **Windows:** the bootstrapper downloads WebView2 on first run when the
   target machine has no suitable runtime — no manual install step.
 - Gates: `cargo fmt --check && cargo clippy --all-targets -- -D warnings
-  && cargo test` and `cargo run --bin smoke` (headless regression run).
+  && cargo test` and `cargo run --example smoke` (headless regression run).
+- **Bundling locally:** `bundle.createUpdaterArtifacts` is on, so a plain
+  `tauri build` fails without `TAURI_SIGNING_PRIVATE_KEY`. For an unsigned
+  local bundle run `npx --yes @tauri-apps/cli build --config
+  '{"bundle":{"createUpdaterArtifacts":false}}'` (what CI's desktop-check
+  smoke does); CI release builds sign with the repo secret.
+- The macOS updater installs `.app.tar.gz` (not dmg) — the release
+  workflow's manifest darwin keys point at `LabHub.app.tar.gz`.
