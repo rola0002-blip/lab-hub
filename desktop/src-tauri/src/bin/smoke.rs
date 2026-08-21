@@ -22,8 +22,18 @@
 //   8. Webview::close works (foreign webview) and remove_server closes the
 //      managed webview via sync
 //   9. CGWindowList screenshot of rail + content and of the empty rail
+//  10. tray: menu refreshed with placeholder at bootstrap, rebuilt with
+//      the server after add (4 items) and back to placeholder after
+//      remove (log-captured refreshes); close_to_tray persisted via the
+//      command; pure close decision (main+flag) and menu-shape helper
+//  11. hidden-window notify path: with the window hidden (close-to-tray
+//      state), consuming a pending click target SHOWS the window again
+//      (a hidden window never fires Focused — show-if-hidden fix)
+//  12. window-state: seeded geometry restored for the runtime-created
+//      main window (relayout follows the restored size); explicit save
+//      writes a main entry next to config.json
 //
-// Run: cargo run --bin smoke (self-exits ~20 s; exit code 0 = all PASS).
+// Run: cargo run --bin smoke (self-exits ~21 s; exit code 0 = all PASS).
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -40,8 +50,9 @@ use tauri_plugin_opener::OpenerExt;
 use labhub_desktop::badges::BadgeState;
 use labhub_desktop::commands;
 use labhub_desktop::config::{normalize_url, AppConfig};
-use labhub_desktop::notify::NotifyState;
+use labhub_desktop::notify::{self, NotifyState};
 use labhub_desktop::servers::server_id;
+use labhub_desktop::tray;
 use labhub_desktop::webviews;
 
 const LABHUB_URL: &str = "https://labhub.taylabs.org";
@@ -76,6 +87,10 @@ static NOTIFY_CALLS: Mutex<Vec<f64>> = Mutex::new(Vec::new());
 /// Payloads (JSON-encoded u32 strings) seen on `server-badge://<id>`
 /// events, fed by the app.listen badge listener.
 static BADGE_PAYLOADS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+/// Label strings of every tray menu refresh ("server | ... | Quit
+/// LabHub"), fed by the logger interceptor — proves add/remove rebuild
+/// the tray menu.
+static TRAY_MENUS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 struct SmokeLogger;
 
@@ -112,6 +127,9 @@ impl log::Log for SmokeLogger {
                 .lock()
                 .unwrap()
                 .push(T0.get().map_or(0.0, |t| t.elapsed().as_secs_f64()));
+        }
+        if let Some(rest) = args.strip_prefix("tray menu refreshed: ") {
+            TRAY_MENUS.lock().unwrap().push(rest.to_string());
         }
     }
     fn flush(&self) {}
@@ -282,6 +300,24 @@ fn timeline(app: tauri::AppHandle) {
         "no content webview before add",
     );
 
+    // Window-state restore: the seeded geometry (1600x1000 physical) was
+    // restored when the runtime-created window became ready; the Resized
+    // event ran the rail/content relayout off the restored size (see
+    // "main window resized: relayout" logs above).
+    if let Some(window) = app.get_window("main") {
+        let scale = window.scale_factor().unwrap_or(1.0);
+        let size = window.inner_size().unwrap_or_default();
+        let (w, h) = (size.width as f64 / scale, size.height as f64 / scale);
+        let (want_w, want_h) = (1600.0 / scale, 1000.0 / scale);
+        log(&format!(
+            "window-state restore: {w:.0}x{h:.0} logical (seeded {want_w:.0}x{want_h:.0}, scale {scale})"
+        ));
+        check(
+            (w - want_w).abs() <= want_w * 0.1 && (h - want_h).abs() <= want_h * 0.1,
+            "window-state restored seeded size for runtime-created main window",
+        );
+    }
+
     // t2.0 — add a server through the real command (health check + save +
     // emit + sync). This is the same path the chrome UI takes.
     sleep_until(&t0, 2.0);
@@ -421,6 +457,87 @@ fn timeline(app: tauri::AppHandle) {
     sleep_until(&t0, 9.0);
     capture("/tmp/labhub-smoke-rail-content.png");
 
+    // t9.4 — tray menu: bootstrap's init refreshed it with the
+    // placeholder, add_server's after_mutation hook rebuilt it with the
+    // server. The label strings come from the same log the operator sees.
+    sleep_until(&t0, 9.4);
+    {
+        let menus = TRAY_MENUS.lock().unwrap().clone();
+        log(&format!("tray menu refreshes so far: {menus:?}"));
+        check(
+            menus.iter().any(|m| m.starts_with("(No servers) | ")),
+            "tray menu refreshed with placeholder at bootstrap",
+        );
+        check(
+            menus.iter().any(|m| {
+                m.split(" | ").count() == 4
+                    && m.split(" | ").next().is_some_and(|l| l != "(No servers)")
+            }),
+            "tray menu rebuilt with 4 items (1 server + 3 fixed) after add",
+        );
+    }
+
+    // t9.7 — close-to-tray decision + the hidden-window notify show-path.
+    // The real CloseRequested needs a GUI click, so the pure decision fn
+    // is asserted directly; the notify path is exercised for real: hide
+    // the window, seed a pending click target, and consume — which must
+    // SHOW the window again (a hidden window never fires Focused).
+    sleep_until(&t0, 9.7);
+    check(
+        commands::set_close_to_tray(app.clone(), app.state(), true).is_ok(),
+        "set_close_to_tray(true) command succeeded",
+    );
+    {
+        let config = app
+            .state::<std::sync::Mutex<AppConfig>>()
+            .lock()
+            .unwrap()
+            .clone();
+        check(
+            config.close_to_tray,
+            "close_to_tray persisted true in config",
+        );
+        check(
+            tray::close_stays_in_tray("main", config.close_to_tray),
+            "close decision: main window stays hidden when close_to_tray on",
+        );
+        check(
+            !tray::close_stays_in_tray("other", config.close_to_tray),
+            "close decision: other windows close regardless",
+        );
+        check(
+            tray::build_menu_items(&config).len() == 4,
+            "tray build_menu_items: N servers -> N+3 labels",
+        );
+    }
+    if let Some(window) = app.get_window("main") {
+        let hid = window.hide().is_ok();
+        thread::sleep(Duration::from_millis(300));
+        let hidden = hid && !window.is_visible().unwrap_or(true);
+        check(hidden, "main window hidden for close-to-tray notify probe");
+        app.state::<NotifyState>()
+            .set_pending_target(Some(id.clone()));
+        notify::consume_pending_click(&app);
+        let mut shown = false;
+        for _ in 0..15 {
+            if window.is_visible().unwrap_or(false) {
+                shown = true;
+                break;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+        check(
+            shown,
+            "notify click consumption SHOWS a hidden main window (show-if-hidden fix)",
+        );
+        check(
+            app.state::<NotifyState>().pending_target().is_none(),
+            "pending click target consumed exactly once",
+        );
+    }
+    // Leave close_to_tray off for the rest of the run.
+    let _ = commands::set_close_to_tray(app.clone(), app.state(), false);
+
     // t10.0 — foreign-origin IPC proof: raw webview (not via manager) on a
     // non-configured origin, testing the labhub-remote https://* pattern.
     sleep_until(&t0, 10.0);
@@ -501,6 +618,13 @@ fn timeline(app: tauri::AppHandle) {
         .map(|w| w.label().to_string())
         .collect();
     log(&format!("webview labels after remove: {labels:?}"));
+    {
+        let menus = TRAY_MENUS.lock().unwrap().clone();
+        check(
+            menus.iter().any(|m| m.starts_with("(No servers) | ")),
+            "tray menu rebuilt with placeholder after remove",
+        );
+    }
 
     // t19.0 — screenshot: empty rail.
     sleep_until(&t0, 19.0);
@@ -514,6 +638,44 @@ fn timeline(app: tauri::AppHandle) {
     {
         Ok(()) => log("opener plugin reachable (opened default browser)"),
         Err(e) => log(&format!("opener plugin call failed (non-fatal): {e}")),
+    }
+
+    // t20.4 — explicit window-state save (the plugin also saves on
+    // RunEvent::Exit; here the save path itself is what is asserted:
+    // the file must land next to config.json with a main-window entry).
+    sleep_until(&t0, 20.4);
+    {
+        use tauri_plugin_window_state::{AppHandleExt, StateFlags};
+        match app.save_window_state(StateFlags::all()) {
+            Ok(()) => {
+                let path = labhub_desktop::config::config_path(&app)
+                    .ok()
+                    .and_then(|p| p.parent().map(|d| d.join(".window-state.json")));
+                let raw = path.as_ref().and_then(|p| std::fs::read_to_string(p).ok());
+                match (path, raw) {
+                    (Some(p), Some(raw)) => {
+                        let parsed: Result<serde_json::Value, _> = serde_json::from_str(&raw);
+                        let has_main = parsed
+                            .ok()
+                            .and_then(|v| v.get("main").cloned())
+                            .is_some_and(|m| m["width"].as_f64().unwrap_or(0.0) > 0.0);
+                        log(&format!(
+                            "window-state saved: {} ({} bytes, main entry: {})",
+                            p.display(),
+                            raw.len(),
+                            has_main
+                        ));
+                        check(has_main, "window-state save wrote a main-window entry");
+                    }
+                    (Some(_), None) => check(false, "window-state save file readable"),
+                    _ => check(false, "window-state path resolvable"),
+                }
+            }
+            Err(e) => {
+                log(&format!("window-state save failed: {e}"));
+                check(false, "window-state save ok");
+            }
+        }
     }
 
     sleep_until(&t0, 21.0);
@@ -536,11 +698,24 @@ fn main() {
     std::fs::create_dir_all(&home).expect("create smoke HOME");
     std::env::set_var("HOME", &home);
 
+    // Seed a saved window state (1600x1000 physical) so the window-state
+    // plugin has something to restore for the runtime-created "main"
+    // window — asserted at t0.5 (restore -> Resized -> relayout).
+    {
+        let dir = home.join("Library/Application Support/org.taylabs.labhub-desktop");
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(
+            dir.join(".window-state.json"),
+            r#"{"main":{"width":1600,"height":1000,"x":120,"y":120,"prev_x":0,"prev_y":0,"maximized":false,"visible":true,"decorated":true,"fullscreen":false}}"#,
+        );
+    }
+
     log::set_logger(&SmokeLogger).expect("install smoke logger");
     log::set_max_level(log::LevelFilter::Info);
     log(&format!("HOME sandboxed to {}", home.display()));
 
     tauri::Builder::default()
+        .plugin(labhub_desktop::window_state_plugin())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![

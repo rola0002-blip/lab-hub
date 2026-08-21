@@ -8,7 +8,7 @@
 
 use crate::config::{normalize_url, AppConfig, ServerConfig};
 use crate::servers::{check_health, default_name, server_id};
-use crate::webviews;
+use crate::{tray, webviews};
 use std::sync::{Mutex, MutexGuard};
 use tauri::{AppHandle, Emitter, State};
 
@@ -22,6 +22,10 @@ fn after_mutation(app: &AppHandle, webview_diff: bool) -> Result<(), String> {
     if let Err(e) = app.emit("servers-changed", ()) {
         log::warn!("emit servers-changed failed: {e}");
     }
+    // Keep the tray's per-server items in lockstep with the rail (the
+    // menu is the same server list in another surface). Idempotent, and
+    // only warns if the tray is somehow missing.
+    tray::refresh(app);
     if webview_diff {
         webviews::sync(app)?;
     }

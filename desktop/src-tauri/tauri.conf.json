@@ -8,7 +8,11 @@
   },
   "app": {
     "withGlobalTauri": true,
-    "windows": []
+    "windows": [],
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "tooltip": "LabHub"
+    }
   },
   "bundle": {
     "active": true,

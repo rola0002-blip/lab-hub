@@ -22,6 +22,12 @@
 //! manual re-focus — acceptable, and usually desired: the freshest
 //! notification points at where the user wants to be next — and the
 //! target is consumed exactly once.
+//!
+//! Close-to-tray wrinkle: a HIDDEN window never fires `Focused(true)`,
+//! so a toast clicked while hidden leaves the target pending; the next
+//! show (tray Show / tray server item / this fn itself — all of which
+//! show + focus, see [`consume_pending_click`]) then consumes it and
+//! lands the user on the notifying server.
 
 use std::collections::VecDeque;
 use std::sync::Mutex;
@@ -214,6 +220,14 @@ pub fn desktop_notify(
 /// Consumes the pending notification click target on main-window focus
 /// (see module docs for why focus is the click signal on desktop). No-op
 /// when nothing is pending, so ordinary dock-click focus is untouched.
+///
+/// Show-if-hidden: with close-to-tray the main window may be hidden when
+/// a toast is clicked — and a hidden window never fires `Focused(true)`,
+/// so the pending target survives until the next show. Every path that
+/// surfaces this consumption (this fn, tray `Show LabHub`, tray server
+/// items) shows + focuses the window first, which both reveals it and
+/// triggers the Focused event that lands the user on the notifying
+/// server.
 pub fn consume_pending_click(app: &AppHandle) {
     let Some(state) = app.try_state::<NotifyState>() else {
         return;
@@ -221,9 +235,20 @@ pub fn consume_pending_click(app: &AppHandle) {
     let Some(server_id) = state.take_pending_target() else {
         return;
     };
+    if let Some(window) = app.get_window(crate::webviews::WINDOW_LABEL) {
+        // A hidden window cannot be focused: show first, then focus.
+        if let Err(e) = window.show() {
+            log::warn!("notification click: show main window failed: {e}");
+        }
+        if let Err(e) = window.set_focus() {
+            log::warn!("notification click: focus main window failed: {e}");
+        }
+    }
     let result = crate::commands::set_active(app.clone(), app.state(), server_id.clone());
     match result {
-        Ok(()) => log::info!("notification click: switched to server {server_id}"),
+        Ok(()) => {
+            log::info!("notification click: main window shown + switched to server {server_id}")
+        }
         Err(e) => log::warn!("notification click switch to {server_id} failed: {e}"),
     }
 }
