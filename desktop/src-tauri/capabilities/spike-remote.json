@@ -1,8 +1,0 @@
-{
-  "identifier": "spike-remote",
-  "windows": ["main"],
-  "remote": {
-    "urls": ["https://labhub.taylabs.org"]
-  },
-  "permissions": ["core:default", "allow-spike-ping"]
-}

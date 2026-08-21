@@ -8,15 +8,7 @@
   },
   "app": {
     "withGlobalTauri": true,
-    "windows": [
-      {
-        "label": "main",
-        "title": "LabHub",
-        "url": "index.html",
-        "width": 1200,
-        "height": 800
-      }
-    ]
+    "windows": []
   },
   "bundle": {
     "active": true,

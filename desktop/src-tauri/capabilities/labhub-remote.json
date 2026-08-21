@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "labhub-remote",
+  "description": "Server content webviews (children of window 'main'). Users can add arbitrary LabHub servers, so the remote url grant cannot enumerate origins: URLPattern 'https://*' / 'http://*' match any http(s) origin (hostname wildcard; empty pathname auto-widens to '*'). Exposure is still contained: the navigation guard in webviews.rs only ever loads user-configured server origins in these webviews, and this capability deliberately grants ONLY desktop-notify + opener + event defaults - never core:default or config commands. 'windows' matches the parent window label, which covers every child webview (spike S5).",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["https://*", "http://*"]
+  },
+  "permissions": [
+    "allow-desktop-notify",
+    "opener:default",
+    "core:event:default"
+  ]
+}

@@ -15,11 +15,12 @@ url = "2"
 uuid = { version = "1", features = ["v5"] }
 reqwest = { version = "0.12", default-features = false, features = ["default-tls", "json"] }
 log = "0.4"
+tauri-plugin-opener = "2"
 
 [[bin]]
 name = "labhub-desktop"
 path = "src/main.rs"
 
 [[bin]]
-name = "spike"
-path = "src/bin/spike.rs"
+name = "smoke"
+path = "src/bin/smoke.rs"
