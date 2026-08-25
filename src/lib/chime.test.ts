@@ -90,6 +90,7 @@ describe('PingThrottle', () => {
     const t = new PingThrottle(3000)
     t.canPing(t0)
     expect(t.canPing(t0 + 1500)).toBe(false)
-    expect(t.canPing(t0 + 3001)).toBe(true, 'window is measured from the last EMITTED ping, not the swallowed hit')
+    // window is measured from the last EMITTED ping, not the swallowed hit
+    expect(t.canPing(t0 + 3001)).toBe(true)
   })
 })
