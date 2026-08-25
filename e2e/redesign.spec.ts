@@ -513,23 +513,25 @@ test('F7: sign-in lands on the last-open conversation; leaving reverts to /issue
   await page.context().close()
 })
 
-// F7: notification sounds — an opt-in per-device toggle (role=switch, never
-// colour-alone) whose localStorage choice survives reload; the server column is
-// only the cross-device seed.
+// F7: notification sounds — a per-device toggle (role=switch, never colour-alone)
+// whose localStorage choice survives reload; the server column is only the
+// cross-device seed. Since v0.23 the default is ON (wave-9 migration flipped the
+// column default + existing rows), so the fresh-admin switch starts checked and
+// the device '0' opt-out must override the now-true server seed after reload.
 test('F7: profile sounds toggle stays on across reload', async ({ browser }) => {
   test.setTimeout(90_000)
   const page = await admin(browser)
 
   await page.goto('/profile')
   const toggle = page.getByRole('switch', { name: 'Notification sounds' })
-  await expect(toggle).toHaveAttribute('aria-checked', 'false')
-  await toggle.click()
   await expect(toggle).toHaveAttribute('aria-checked', 'true')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
 
-  // Reload: localStorage 'sounds' === '1' wins on the device, so the switch the
-  // server seeded as false still renders on.
+  // Reload: localStorage 'sounds' === '0' wins on the device, so the switch the
+  // server seeded as true still renders off.
   await page.reload()
-  await expect(page.getByRole('switch', { name: 'Notification sounds' })).toHaveAttribute('aria-checked', 'true')
+  await expect(page.getByRole('switch', { name: 'Notification sounds' })).toHaveAttribute('aria-checked', 'false')
 
   await page.context().close()
 })
