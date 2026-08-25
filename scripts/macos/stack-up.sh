@@ -17,19 +17,24 @@ for _ in $(seq 1 30); do
   sleep 2
 done
 
-# Memory-floor guard (F8). The in-VM production build (prisma generate + next build on top of
-# BuildKit + Postgres) needs headroom; a silently-recreated 2 GiB default VM OOM-kills the build
-# and surfaces as a cryptic "UPDATE FAILED". Warn (never block boot) if the RUNNING VM is below
-# the floor, so an under-sized VM is visible in the launchd log instead of a mystery failure.
+# Memory-floor guard (F8, kept as a general resource check). Since SP10 the stack runs
+# the PUBLISHED image (docker-compose.image.yml) — no in-VM production build — but a
+# starved VM still hurts Postgres + Next at lab scale; warn (never block boot).
 # Best-effort parse — never fatal (jq may be absent; colima's JSON shape varies across versions).
 MEM_FLOOR_GIB=12
 mem_bytes="$(colima list --json 2>/dev/null | sed -n 's/.*"memory":\([0-9][0-9]*\).*/\1/p' | head -1)" || mem_bytes=""
 if [ -n "$mem_bytes" ]; then
   mem_gib=$(( mem_bytes / 1073741824 ))
   if [ "$mem_gib" -lt "$MEM_FLOOR_GIB" ]; then
-    echo "WARNING: Colima VM has ${mem_gib} GiB (< ${MEM_FLOOR_GIB} GiB floor) — the in-VM prod build may OOM." >&2
+    echo "WARNING: Colima VM has ${mem_gib} GiB (< ${MEM_FLOOR_GIB} GiB floor) — the stack may struggle." >&2
     echo "  Recreate sized: colima stop && colima start --memory ${MEM_FLOOR_GIB} --cpu 4" >&2
   fi
 fi
 
-docker compose --profile prod --profile tunnel up -d
+# SP10 posture: run the published GHCR image (fast, no local build). LABHUB_VERSION
+# comes from .env when present (set at dogfood migration), else latest. --pull always
+# picks up new releases on boot; on pull failure the local image still boots.
+LABHUB_VERSION="$(sed -n 's/^LABHUB_VERSION=//p' .env 2>/dev/null | tail -1)"
+export LABHUB_VERSION="${LABHUB_VERSION:-latest}"
+docker compose -f docker-compose.yml -f docker-compose.image.yml \
+  --profile prod --profile tunnel up -d --pull always
