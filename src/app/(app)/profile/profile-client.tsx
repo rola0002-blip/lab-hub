@@ -131,7 +131,7 @@ export default function ProfileClient({ user, soundsEnabled }: { user: ProfileUs
           <div className="mt-2"><AccentPicker /></div>
         </div>
         <div className="mt-4 flex items-center justify-between gap-4">
-          <p className="text-sm text-muted">Notification sounds — a soft chime for mentions and direct messages on this device.</p>
+          <p className="text-sm text-muted">Notification sounds — a soft ping for new messages in unmuted conversations on this device.</p>
           <SoundsToggle initial={soundsEnabled} />
         </div>
       </section>

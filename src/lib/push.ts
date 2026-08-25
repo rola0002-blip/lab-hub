@@ -34,7 +34,7 @@ export async function deleteSubscription(userId: string, endpoint: string): Prom
 
 export async function sendPush(
   userId: string,
-  payload: { title: string; body: string; url: string },
+  payload: { title: string; body: string; url: string; tag?: string },
   sender?: PushSender,
 ): Promise<void> {
   try {

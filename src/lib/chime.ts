@@ -20,3 +20,31 @@ export function shouldChime(watermark: string | null, items: ChimeItem[]): { chi
   }
   return { chime: hits.length > 0, watermark: max ?? '', hits }
 }
+
+// Wave 9 (D5/D7): Slack-like coverage — every new message in an unmuted,
+// non-open conversation pings. The SSE `msg` event carries only {cid, mid}, so
+// the Bell fetches the message (the MessagePane precedent) and decides HERE.
+export type MsgPingInput = { cid: string; authorId: string; kind?: string; muted: boolean }
+
+export function shouldPingFromMessage(
+  m: MsgPingInput,
+  opts: { openCid: string | null; focused: boolean; selfId: string },
+): boolean {
+  if (m.muted) return false
+  if (m.kind === 'system') return false
+  if (m.authorId === opts.selfId) return false // never ping your own echo
+  if (opts.focused && m.cid === opts.openCid) return false // you are looking at it
+  return true
+}
+
+// One ping per burst: a hit inside the window is swallowed (NO queued backlog
+// ping — Slack dings once per burst, it does not replay the queue).
+export class PingThrottle {
+  private last = 0
+  constructor(private readonly minIntervalMs = 3000) {}
+  canPing(now = Date.now()): boolean {
+    if (now - this.last < this.minIntervalMs) return false
+    this.last = now
+    return true
+  }
+}
