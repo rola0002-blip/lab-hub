@@ -3,9 +3,11 @@
 //! Window "main" hosts a fixed [`RAIL_WIDTH`]-logical-px local chrome rail
 //! (webview "chrome") plus one remote content webview per configured server
 //! (webview "srv-<server-id>"); switching servers toggles visibility only,
-//! so sessions and scroll positions survive. Bounds are managed manually
-//! (no `auto_resize`): [`relayout`] re-applies them on every
-//! `WindowEvent::Resized` so the rail stays exactly 240 px wide — with
+//! so sessions and scroll positions survive. Since wave 9 the rail AUTO-HIDES
+//! at exactly one configured server (effective width 0 — see [`rail_visible`]);
+//! the tray's "Add server…" item re-reveals it via [`reveal_rail`]. Bounds are
+//! managed manually (no `auto_resize`): [`relayout`] re-applies them on every
+//! `WindowEvent::Resized` so the rail stays at its effective width — with
 //! `auto_resize` each webview keeps *proportional* size instead (spike S1
 //! quirk, docs/handoffs/2026-08-21-sp11-spike.md).
 
