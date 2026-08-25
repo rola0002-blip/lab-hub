@@ -23,14 +23,15 @@ model User {
   timezone         String? // IANA tz id; drives the member's local time on People
   isSystem         Boolean   @default(false) // true ONLY for the LabHub Bot; excluded from every human enumeration (SP5 §5.6)
   icsToken         String?   @unique // per-user calendar-feed token; nullable-unique (many NULLs coexist), minted lazily (SP5 §4.1)
-  // v0.16 F3/F7/F9: per-user workspace state. pinnedProjectIds is pin order
+  // v0.16 F3/F7/F9 + v0.23 D6: per-user workspace state. pinnedProjectIds is pin order
   // (NOT NULL array, SQL DEFAULT '{}' — a rolled-back binary INSERTs fine);
   // lastConversationId is a plain string (membership re-validated at read, NOT
   // a FK — DMs/channels are never hard-deleted and stale degrades to fallback);
-  // soundsEnabled default OFF (opt-in chime).
+  // soundsEnabled default ON since v0.23 (wave-9 migration flipped the column
+  // default + all existing rows; per-device localStorage 'sounds'='0' still wins).
   pinnedProjectIds   String[]  @default([])
   lastConversationId String?
-  soundsEnabled      Boolean   @default(false)
+  soundsEnabled      Boolean   @default(true)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -58,6 +59,7 @@ model User {
   documentFolders DocumentFolder[]
 
   feedback Feedback[]
+  raAcknowledgments RaAcknowledgment[]
 
   @@map("user")
 }
@@ -704,4 +706,23 @@ model Feedback {
   // status, not searched.
   @@index([status, createdAt])
   @@index([authorId, createdAt])
+}
+
+// ---------- RA acknowledgments: risk-assessment read receipts (v0.23 / wave 9) ----------
+model RaAcknowledgment {
+  id           String   @id @default(cuid())
+  userId       String
+  // Restrict like Feedback.authorId: the lab's compliance record must fail
+  // loudly, never silently erase. (Users are banned, never deleted.)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  // PLAIN STRING, deliberately NOT an FK, + a name snapshot: deleting an RA
+  // from Files must never destroy (or be blocked by) the evidence that it was
+  // read — the User.lastConversationId non-FK posture.
+  documentId   String
+  documentName String
+  matricNumber String
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, documentId])
+  @@index([createdAt])
 }

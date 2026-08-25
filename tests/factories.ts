@@ -154,6 +154,12 @@ export async function makeFeedback(
   })
 }
 
+export async function makeRaAcknowledgment(userId: string, documentId: string, over: Record<string, unknown> = {}) {
+  return prisma.raAcknowledgment.create({
+    data: { userId, documentId, documentName: 'ra-test.pdf', matricNumber: 'A0123456X', ...over },
+  })
+}
+
 // Re-create the system rows the SP5 seed migration installs (resetDb TRUNCATEs them
 // away). Idempotent — SP5 integration tests call this in their beforeEach after
 // resetDb when they need the bot / #lab-updates present.
