@@ -42,6 +42,7 @@ pub const NOTIFY_SHIM: &str = include_str!("../../ui/notify-shim.js");
 #[derive(Default)]
 pub struct WebviewManager {
     webviews: Mutex<HashMap<String, String>>,
+    rail_revealed: std::sync::atomic::AtomicBool,
 }
 
 fn label_for(server_id: &str) -> String {
@@ -146,17 +147,47 @@ pub fn sync(app: &AppHandle) -> Result<(), String> {
             wv.hide().map_err(|e| format!("hide {label}: {e}"))?;
         }
     }
+    // Rail auto-hide: a mutation re-derives visibility from the server count —
+    // a tray-revealed rail (no mutation yet) hides again once one happens.
+    let visible = rail_visible(config.servers.len(), false);
+    manager
+        .rail_revealed
+        .store(visible, std::sync::atomic::Ordering::Relaxed);
+    if let Some(chrome) = app.get_webview(CHROME_LABEL) {
+        let r = if visible {
+            chrome.show()
+        } else {
+            chrome.hide()
+        };
+        if let Err(e) = r {
+            log::warn!("rail show/hide failed: {e}");
+        }
+    }
     drop(map);
     relayout(&window);
     Ok(())
 }
 
 /// Re-applies chrome + content bounds. Called on every window resize so
-/// the rail stays fixed-width (see module docs).
+/// the rail stays fixed-width (see module docs). The rail's EFFECTIVE width is
+/// zero while auto-hidden (exactly one server, not tray-revealed) — one layout
+/// function covers both states, no special-casing at the show/hide sites.
 pub fn relayout(window: &Window) {
     let app = window.app_handle();
     let Some(manager) = app.try_state::<WebviewManager>() else {
         return;
+    };
+    let server_count = app
+        .try_state::<Mutex<AppConfig>>()
+        .and_then(|state| state.lock().ok().map(|c| c.servers.len()))
+        .unwrap_or(0);
+    let revealed = manager
+        .rail_revealed
+        .load(std::sync::atomic::Ordering::Relaxed);
+    let rail = if rail_visible(server_count, revealed) {
+        RAIL_WIDTH
+    } else {
+        0.0
     };
     let Ok(map) = manager.webviews.lock() else {
         return;
@@ -170,14 +201,11 @@ pub fn relayout(window: &Window) {
             continue;
         };
         let bounds = if label == CHROME_LABEL {
-            (
-                LogicalPosition::new(0.0, 0.0),
-                LogicalSize::new(RAIL_WIDTH, h),
-            )
+            (LogicalPosition::new(0.0, 0.0), LogicalSize::new(rail, h))
         } else {
             (
-                LogicalPosition::new(RAIL_WIDTH, 0.0),
-                LogicalSize::new((w - RAIL_WIDTH).max(0.0), h),
+                LogicalPosition::new(rail, 0.0),
+                LogicalSize::new((w - rail).max(0.0), h),
             )
         };
         if let Err(e) = wv
@@ -187,6 +215,40 @@ pub fn relayout(window: &Window) {
             log::warn!("relayout {label} failed: {e}");
         }
     }
+}
+
+/// Tray "Add server…" (wave 9): temporarily reveal the hidden rail and focus
+/// it so the always-present "+ Add server" form is reachable. Cleared by the
+/// next config mutation (sync) — a cancelled reveal persists until then; an
+/// accepted quirk (documented in the spec), never blocking.
+pub fn reveal_rail(app: &AppHandle) {
+    let Some(window) = app.get_window(WINDOW_LABEL) else {
+        return;
+    };
+    if let Some(manager) = app.try_state::<WebviewManager>() {
+        manager
+            .rail_revealed
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    if let Some(chrome) = app.get_webview(CHROME_LABEL) {
+        if let Err(e) = chrome.show() {
+            log::warn!("reveal rail (show) failed: {e}");
+        }
+        if let Err(e) = chrome.set_focus() {
+            log::warn!("reveal rail (focus) failed: {e}");
+        }
+    }
+    relayout(&window);
+}
+
+/// Smoke seam (wave 9): the current rail reveal/visibility flag, so the
+/// smoke bin can assert the auto-hidden state headlessly (Webview has no
+/// is_visible accessor). `#[doc(hidden)]` like `note_title`.
+#[doc(hidden)]
+pub fn is_rail_revealed(app: &AppHandle) -> bool {
+    app.try_state::<WebviewManager>()
+        .map(|m| m.rail_revealed.load(std::sync::atomic::Ordering::Relaxed))
+        .unwrap_or(false)
 }
 
 fn create_content_webview(
@@ -316,6 +378,14 @@ fn is_scheme_upgrade(server: &Url, nav: &Url) -> bool {
         && nav.scheme() == "https"
         && server.host_str() == nav.host_str()
         && server.port() == nav.port()
+}
+
+/// Rail auto-hide (wave 9 D1): the rail is HIDDEN when exactly one server is
+/// configured (nothing to switch), visible at zero (it is the only add-server
+/// UI) and at two+ (it is the switcher). `revealed` is the tray "Add server…"
+/// escape hatch while hidden — pure so the matrix is unit-testable.
+pub fn rail_visible(server_count: usize, revealed: bool) -> bool {
+    server_count != 1 || revealed
 }
 
 /// Which server's webview should be VISIBLE: the configured active server
@@ -524,5 +594,19 @@ mod tests {
     #[test]
     fn resolve_active_is_none_with_no_servers() {
         assert_eq!(resolve_active(&AppConfig::default()), None);
+    }
+
+    // --- rail auto-hide (wave 9) ---
+
+    #[test]
+    fn rail_hides_exactly_at_one_server() {
+        assert!(rail_visible(0, false));
+        assert!(!rail_visible(1, false));
+        assert!(rail_visible(2, false));
+    }
+
+    #[test]
+    fn tray_reveal_shows_the_hidden_rail() {
+        assert!(rail_visible(1, true));
     }
 }

@@ -23,7 +23,7 @@
 //      managed webview via sync
 //   9. CGWindowList screenshot of rail + content and of the empty rail
 //  10. tray: menu refreshed with placeholder at bootstrap, rebuilt with
-//      the server after add (4 items) and back to placeholder after
+//      the server after add (5 items) and back to placeholder after
 //      remove (log-captured refreshes); close_to_tray persisted via the
 //      command; pure close decision (main+flag) and menu-shape helper
 //  11. hidden-window notify path: with the window hidden (close-to-tray
@@ -32,6 +32,10 @@
 //  12. window-state: seeded geometry restored for the runtime-created
 //      main window (relayout follows the restored size); explicit save
 //      writes a main entry next to config.json
+//  13. rail auto-hide (wave 9): at exactly one server the chrome rail is
+//      hidden (reveal flag false, relayout width 0 — Webview has no
+//      is_visible()); after remove (zero servers) it is visible at full
+//      rail width again
 //
 // Run: cargo run --example smoke (self-exits ~21 s; exit code 0 = all PASS).
 // An EXAMPLE, not a [[bin]]: tauri bundles every cargo bin into the app
@@ -457,7 +461,8 @@ fn timeline(app: tauri::AppHandle) {
         );
     }
 
-    // t9.0 — screenshot: rail + content.
+    // t9.0 — screenshot: content only (the rail is auto-hidden at one
+    // server, so the capture shows the content webview full-width).
     sleep_until(&t0, 9.0);
     capture("/tmp/labhub-smoke-rail-content.png");
 
@@ -469,15 +474,25 @@ fn timeline(app: tauri::AppHandle) {
         let menus = TRAY_MENUS.lock().unwrap().clone();
         log(&format!("tray menu refreshes so far: {menus:?}"));
         check(
-            menus.iter().any(|m| m.starts_with("(No servers) | ")),
+            menus.iter().any(|m| {
+                m == "(No servers) | Add server… | Check for Updates | Show LabHub | Quit LabHub"
+            }),
             "tray menu refreshed with placeholder at bootstrap",
         );
         check(
             menus.iter().any(|m| {
-                m.split(" | ").count() == 4
-                    && m.split(" | ").next().is_some_and(|l| l != "(No servers)")
+                let items: Vec<&str> = m.split(" | ").collect();
+                items.len() == 5
+                    && items[0] != "(No servers)"
+                    && items[1..]
+                        == [
+                            "Add server…",
+                            "Check for Updates",
+                            "Show LabHub",
+                            "Quit LabHub",
+                        ]
             }),
-            "tray menu rebuilt with 4 items (1 server + 3 fixed) after add",
+            "tray menu rebuilt with 5 items (1 server + 4 fixed) after add",
         );
     }
 
@@ -510,8 +525,8 @@ fn timeline(app: tauri::AppHandle) {
             "close decision: other windows close regardless",
         );
         check(
-            tray::build_menu_items(&config).len() == 4,
-            "tray build_menu_items: N servers -> N+3 labels",
+            tray::build_menu_items(&config).len() == 5,
+            "tray build_menu_items: N servers -> N+4 labels",
         );
     }
     if let Some(window) = app.get_window("main") {
@@ -542,9 +557,40 @@ fn timeline(app: tauri::AppHandle) {
     // Leave close_to_tray off for the rest of the run.
     let _ = commands::set_close_to_tray(app.clone(), app.state(), false);
 
-    // t10.0 — foreign-origin IPC proof: raw webview (not via manager) on a
-    // non-configured origin, testing the labhub-remote https://* pattern.
+    // t10.0 — rail auto-hide (wave 9): with exactly one server the chrome
+    // rail must be hidden — reveal flag false and relayout width 0
+    // (Webview exposes no is_visible(); the flag + bounds are the
+    // API-supported proxies). Then the foreign-origin IPC proof: raw
+    // webview (not via manager) on a non-configured origin, testing the
+    // labhub-remote https://* pattern.
     sleep_until(&t0, 10.0);
+    {
+        check(
+            !webviews::is_rail_revealed(&app),
+            "rail auto-hidden at one server: reveal flag false",
+        );
+        if let Some(chrome) = app.get_webview("chrome") {
+            let scale = app
+                .get_window("main")
+                .map_or(1.0, |w| w.scale_factor().unwrap_or(1.0));
+            match chrome.bounds() {
+                Ok(b) => {
+                    let size = b.size.to_logical::<f64>(scale);
+                    log(&format!(
+                        "chrome bounds at 1 server: {size:?} logical (want width 0)"
+                    ));
+                    check(
+                        size.width < 1.0,
+                        "rail auto-hidden at one server: chrome width 0",
+                    );
+                }
+                Err(e) => {
+                    log(&format!("chrome bounds read failed: {e}"));
+                    check(false, "rail auto-hidden: chrome bounds readable");
+                }
+            }
+        }
+    }
     let foreign = app.get_window("main").and_then(|window| {
         window
             .add_child(
@@ -625,13 +671,45 @@ fn timeline(app: tauri::AppHandle) {
     {
         let menus = TRAY_MENUS.lock().unwrap().clone();
         check(
-            menus.iter().any(|m| m.starts_with("(No servers) | ")),
+            menus.iter().any(|m| {
+                m == "(No servers) | Add server… | Check for Updates | Show LabHub | Quit LabHub"
+            }),
             "tray menu rebuilt with placeholder after remove",
         );
     }
 
-    // t19.0 — screenshot: empty rail.
+    // t19.0 — screenshot: empty rail (zero servers -> the rail is visible
+    // again at full width, with the always-present add form).
+    // Rail auto-hide counterpart of the t10 check: at zero servers the
+    // rail must be back — reveal flag true (re-derived by sync) and the
+    // relayout width restored to RAIL_WIDTH.
     sleep_until(&t0, 19.0);
+    check(
+        webviews::is_rail_revealed(&app),
+        "rail visible again at zero servers: flag true",
+    );
+    if let Some(chrome) = app.get_webview("chrome") {
+        let scale = app
+            .get_window("main")
+            .map_or(1.0, |w| w.scale_factor().unwrap_or(1.0));
+        match chrome.bounds() {
+            Ok(b) => {
+                let size = b.size.to_logical::<f64>(scale);
+                log(&format!(
+                    "chrome bounds at 0 servers: {size:?} logical (want width {})",
+                    webviews::RAIL_WIDTH
+                ));
+                check(
+                    (size.width - webviews::RAIL_WIDTH).abs() < 1.0,
+                    "rail visible again at zero servers: chrome width = RAIL_WIDTH",
+                );
+            }
+            Err(e) => {
+                log(&format!("chrome bounds read failed: {e}"));
+                check(false, "rail visible again: chrome bounds readable");
+            }
+        }
+    }
     capture("/tmp/labhub-smoke-rail-empty.png");
 
     // t20.0 — opener plugin reachable (compile-time path exists; dry call).
