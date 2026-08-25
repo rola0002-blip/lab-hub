@@ -6,6 +6,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Risk-assessment acknowledgments. A `/ra` page (nav row "RA", Workspace section)
+  where members and guests record that they have read a risk assessment — their
+  name is locked from their account, they type their matric number, and they pick
+  the RA from the Files folder named exactly "RA". Admins see every record and
+  export CSV (`/api/ra/acknowledgments/csv`); one acknowledgment per person per
+  document, and the record survives the document's deletion (a name snapshot, no
+  dangling reference).
+- A Slack-like notification ping, on by default for everyone (existing users are
+  flipped along with it). A soft two-tap synthesized ping now plays for every new
+  message in unmuted conversations — it was mentions and DMs only, and opt-in. At
+  most one ping lands per burst (a ~3 s window, so no backlog ever plays
+  catch-up), and none sounds for the conversation open in a focused window. Push
+  notifications collapse per conversation by tag, and desktop toasts stay
+  mention/DM-shaped and silent — the in-app ping is the sound on every platform.
+- The desktop server rail auto-hides when exactly one server is configured
+  (visible at zero and two or more; hidden is zero-width, so the lab's webview
+  takes the full window), and the tray menu gains "Add server…", which reveals
+  and focuses the rail. A reveal is cleared by the next add, remove, or switch —
+  a cancelled reveal persists until then — and the tray now reads servers →
+  Add server… → Check for Updates → Show LabHub → Quit.
+
+### Fixed
+- The chat jump-to-latest arrow survives SSE-reconnect refetches, floats above a
+  composer grown tall, and no longer yanks the view while the arrow is still
+  visible (the stick threshold is aligned with exactly that) — and it resets per
+  conversation, so it never carries over from the last one.
+
 ## [0.22.0] - 2026-08-21
 
 ### Added

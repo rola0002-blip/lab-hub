@@ -48,6 +48,13 @@ manually-installed release, then future releases auto-update again.
 - Server ids are uuid-v5 of the normalized URL (frozen scheme — see
   `desktop/src-tauri/src/servers.rs`); re-adding a removed server restores
   its session (data is kept on removal by design).
+- The rail auto-hides when exactly one server is configured (visible at zero
+  and two or more). Hidden is zero-width: the single server's webview takes
+  the full window.
+- Tray "Add server…" reveals and focuses the hidden rail; the reveal is
+  cleared by the next server add/remove/switch — a cancelled reveal persists
+  until then. Tray order: servers → Add server… → Check for Updates →
+  Show LabHub → Quit.
 - Unread badges come from the web app's own tab-title encoding (`(n) LabHub`).
 - Desktop version always equals the repo `package.json` version (build-time
   assertion in `desktop/src-tauri/build.rs`).

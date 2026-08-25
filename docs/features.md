@@ -137,6 +137,17 @@ office files download (with the original, possibly non-ASCII, filename preserved
 Each new upload is announced by the LabHub Bot in `#lab-updates`. Storage reuses
 the existing uploads volume and backup — no new services.
 
+## RA acknowledgments
+
+A compliance record at `/ra` (nav row "RA", in the Workspace section): members
+and guests log that they have read a risk assessment — name locked from their
+signed-in account, matric number typed in, and the document picked from the
+Files folder named exactly `RA` (the folder convention that marks a file as a
+risk assessment). One acknowledgment per person per document. Admins see
+everyone's records and export them as CSV (`/api/ra/acknowledgments/csv`); a
+record outlives its document, keeping a snapshot of the name rather than a
+link, so deleting the file never erases the acknowledgment.
+
 ## Web Push (optional)
 
 Push is disabled until you supply a VAPID key pair. Generate one once:
