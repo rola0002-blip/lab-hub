@@ -846,3 +846,46 @@ test('20: filename-only paste never types junk; escalates and surfaces feedback'
 
   await page.context().close()
 })
+
+// Wave 9 A: the jump-to-latest arrow. Scroll up → button appears; click → bottom +
+// button gone; an inbound message while scrolled up shows "1 new"; a conversation
+// switch never carries a stale count.
+test('21: jump-to-latest arrow — appears when scrolled up, jumps, counts new, resets across switches', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  const pageB = await joinAs(page, browser, BOB, 'member')
+  const cid = await createChannel(page, 'jumpy')
+  await joinChannel(pageB, cid, 'jumpy')
+
+  // Seed enough messages that the pane overflows the viewport. The composer drops
+  // Enter while a send is in flight (busy guard; the draft clears only on 201), so
+  // each send waits for the composer to empty before the next — no dropped fills.
+  const composer = page.getByPlaceholder('Write a message…')
+  for (let i = 0; i < 15; i++) {
+    await send(page, `filler ${i}`)
+    await expect(composer).toHaveValue('')
+  }
+  await expect(logMsg(pageB, 'filler 14')).toBeVisible()
+
+  const latest = page.getByRole('button', { name: 'Jump to latest messages' })
+  const log = page.getByRole('log', { name: 'Messages' })
+  await expect(latest).toBeHidden()
+  await log.evaluate((el) => { el.scrollTop = 0 })
+  await expect(latest).toBeVisible()
+  await latest.click()
+  await expect(latest).toBeHidden()
+
+  // Inbound while scrolled up → the button counts it.
+  await log.evaluate((el) => { el.scrollTop = 0 })
+  await send(pageB, 'new while away')
+  await expect(page.getByRole('button', { name: 'Jump to 1 new message' })).toBeVisible()
+
+  // Switch away and back: no stale count, fresh open at newest.
+  await page.goto('/dashboard')
+  await page.goto('/chat/' + cid)
+  await expect(page.getByRole('button', { name: /^Jump to/ })).toBeHidden()
+  await expect(logMsg(page, 'new while away')).toBeVisible()
+
+  await pageB.context().close()
+  await page.context().close()
+})

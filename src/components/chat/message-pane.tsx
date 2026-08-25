@@ -187,8 +187,17 @@ export default function MessagePane({ conversationId, conversationType, channelN
     } catch { /* best-effort; SSE reconciles */ }
   }, [loadPinned])
 
-  // Reset the first-load flag when the conversation changes so the next load opens at newest.
-  useEffect(() => { firstLoad.current = true }, [conversationId])
+  // Reset the first-load flag when the conversation changes so the next load opens
+  // at newest — and clear the jump-button state so the previous conversation's
+  // "N new" can never flash on the fresh one (wave 9 A4).
+  useEffect(() => {
+    firstLoad.current = true
+    atBottomRef.current = true
+    // One-shot transition on a conversation id change, never a cascading render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAtBottom(true)
+    setNewCount(0)
+  }, [conversationId])
 
   // Touch dismissal for the focus-revealed message toolbar. A tap focuses the row
   // (tabIndex), which is what reveals its toolbar via group-focus-within — but
@@ -310,21 +319,12 @@ export default function MessagePane({ conversationId, conversationType, channelN
     }
   }), [conversationId, registerConversationHandler, loadLatest, loadPinned, upsert, markRead, selfId])
 
-  useEffect(() => { // first load opens at newest; afterwards stick to bottom only when near it
-    const el = scroller.current
-    if (!el) return
-    // On first load, open at newest — UNLESS we're deep-linking, in which case the
-    // deep-link effect owns the scroll position (don't yank to bottom first).
-    if (firstLoad.current && messages.length) {
-      firstLoad.current = false
-      if (!deepLinkMsgId) el.scrollTop = el.scrollHeight
-      return
-    }
-    if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) el.scrollTop = el.scrollHeight
-  }, [messages, deepLinkMsgId])
-
-  // Track bottom-proximity for the jump button; only re-render on transitions.
-  const onScroll = useCallback(() => {
+  // Bottom-proximity is derived from live geometry; only re-render on transitions.
+  // Called from onScroll AND after every content change: a refetch (SSE reconnect)
+  // unmounts the list to a skeleton, the clamped scrollTop flips atBottom to true,
+  // and NO scroll event fires when the messages re-render — without this recompute
+  // the jump button vanishes while the user is stranded mid-history (wave 9 A1).
+  const syncBottom = useCallback(() => {
     const el = scroller.current
     if (!el) return
     const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < AT_BOTTOM_PX
@@ -333,6 +333,27 @@ export default function MessagePane({ conversationId, conversationType, channelN
     setAtBottom(bottom)
     if (bottom) setNewCount(0)
   }, [])
+
+  useEffect(() => { // first load opens at newest; afterwards stick to bottom only when near it
+    const el = scroller.current
+    if (!el) return
+    // On first load, open at newest — UNLESS we're deep-linking, in which case the
+    // deep-link effect owns the scroll position (don't yank to bottom first).
+    if (firstLoad.current && messages.length) {
+      firstLoad.current = false
+      if (!deepLinkMsgId) el.scrollTop = el.scrollHeight
+      syncBottom()
+      return
+    }
+    // Stick threshold = AT_BOTTOM_PX (was 200): the button shows exactly when we
+    // DON'T snap, so an inbound message can never yank the pane while the jump
+    // button is on screen (wave 9 A3).
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < AT_BOTTOM_PX) el.scrollTop = el.scrollHeight
+    syncBottom()
+  }, [messages, deepLinkMsgId, syncBottom])
+
+  // Track bottom-proximity for the jump button on user scroll.
+  const onScroll = useCallback(() => { syncBottom() }, [syncBottom])
 
   const jumpToLatest = useCallback(() => {
     const el = scroller.current
@@ -607,7 +628,7 @@ export default function MessagePane({ conversationId, conversationType, channelN
         {!atBottom && (
           <button type="button" onClick={jumpToLatest}
             aria-label={newCount > 0 ? `Jump to ${newCount} new message${newCount === 1 ? '' : 's'}` : 'Jump to latest messages'}
-            className="absolute bottom-20 right-6 flex items-center gap-1 rounded-full bg-accent px-3 py-1.5 text-sm text-accent-on shadow-lg">
+            className="absolute bottom-20 right-6 z-10 flex items-center gap-1 rounded-full bg-accent px-3 py-1.5 text-sm text-accent-on shadow-lg">
             <ArrowDown size={16} aria-hidden />
             {newCount > 0 ? `${newCount} new` : 'Jump to latest'}
           </button>
