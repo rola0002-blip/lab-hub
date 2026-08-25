@@ -39,10 +39,12 @@ badges on the dock icon and sidebar, and sends native notifications for
 mentions and DMs. It checks for updates automatically; installing one is
 a click in the tray menu.
 
-- **macOS 14+**: first launch of an unsigned app — right-click the app →
-  Open → Open (once), or run
-  `xattr -d com.apple.quarantine /Applications/LabHub.app` after dragging it
-  to /Applications. The first notification asks for permission once.
+- **macOS 14+**: first launch of an unsigned app — after dragging it to
+  /Applications, run
+  `xattr -d com.apple.quarantine /Applications/LabHub.app` in Terminal, or
+  try to open it once and approve it under System Settings → Privacy &
+  Security → Open Anyway. (The old right-click → Open bypass no longer works
+  on current macOS.) The first notification asks for permission once.
 - **Windows 10/11**: run the installer; SmartScreen may warn on first run —
   "More info" → "Run anyway". WebView2 installs itself if missing.
 - The desktop app is a thin shell over the same web app your lab server
