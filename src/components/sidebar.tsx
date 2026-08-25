@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import {
   ChevronDown, LayoutDashboard, MessageCircle, CalendarDays, CalendarCheck,
   ClipboardCheck, Award, Users, Microscope, Settings, ListTodo, Inbox,
-  FolderKanban, Files, Megaphone, type LucideIcon,
+  FolderKanban, Files, Megaphone, ShieldCheck, type LucideIcon,
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -29,6 +29,9 @@ export const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     // All roles, deliberately absent from NON_GUEST/ADMIN_ONLY: /feedback is
     // role-adaptive, not role-gated (a guest sees their own submissions there).
     { href: '/feedback', label: 'Feedback', icon: Megaphone },
+    // All roles (wave 9 D2/D4): anyone may acknowledge an RA they read; the
+    // records table + CSV are role-adaptive on the page itself.
+    { href: '/ra', label: 'RA', icon: ShieldCheck },
   ] },
   { title: 'Projects', items: [
     { href: '/issues/me', label: 'My issues', icon: Inbox },
