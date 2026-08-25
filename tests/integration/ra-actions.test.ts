@@ -75,6 +75,18 @@ describe('RA acknowledgments CSV route', () => {
     // cell() quotes every field, so the header line is the quoted form.
     expect(body).toContain('"name","email","matric","ra","acknowledgedAt"')
     expect(body).toContain('NTU2026ABS')
+
+    // RFC 4180 round trip through the action: a name with quotes and an
+    // embedded newline comes back doubled-quoted, and the file stays exactly
+    // header + 2 rows (the newline lives INSIDE one quoted cell, never a
+    // stray record).
+    const tricky = await makeDocument(member.id, { folderId: folder.id, name: 'He said "wear gloves", then left\nline-two.pdf' })
+    signIn(member)
+    expect(await submitRaAction(tricky.id, 'NTU2026ABS')).toEqual({ ok: true })
+    signIn(admin)
+    const body2 = await (await GET()).text()
+    expect(body2).toContain('"He said ""wear gloves"", then left\nline-two.pdf"')
+    expect(body2.split('\r\n')).toHaveLength(3)
   })
 
   it('a member and a signed-out caller both get 404', async () => {

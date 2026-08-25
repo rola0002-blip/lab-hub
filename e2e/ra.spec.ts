@@ -1,5 +1,5 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
-import { wipe, seedSystem, runWizard, signIn, ADMIN, createMemberViaInvite, acceptInvite } from './helpers'
+import { wipe, seedSystem, runWizard, signIn, waitForHydration, ADMIN, createMemberViaInvite, acceptInvite } from './helpers'
 
 // W9-B — RA acknowledgments: the /ra round trip. Test order is load-bearing —
 // journey 1 must run BEFORE any 'RA' folder exists (it asserts the friendly
@@ -69,6 +69,7 @@ test('2: member acknowledges an RA and sees their history', async ({ browser }) 
   const ap = await newPage(browser)
   await signIn(ap, ADMIN.email, ADMIN.password)
   await ap.goto('/files')
+  await waitForHydration(ap)
   await ap.getByRole('button', { name: 'New folder' }).click()
   await ap.getByLabel('Name').fill('RA')
   await ap.getByRole('button', { name: 'Save' }).click()
@@ -82,6 +83,7 @@ test('2: member acknowledges an RA and sees their history', async ({ browser }) 
   const mp = await newPage(browser)
   await signIn(mp, MEMBER.email, MEMBER.pass)
   await mp.goto('/ra')
+  await waitForHydration(mp)
   await expect(mp.getByRole('heading', { name: 'My acknowledgments' })).toBeVisible()
 
   // Own name, locked: the record is bound to the signed-in account, so the field
@@ -107,6 +109,7 @@ test('2: member acknowledges an RA and sees their history', async ({ browser }) 
   // (Attribute assertion, not toBeDisabled(): Playwright's disabled check does
   // not honour the disabled state of an <option>, even when present in the DOM.)
   await mp.goto('/ra')
+  await waitForHydration(mp)
   const option = mp.getByRole('combobox', { name: 'Which RA did you read?' }).locator('option', { hasText: RA_DOC })
   await expect(option).toHaveAttribute('disabled')
   await expect(option).toHaveText(/— acknowledged/)

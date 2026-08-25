@@ -123,30 +123,35 @@ export function RaClient({ name, options, mine, all, tz }: {
             <a href="/api/ra/acknowledgments/csv" className={`${SMALL_BTN} text-default`}>Export CSV</a>
           </div>
           {all.length > 0 ? (
-            <table className="mt-3 w-full text-sm">
-              <thead>
-                <tr className="text-left text-subtle">
-                  <th scope="col" className="px-2 py-1.5 font-medium">Name</th>
-                  <th scope="col" className="px-2 py-1.5 font-medium">Email</th>
-                  <th scope="col" className="px-2 py-1.5 font-medium">Matric</th>
-                  <th scope="col" className="px-2 py-1.5 font-medium">RA</th>
-                  <th scope="col" className="px-2 py-1.5 text-right font-medium">When</th>
-                </tr>
-              </thead>
-              <tbody>
-                {all.map((r) => (
-                  <tr key={r.id} className="transition-colors hover:bg-hover">
-                    <td className="border-t border-border px-2 py-1.5 text-default">{r.author.name}</td>
-                    <td className="border-t border-border px-2 py-1.5 text-muted">{r.author.email}</td>
-                    <td className="border-t border-border px-2 py-1.5 text-muted">{r.matricNumber}</td>
-                    <td className="border-t border-border px-2 py-1.5 text-default">{r.documentName}</td>
-                    <td className="border-t border-border px-2 py-1.5 text-right text-subtle">
-                      <time dateTime={r.createdAt}>{formatDateTime(new Date(r.createdAt), tz)}</time>
-                    </td>
+            // 375px: five columns cannot fit — the repo's scroll-container
+            // idiom (booking day page, schedule-view) keeps the page width
+            // stable while the table pans inside its own scrollbar.
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-subtle">
+                    <th scope="col" className="px-2 py-1.5 font-medium">Name</th>
+                    <th scope="col" className="px-2 py-1.5 font-medium">Email</th>
+                    <th scope="col" className="px-2 py-1.5 font-medium">Matric</th>
+                    <th scope="col" className="px-2 py-1.5 font-medium">RA</th>
+                    <th scope="col" className="px-2 py-1.5 text-right font-medium">When</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {all.map((r) => (
+                    <tr key={r.id} className="transition-colors hover:bg-hover">
+                      <td className="border-t border-border px-2 py-1.5 text-default">{r.author.name}</td>
+                      <td className="border-t border-border px-2 py-1.5 text-muted">{r.author.email}</td>
+                      <td className="border-t border-border px-2 py-1.5 text-muted">{r.matricNumber}</td>
+                      <td className="border-t border-border px-2 py-1.5 text-default">{r.documentName}</td>
+                      <td className="border-t border-border px-2 py-1.5 text-right text-subtle">
+                        <time dateTime={r.createdAt}>{formatDateTime(new Date(r.createdAt), tz)}</time>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <div className="mt-3">
               <EmptyState icon={ShieldCheck} title="No acknowledgments yet"
