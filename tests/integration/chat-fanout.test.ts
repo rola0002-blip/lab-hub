@@ -85,6 +85,9 @@ describe('fanoutMessage', () => {
     expect((await prisma.emailOutbox.findFirstOrThrow()).toEmail).toBe(rcpt.email)
     expect(push).toHaveBeenCalledTimes(1)
     expect(push.mock.calls[0][0]).toBe(rcpt.id)
+    // W9-D: the push payload carries tag = conversationId so the service
+    // worker's showNotification collapses a message burst into one OS toast.
+    expect(push.mock.calls[0][1]).toMatchObject({ tag: ch.id, url: `/chat/${ch.id}` })
   })
 
   it('channel: direct mentions pierce mute; @channel does not; plain messages notify nobody', async () => {

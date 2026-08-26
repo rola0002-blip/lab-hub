@@ -1,6 +1,7 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import {
   Bell as BellIcon, BellPlus, Check, Hash, AtSign, MessageSquare,
   CalendarClock, CalendarCheck, CalendarX, UserPlus, CircleCheck, ClipboardCheck, Megaphone,
@@ -10,7 +11,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { EmptyState } from '@/components/ui/empty-state'
 import { humanTime } from '@/lib/humanize'
 import { notificationHref } from '@/lib/notification-href'
-import { shouldChime } from '@/lib/chime'
+import { shouldChime, shouldPingFromMessage, PingThrottle } from '@/lib/chime'
 import { usePushOptIn } from './hooks/use-push-optin'
 import { useSoundsEnabled } from './hooks/use-sounds'
 import { useChat } from './chat/chat-store'
@@ -66,19 +67,32 @@ function playChime() {
     audioCtx ??= new AudioContext()
     if (audioCtx.state === 'suspended') void audioCtx.resume()
     const t = audioCtx.currentTime
-    const g = audioCtx.createGain(); g.connect(audioCtx.destination)
-    g.gain.setValueAtTime(0.0001, t)
-    g.gain.exponentialRampToValueAtTime(0.15, t + 0.02)
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25)
-    for (const [freq, at] of [[880, 0], [1318.5, 0.09]] as const) {
-      const o = audioCtx.createOscillator(); o.type = 'sine'; o.frequency.value = freq
-      o.connect(g); o.start(t + at); o.stop(t + at + 0.22)
+    // Slack-like "knock brush" (wave 9 D6): two quick soft taps with a slight
+    // pitch drop, ~170 ms total — richer than the old A5→E6 sine pair, still
+    // pure synthesis (no binary asset, no licensing surface).
+    const lp = audioCtx.createBiquadFilter()
+    lp.type = 'lowpass'
+    lp.frequency.value = 2400
+    lp.connect(audioCtx.destination)
+    const tap = (at: number, from: number, to: number, peak: number) => {
+      const o = audioCtx!.createOscillator()
+      const g = audioCtx!.createGain()
+      o.type = 'sine'
+      o.frequency.setValueAtTime(from, t + at)
+      o.frequency.exponentialRampToValueAtTime(to, t + at + 0.06)
+      g.gain.setValueAtTime(0.0001, t + at)
+      g.gain.exponentialRampToValueAtTime(peak, t + at + 0.005)
+      g.gain.exponentialRampToValueAtTime(0.0001, t + at + 0.09)
+      o.connect(g)
+      g.connect(lp)
+      o.start(t + at)
+      o.stop(t + at + 0.1)
     }
+    tap(0, 1150, 900, 0.2)
+    tap(0.07, 950, 750, 0.16)
   } catch {
-    /* Construction failures only (headless/embedded). Under autoplay policy the
-       context is instead created SUSPENDED — oscillators schedule into its
-       frozen currentTime and sound once a gesture resumes it — so that
-       degradation is silent-by-design, not an exception. */
+    /* Construction failures only (headless/embedded). Suspended-context
+       degradation is silent-by-design, unchanged. */
   }
 }
 
@@ -118,6 +132,39 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
   const soundsRef = useRef(false)
   useEffect(() => { soundsRef.current = sounds }, [sounds])
   const watermark = useRef<string | null>(null)
+  // The open conversation (route-derived — the store deliberately does not know
+  // it; /chat/<cid> is the only place a conversation is "open").
+  const pathname = usePathname()
+  const openCid = pathname.match(/^\/chat\/([^/]+)/)?.[1] ?? null
+  // `load` is memoized with [] deps — mirror the live open-conversation into a
+  // ref it can read at fetch time (the soundsRef idiom).
+  const openCidRef = useRef<string | null>(null)
+  useEffect(() => { openCidRef.current = openCid }, [openCid])
+  const throttle = useRef(new PingThrottle(3000))
+
+  // Both chime paths funnel here: throttle (one ping per burst, no backlog)
+  // then sound + the shell toast (unchanged shape). The toast is shell-only by
+  // construction — `__TAURI__` exists only in the Tauri webviews, and the app
+  // never requests direct Notification permission in browsers (push opt-in
+  // goes through the service worker), so a 'granted' permission in a normal
+  // browser means a push subscription whose toasts the SW already shows —
+  // gating on the shell marker prevents a second toast from here.
+  const ping = useCallback((hit?: Item) => {
+    if (!soundsRef.current) return
+    if (!throttle.current.canPing()) return
+    playChime()
+    if (hit && '__TAURI__' in window && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      try {
+        const body = typeof hit.payload?.message === 'string' ? hit.payload.message : ''
+        // title/body mirror what the tray and the sw push payload derive
+        // from the same fanout strings (sender + channel/DM + snippet);
+        // tag is passed forward-compatible (native Notification may
+        // implement tag collapse; the desktop shim does not, one day).
+        const toast = new Notification(LABEL[hit.type] ?? hit.type, hit.payload?.conversationId ? { body, tag: hit.payload.conversationId } : { body })
+        toast.onclick = () => window.focus()
+      } catch { /* best-effort */ }
+    }
+  }, [])
 
   const load = useCallback(async () => {
     try {
@@ -127,29 +174,15 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
       setUnread(d.unread); setItems(d.items)
       const r2 = shouldChime(watermark.current, d.items.map((i: Item) => ({ id: i.id, type: i.type, createdAt: i.createdAt })))
       watermark.current = r2.watermark
-      if (r2.chime && soundsRef.current) {
-        playChime()
-        // Desktop-shell bridge (SP11): shell-only by construction — `__TAURI__`
-        // exists only in the Tauri webviews, and the app never requests direct
-        // Notification permission in browsers (push opt-in goes through the
-        // service worker). So a 'granted' permission in a normal browser means
-        // a push subscription, whose toasts the SW already shows — gating on
-        // the shell marker prevents a second toast from here.
+      if (r2.chime) {
         const hit = d.items.find((i: Item) => i.id === r2.hits[0].id)
-        if (hit && '__TAURI__' in window && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-          try {
-            const body = typeof hit.payload?.message === 'string' ? hit.payload.message : ''
-            // title/body mirror what the tray and the sw push payload derive
-            // from the same fanout strings (sender + channel/DM + snippet).
-            // tag is passed forward-compatible; the desktop shim does not
-            // implement tag collapse (native Notification may, one day).
-            const toast = new Notification(LABEL[hit.type] ?? hit.type, hit.payload?.conversationId ? { body, tag: hit.payload.conversationId } : { body })
-            toast.onclick = () => window.focus()
-          } catch { /* best-effort */ }
-        }
+        // Focus suppression (D7): no ping — and no toast — for the conversation
+        // open in a focused window; you are already reading it.
+        const hitCid = hit?.payload?.conversationId
+        if (!(hitCid && hitCid === openCidRef.current && document.hasFocus())) ping(hit)
       }
     } catch { /* transient network error; next poll retries */ }
-  }, [])
+  }, [ping])
 
   useEffect(() => {
     // Fetch-on-mount: load() is async and only setStates after an awaited network
@@ -160,7 +193,27 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
     return () => clearInterval(t)
   }, [load])
 
-  useEvents((e) => { if (e.t === 'notif' || e.t === 'reconnect') void load() })
+  // Slack-like coverage (D5): every inbound `msg` in an unmuted, non-open
+  // conversation pings. useEvents re-reads this closure every render, so the
+  // store conversations / selfId / openCid are live. The `msg` event carries
+  // only {cid, mid}, so the message is fetched (the MessagePane precedent) —
+  // skipped entirely when the open+focused conversation would suppress anyway.
+  useEvents((e) => {
+    if (e.t === 'notif' || e.t === 'reconnect') { void load(); return }
+    if (e.t !== 'msg' || !('cid' in e)) return
+    const cid = e.cid
+    const conv = conversations.find((c) => c.id === cid)
+    if (!conv || conv.muted) return
+    if (openCid === cid && document.hasFocus()) return
+    void fetch(`/api/chat/messages/${e.mid}`).then(async (r) => {
+      if (!r.ok) return
+      const d = (await r.json()) as { message: { author: { id: string }; kind: string } }
+      if (shouldPingFromMessage(
+        { cid, authorId: d.message.author.id, kind: d.message.kind, muted: false },
+        { openCid, focused: document.hasFocus(), selfId },
+      )) ping()
+    })
+  })
 
   useEffect(() => {
     function onClick(e: MouseEvent) {

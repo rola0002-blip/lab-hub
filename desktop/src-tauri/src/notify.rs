@@ -28,6 +28,15 @@
 //! show (tray Show / tray server item / this fn itself — all of which
 //! show + focus, see [`consume_pending_click`]) then consumes it and
 //! lands the user on the notifying server.
+//!
+//! Toast audio (W9-D7): the native toast is SILENT on every platform —
+//! the webview's own ping sound is THE sound. macOS notifications are
+//! silent unless a sound is attached (we attach none); on Windows the
+//! chain tauri-plugin-notification 2.3.3 → notify-rust 4.18 →
+//! tauri-winrt-notification 0.7.3 maps an UNSET sound name to
+//! `Toast::sound(None)`, which emits `<audio silent="true"/>` in the
+//! toast XML. Nothing here may call the builder's `.sound(...)` — that
+//! would opt the toast INTO an OS sound on top of the webview ping.
 
 use std::collections::VecDeque;
 use std::sync::Mutex;

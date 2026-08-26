@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { shouldChime } from './chime'
+import { shouldChime, shouldPingFromMessage, PingThrottle } from './chime'
 const item = (id: string, type: string, createdAt: string) => ({ id, type, createdAt })
 
 describe('shouldChime', () => {
@@ -39,5 +39,58 @@ describe('shouldChime', () => {
       item('3', 'message_dm', '2026-01-01T00:03:00.000Z'),
       item('1', 'message_mention', '2026-01-01T00:01:00.000Z'),
     ])
+  })
+})
+
+describe('shouldPingFromMessage', () => {
+  const opts = { openCid: 'c1', focused: true, selfId: 'me' }
+  const base = { cid: 'c2', authorId: 'other', kind: 'text', muted: false }
+
+  it('pings for a plain message in another conversation (focused or not)', () => {
+    expect(shouldPingFromMessage(base, opts)).toBe(true)
+    expect(shouldPingFromMessage(base, { ...opts, focused: false })).toBe(true)
+  })
+  it('muted conversation → no ping', () => {
+    expect(shouldPingFromMessage({ ...base, muted: true }, opts)).toBe(false)
+  })
+  it('system kind → no ping', () => {
+    expect(shouldPingFromMessage({ ...base, kind: 'system' }, opts)).toBe(false)
+  })
+  it('own message (echo of what you sent) → no ping', () => {
+    expect(shouldPingFromMessage({ ...base, authorId: 'me' }, opts)).toBe(false)
+  })
+  it('open + focused conversation → no ping (you are reading it)', () => {
+    expect(shouldPingFromMessage({ ...base, cid: 'c1' }, opts)).toBe(false)
+  })
+  it('open but UNfocused conversation → ping (you are away from the window)', () => {
+    expect(shouldPingFromMessage({ ...base, cid: 'c1' }, { ...opts, focused: false })).toBe(true)
+  })
+})
+
+describe('PingThrottle', () => {
+  // `last` starts at 0, so tests drive an explicit clock offset well past the
+  // epoch (Date.now()-like), never t=0.
+  const t0 = 1_000_000
+
+  it('first canPing passes; an immediate second is swallowed', () => {
+    const t = new PingThrottle(3000)
+    expect(t.canPing(t0)).toBe(true)
+    expect(t.canPing(t0 + 100)).toBe(false)
+  })
+  it('still blocked at window-1ms; free again at window+1ms', () => {
+    const t = new PingThrottle(3000)
+    t.canPing(t0)
+    expect(t.canPing(t0 + 2999)).toBe(false)
+    expect(t.canPing(t0 + 3001)).toBe(true)
+  })
+  it('a swallowed ping does NOT re-arm the window (swallow leaves `last` alone)', () => {
+    // A hit at t0 arms the window; a hit at t0+1500 (0.5×window) is swallowed
+    // and must not slide the window — otherwise a burst that straddles the
+    // midpoint would mute the ping that follows the window.
+    const t = new PingThrottle(3000)
+    t.canPing(t0)
+    expect(t.canPing(t0 + 1500)).toBe(false)
+    // window is measured from the last EMITTED ping, not the swallowed hit
+    expect(t.canPing(t0 + 3001)).toBe(true)
   })
 })

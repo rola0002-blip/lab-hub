@@ -14,6 +14,7 @@
 //! <server name>        one item per configured server
 //! <server name>        click -> set active + show/focus main window
 //! ───────────
+//! Add server…          emits `tray://add-server` (reveals the auto-hidden rail)
 //! Check for Updates    emits `tray://check-updates` (Task 8 listens)
 //! ───────────
 //! Show LabHub          show + focus main window
@@ -52,6 +53,7 @@ pub const TRAY_ID: &str = "main";
 
 /// Menu item ids — stable across refreshes; handlers dispatch on these.
 pub const CHECK_UPDATES_ID: &str = "check_updates";
+pub const ADD_SERVER_ID: &str = "add_server";
 pub const SHOW_ID: &str = "show";
 pub const QUIT_ID: &str = "quit";
 /// Prefix of per-server item ids; the remainder is the server id (a
@@ -61,6 +63,10 @@ pub const SERVER_ITEM_PREFIX: &str = "server:";
 /// Event emitted when the tray "Check for Updates" item is clicked; the
 /// updater (updater.rs) listens and runs an interactive check.
 pub const CHECK_UPDATES_EVENT: &str = "tray://check-updates";
+
+/// Event emitted when the tray "Add server…" item is clicked; webviews'
+/// bootstrap listener reveals the (possibly hidden) rail (the CHECK_UPDATES pattern).
+pub const ADD_SERVER_EVENT: &str = "tray://add-server";
 
 /// Pure close decision shared with `lib.rs::handle_window_event`: only
 /// the main window with close-to-tray enabled hides on close; every
@@ -77,12 +83,13 @@ fn server_item_id(server_id: &str) -> String {
 /// Labels of the items the tray menu is built from, in order — the
 /// pure half of [`refresh`], unit-testable and smoke-assertable:
 /// one entry per server (or a "(No servers)" placeholder), then the
-/// three fixed items.
+/// four fixed items.
 pub fn build_menu_items(config: &AppConfig) -> Vec<String> {
     let mut labels: Vec<String> = config.servers.iter().map(|s| s.name.clone()).collect();
     if labels.is_empty() {
         labels.push("(No servers)".into());
     }
+    labels.push("Add server…".into());
     labels.push("Check for Updates".into());
     labels.push("Show LabHub".into());
     labels.push("Quit LabHub".into());
@@ -113,6 +120,13 @@ fn build_menu(app: &AppHandle, config: &AppConfig) -> Result<Menu<Wry>, tauri::E
         }
     }
     menu.append(&PredefinedMenuItem::separator(app)?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        ADD_SERVER_ID,
+        "Add server…",
+        true,
+        None::<&str>,
+    )?)?;
     menu.append(&MenuItem::with_id(
         app,
         CHECK_UPDATES_ID,
@@ -204,6 +218,12 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
                 log::warn!("emit {CHECK_UPDATES_EVENT} failed: {e}");
             }
         }
+        ADD_SERVER_ID => {
+            log::info!("tray add-server clicked (emitting {ADD_SERVER_EVENT})");
+            if let Err(e) = app.emit(ADD_SERVER_EVENT, ()) {
+                log::warn!("emit {ADD_SERVER_EVENT} failed: {e}");
+            }
+        }
         SHOW_ID => show_main(app),
         QUIT_ID => {
             log::info!("tray quit clicked: exiting");
@@ -279,6 +299,7 @@ mod tests {
             labels,
             vec![
                 "(No servers)".to_string(),
+                "Add server…".into(),
                 "Check for Updates".into(),
                 "Show LabHub".into(),
                 "Quit LabHub".into(),
@@ -294,21 +315,22 @@ mod tests {
             close_to_tray: false,
         };
         let labels = build_menu_items(&config);
-        assert_eq!(labels.len(), 5, "2 servers + 3 fixed items");
+        assert_eq!(labels.len(), 6, "2 servers + 4 fixed items");
         assert_eq!(labels[0], "Tay Labs");
         assert_eq!(labels[1], "Beta Lab");
-        assert_eq!(labels[2], "Check for Updates");
-        assert_eq!(labels[3], "Show LabHub");
-        assert_eq!(labels[4], "Quit LabHub");
+        assert_eq!(labels[2], "Add server…");
+        assert_eq!(labels[3], "Check for Updates");
+        assert_eq!(labels[4], "Show LabHub");
+        assert_eq!(labels[5], "Quit LabHub");
     }
 
     #[test]
-    fn menu_item_count_is_servers_plus_three() {
+    fn menu_item_count_is_servers_plus_four() {
         let config = AppConfig {
             servers: vec![server_cfg("a", "A")],
             ..AppConfig::default()
         };
-        assert_eq!(build_menu_items(&config).len(), 4);
+        assert_eq!(build_menu_items(&config).len(), 5);
     }
 
     #[test]
@@ -333,7 +355,7 @@ mod tests {
     fn fixed_ids_never_carry_the_server_prefix() {
         // The dispatcher routes on the prefix; fixed ids must not be
         // mistaken for server items.
-        for id in [CHECK_UPDATES_ID, SHOW_ID, QUIT_ID] {
+        for id in [CHECK_UPDATES_ID, ADD_SERVER_ID, SHOW_ID, QUIT_ID] {
             assert!(!id.starts_with(SERVER_ITEM_PREFIX));
         }
     }

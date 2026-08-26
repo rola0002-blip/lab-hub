@@ -24,8 +24,11 @@ Full-text search spans every conversation
 you belong to. Delivery is realtime over one Server-Sent-Events stream per
 tab (no WebSockets), fanned out with Postgres `LISTEN`/`NOTIFY`. Web Push
 notifies you of mentions and DMs when you have no tab open — opt-in, and
-silenced per conversation by mute (except direct @mentions). An opt-in soft
-chime (profile → Appearance) covers mentions, DMs, and thread replies, and a
+silenced per conversation by mute (except direct @mentions), with same-
+conversation pushes collapsing into one OS notification. A soft ping
+(profile → Appearance, on by default since v0.23) covers every new message
+in unmuted conversations — at most one ping per burst of messages, and none
+for the conversation you're viewing while its window is focused — and a
 60-minute unread-chat digest email follows (at most one per hour; mentions,
 DMs, and thread replies — never bot messages).
 Membership is the single authorization rule: you only ever read, search, or
@@ -133,6 +136,17 @@ its creator or an admin (only when empty). PDFs and images open inline in a new 
 office files download (with the original, possibly non-ASCII, filename preserved).
 Each new upload is announced by the LabHub Bot in `#lab-updates`. Storage reuses
 the existing uploads volume and backup — no new services.
+
+## RA acknowledgments
+
+A compliance record at `/ra` (nav row "RA", in the Workspace section): members
+and guests log that they have read a risk assessment — name locked from their
+signed-in account, matric number typed in, and the document picked from the
+Files folder named exactly `RA` (the folder convention that marks a file as a
+risk assessment). One acknowledgment per person per document. Admins see
+everyone's records and export them as CSV (`/api/ra/acknowledgments/csv`); a
+record outlives its document, keeping a snapshot of the name rather than a
+link, so deleting the file never erases the acknowledgment.
 
 ## Web Push (optional)
 

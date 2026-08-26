@@ -8,7 +8,7 @@ pub mod updater;
 pub mod webviews;
 
 use std::sync::Mutex;
-use tauri::Manager;
+use tauri::{Listener, Manager};
 
 /// Shared app bootstrap: load config, register managed state, create the
 /// main window + chrome rail + content webviews, attach the tray. Used by
@@ -22,6 +22,13 @@ pub fn bootstrap(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
     app.manage(notify::NotifyState::default());
     webviews::setup(app.handle())?;
     tray::init(app.handle())?;
+    // Tray "Add server…" (wave 9): reveal the (possibly auto-hidden) rail so
+    // the always-present add form is reachable (the CHECK_UPDATES listener pattern).
+    let reveal_app = app.handle().clone();
+    app.listen(tray::ADD_SERVER_EVENT, move |_event| {
+        tray::show_main(&reveal_app);
+        crate::webviews::reveal_rail(&reveal_app);
+    });
     updater::init(app.handle());
     Ok(())
 }
@@ -43,10 +50,7 @@ pub fn handle_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
                 // bounds from the (possibly restored) inner size either
                 // way, so no ordering fix is needed — this log makes the
                 // restore -> relayout sequence visible.
-                log::info!(
-                    "main window resized: relayout (rail stays fixed {:.0}px)",
-                    webviews::RAIL_WIDTH
-                );
+                log::info!("main window resized: relayout (rail auto-hides at one server)");
                 webviews::relayout(window);
             }
             tauri::WindowEvent::Focused(true) => notify::consume_pending_click(window.app_handle()),

@@ -61,6 +61,8 @@ Details: [docs/desktop.md](docs/desktop.md).
 - **Projects** — issue tracker (`LAB-n`), keyboard-accessible board,
   milestones, labels, weekly update prompts, LabHub Bot digests.
 - **Files** — shared document library with 100 MB uploads and search.
+- **RA acknowledgments** — members and guests record reading a risk
+  assessment from Files' "RA" folder; admins review records and export CSV.
 - **Platform** — roles (admin/member/guest), invitations, light/dark + 10
   accents, ⌘K palette, WCAG-checked accessibility.
 

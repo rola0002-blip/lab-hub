@@ -9,7 +9,7 @@ import { renderBody } from './mentions'
 
 type Seams = {
   hasLive?: (uid: string) => boolean
-  push?: (uid: string, p: { title: string; body: string; url: string }) => Promise<void>
+  push?: (uid: string, p: { title: string; body: string; url: string; tag?: string }) => Promise<void>
 }
 
 export async function fanoutMessage(
@@ -48,7 +48,9 @@ export async function fanoutMessage(
         : undefined
       await notify(member.userId, type, { message: `${args.senderName} in ${where}: ${preview}`, conversationId: c.id, messageId: m.id, senderId: m.userId }, email)
       if (offline) {
-        await push(member.userId, { title: `${args.senderName} — ${where}`, body: preview, url }).catch(() => {})
+        // tag = conversationId: the SW's showNotification collapses same-tag
+        // toasts, so a message burst is ONE OS notification, not a stack (W9-D).
+        await push(member.userId, { title: `${args.senderName} — ${where}`, body: preview, url, tag: c.id }).catch(() => {})
       }
     }
   } catch (e) {

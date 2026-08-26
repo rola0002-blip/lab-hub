@@ -1,6 +1,6 @@
 self.addEventListener('push', (event) => {
   const data = event.data ? event.data.json() : { title: 'LabHub', body: '', url: '/' }
-  event.waitUntil(self.registration.showNotification(data.title, { body: data.body, data: { url: data.url } }))
+  event.waitUntil(self.registration.showNotification(data.title, { body: data.body, tag: data.tag, data: { url: data.url } }))
 })
 
 self.addEventListener('notificationclick', (event) => {
