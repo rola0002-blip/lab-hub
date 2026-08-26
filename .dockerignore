@@ -13,3 +13,7 @@ backups
 coverage
 playwright-report
 test-results
+# desktop/ is the Tauri shell — never part of the web image. Also keeps cargo's
+# multi-GB desktop/src-tauri/target out of the context (a bare 'debug' pattern
+# would only match the context ROOT, not nested target dirs).
+desktop
