@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-08-26
+
 ### Added
 - Risk-assessment acknowledgments. A `/ra` page (nav row "RA", Workspace section)
   where members and guests record that they have read a risk assessment — their
