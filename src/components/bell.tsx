@@ -98,6 +98,16 @@ function playChime() {
   }
 }
 
+// iOS starts non-gesture AudioContexts suspended and rejects gesture-less
+// resume() — create + resume on the FIRST user gesture so chimes are audible
+// from cold load. Behavior-preserving no-op on desktop/Android.
+function primeChime() {
+  try {
+    audioCtx ??= new AudioContext()
+    if (audioCtx.state === 'suspended') void audioCtx.resume()
+  } catch { /* headless/embedded */ }
+}
+
 type Face =
   | { kind: 'user'; id: string; name: string; image: string | null }
   | { kind: 'glyph'; icon: LucideIcon }
@@ -134,6 +144,16 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
   // `sounds`; mirror the live value into a ref it can read at fetch time.
   const soundsRef = useRef(false)
   useEffect(() => { soundsRef.current = sounds }, [sounds])
+  useEffect(() => {
+    // One gesture is enough to unlock iOS audio for the page lifetime.
+    const opts: AddEventListenerOptions = { once: true, passive: true }
+    window.addEventListener('pointerdown', primeChime, opts)
+    window.addEventListener('keydown', primeChime, opts)
+    return () => {
+      window.removeEventListener('pointerdown', primeChime)
+      window.removeEventListener('keydown', primeChime)
+    }
+  }, [])
   const watermark = useRef<string | null>(null)
   // The open conversation (route-derived — the store deliberately does not know
   // it; /chat/<cid> is the only place a conversation is "open").
