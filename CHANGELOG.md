@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-08-28
+
 ### Added
 - RA acknowledgements can now be revoked. A wrongly-added submission is
   corrected by the person who made it (a Revoke action on each of "My
