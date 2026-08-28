@@ -2,6 +2,7 @@
 import { useEffect, useRef } from 'react'
 import { useChat } from '@/components/chat/chat-store'
 import { sumUnread } from '@/features/chat/unread'
+import { applyAppBadge } from '@/lib/app-badge'
 
 // Teams-style "(N)" unread-chats count in the TAB TITLE (wave-6). Mounted once
 // in the app shell inside ChatProvider. Same live derivation as the sidebar
@@ -19,6 +20,8 @@ export function ChatTitleBadge() {
     if (base.current === null) base.current = document.title
     const n = sumUnread(conversations)
     document.title = n > 0 ? `(${n}) ${base.current}` : base.current
+    // Same n drives the installed-PWA launcher badge (no-op where unsupported).
+    applyAppBadge(n)
   }, [conversations])
   return null
 }
