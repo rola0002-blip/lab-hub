@@ -138,7 +138,7 @@ export function RaClient({ name, options, mine, all, tz }: {
             <a href="/api/ra/acknowledgments/csv" className={`${SMALL_BTN} text-default`}>Export CSV</a>
           </div>
           {all.length > 0 ? (
-            // 375px: five columns cannot fit — the repo's scroll-container
+            // 375px: six columns cannot fit — the repo's scroll-container
             // idiom (booking day page, schedule-view) keeps the page width
             // stable while the table pans inside its own scrollbar.
             <div className="mt-3 overflow-x-auto">

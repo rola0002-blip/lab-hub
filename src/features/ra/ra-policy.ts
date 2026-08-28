@@ -2,8 +2,8 @@ import type { Role } from '@/lib/session'
 import { PolicyError, policyStatus } from '@/features/issues/issue-policy'
 
 // The RA-acknowledgment permission choke point (wave 9). Client-safe: imports
-// nothing server-only; the /ra client imports the predicates for cosmetic
-// gating, the real gate is the service's asserts.
+// nothing server-only; the /ra page imports the predicates for role-adaptive
+// data fetching, the real gate is the service's asserts.
 export { PolicyError, policyStatus }
 
 // The Files folder whose documents are acknowledgable risk assessments. Folder
