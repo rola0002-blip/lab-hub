@@ -68,8 +68,9 @@ Cloudflare Tunnel option above provides it.
   install banner; the bell tray's "Install app" row triggers it too) → open
   the bell and enable notifications. Unread chats also show as a badge on
   the launcher icon.
-- iOS removes home-screen web apps unused for ~7 days; if notifications
-  stop, open LabHub once and re-enable them from the bell.
+- iOS may evict the storage of a home-screen web app that hasn't been used
+  for ~7 days; if notifications stop, open LabHub once and re-enable them
+  from the bell.
 
 ## What's inside
 
