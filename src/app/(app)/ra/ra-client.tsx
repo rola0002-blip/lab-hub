@@ -151,7 +151,12 @@ export function RaClient({ name, options, mine, all, tz }: {
                     <th scope="col" className="px-2 py-1.5 font-medium">Matric</th>
                     <th scope="col" className="px-2 py-1.5 font-medium">RA</th>
                     <th scope="col" className="px-2 py-1.5 text-right font-medium">When</th>
-                    <th scope="col" className="px-2 py-1.5 font-medium"><span className="sr-only">Actions</span></th>
+                    {/* aria-label, not an sr-only span: sr-only is absolutely
+                        positioned with no positioned ancestor inside the
+                        overflow-x-auto scroller, so its 1px box escapes the
+                        clip and breaks the 375px no-horizontal-overflow
+                        invariant (wave-10 physical pass). */}
+                    <th scope="col" aria-label="Actions" className="px-2 py-1.5 font-medium" />
                   </tr>
                 </thead>
                 <tbody>
