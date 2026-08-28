@@ -323,6 +323,7 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
             <div className="mt-1 border-t border-border pt-1">
               <div className="flex items-center gap-1">
                 <button type="button" onClick={() => (install.isIos ? install.openGuide() : void install.promptInstall())}
+                  aria-expanded={install.isIos ? install.guideOpen : undefined}
                   className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-avatar)] bg-active text-muted">
                     <Smartphone size={18} aria-hidden />

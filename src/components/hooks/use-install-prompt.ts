@@ -11,6 +11,7 @@ type DeferredPrompt = Event & {
 // SSR-safe, shell-gated, every failure swallowed). Chromium: capture
 // beforeinstallprompt and show the native sheet. iOS: no prompt event exists,
 // so the row expands into an until-dismissed Share → Add to Home Screen guide.
+// beforeinstallprompt fired before hydration is missed by design (spec §6) — the row appears on a later load.
 export function useInstallPrompt(): {
   show: boolean
   isIos: boolean
@@ -31,25 +32,25 @@ export function useInstallPrompt(): {
       (window.navigator as Navigator & { standalone?: boolean }).standalone === true
     const isIos = isIosUa(window.navigator.userAgent, window.navigator.maxTouchPoints)
     const tauri = '__TAURI__' in window
-    const dismissed = window.localStorage.getItem(INSTALL_DISMISS_KEY) === '1'
-    // setIos/sync(false) hydrate mount-only browser facts (UA, display-mode,
-    // dismiss flag) in one burst on mount — SSR-safe gating, not a cascading
-    // render; the same suppression idiom as Bell's fetch-on-mount load().
+    // Dismissal is read LIVE (not the mount-time snapshot) so an explicit
+    // dismiss always wins, even when Chrome re-fires beforeinstallprompt in a
+    // long-lived session after engagement re-qualification.
+    const dismissedNow = () => window.localStorage.getItem(INSTALL_DISMISS_KEY) === '1'
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIos(isIos)
     const sync = (deferredAvailable: boolean) =>
-      setShow(shouldShowInstall({ standalone, isIos, dismissed, deferredAvailable, tauri }))
+      setShow(shouldShowInstall({ standalone, isIos, dismissed: dismissedNow(), deferredAvailable, tauri }))
     sync(false)
-    const onBip = (e: Event) => {
+    const onBeforeInstallPrompt = (e: Event) => {
       e.preventDefault()
       setDeferred(e as DeferredPrompt)
       sync(true)
     }
     const onInstalled = () => setShow(false)
-    window.addEventListener('beforeinstallprompt', onBip)
+    window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt)
     window.addEventListener('appinstalled', onInstalled)
     return () => {
-      window.removeEventListener('beforeinstallprompt', onBip)
+      window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt)
       window.removeEventListener('appinstalled', onInstalled)
     }
   }, [])
@@ -58,7 +59,9 @@ export function useInstallPrompt(): {
     if (!deferred) return
     try {
       await deferred.prompt()
-    } catch { /* best-effort */ }
+    } catch (e) {
+      console.warn('Install prompt failed:', e)
+    }
     setDeferred(null)
     setShow(false)
   }, [deferred])
