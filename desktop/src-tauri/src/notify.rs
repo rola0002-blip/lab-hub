@@ -165,11 +165,17 @@ pub fn truncate_chars(s: &str, max_chars: usize) -> String {
 
 /// The single delivery site for shell toasts (silent by module contract —
 /// never `.sound(...)`). Shared by the `desktop_notify` command and the
-/// download-completion toast (webviews.rs). Fire-and-forget: a failed show is
-/// logged, never propagated.
-pub fn show_toast(app: &AppHandle, title: &str, body: &str) {
-    if let Err(e) = app.notification().builder().title(title).body(body).show() {
-        log::warn!("notification show failed: {e}");
+/// download-completion toast (webviews.rs). Fire-and-forget with a result:
+/// `true` when the show succeeded, `false` when the OS/plugin refused it —
+/// the failure is warned HERE (the only failure log; callers must not
+/// double-log) and callers gate their own "delivered" logging on the bool.
+pub fn show_toast(app: &AppHandle, title: &str, body: &str) -> bool {
+    match app.notification().builder().title(title).body(body).show() {
+        Ok(()) => true,
+        Err(e) => {
+            log::warn!("notification show failed: {e}");
+            false
+        }
     }
 }
 
@@ -222,9 +228,11 @@ pub fn desktop_notify(
     // Not Disturb / permission denied after the one-time prompt), and the
     // page can do nothing with that error — so failures are logged inside
     // [`show_toast`] and the command still resolves Ok (delivery failure ≠
-    // bad request).
-    show_toast(&app, &title, &body);
-    log::info!("desktop_notify delivered: title={title:?} server={target:?}");
+    // bad request). The "delivered" log is gated on the show result so it
+    // never overclaims a suppressed toast.
+    if show_toast(&app, &title, &body) {
+        log::info!("desktop_notify delivered: title={title:?} server={target:?}");
+    }
     Ok(())
 }
 
