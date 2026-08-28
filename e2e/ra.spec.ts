@@ -141,3 +141,39 @@ test('3: admin sees records + CSV export', async ({ browser }) => {
 
   await page.context().close()
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+test('4: revoke — own row frees re-acknowledgement; admin revoke removes the record', async ({ browser }) => {
+  test.setTimeout(150_000)
+
+  // Member revokes their own acknowledgment (journey 2's row).
+  const mp = await newPage(browser)
+  await signIn(mp, MEMBER.email, MEMBER.pass)
+  await mp.goto('/ra')
+  await waitForHydration(mp)
+  mp.once('dialog', (d) => d.accept())
+  await mp.getByRole('listitem').filter({ hasText: RA_DOC }).getByRole('button', { name: 'Revoke' }).click()
+  await expect(mp.getByRole('status').filter({ hasText: 'Acknowledgment revoked.' })).toBeVisible()
+  await expect(mp.getByRole('listitem').filter({ hasText: RA_DOC })).toHaveCount(0)
+  await expect(mp.getByText('You have not acknowledged any RA yet.')).toBeVisible()
+
+  // Re-acknowledgement is possible again: the option is enabled and submits.
+  await mp.getByRole('combobox', { name: 'Which RA did you read?' }).selectOption({ label: RA_DOC })
+  await mp.getByLabel('Matriculation number').fill(MATRIC)
+  await mp.getByRole('button', { name: 'I have read this RA' }).click()
+  await expect(mp.getByRole('status').filter({ hasText: 'Acknowledged — recorded.' })).toBeVisible()
+  await mp.context().close()
+
+  // Admin revokes the member's row from Records; the CSV stops carrying it.
+  const ap = await newPage(browser)
+  await signIn(ap, ADMIN.email, ADMIN.password)
+  await ap.goto('/ra')
+  await expect(ap.getByRole('heading', { name: 'Records' })).toBeVisible()
+  ap.once('dialog', (d) => d.accept())
+  await ap.getByRole('row').filter({ hasText: MATRIC }).getByRole('button', { name: 'Revoke' }).click()
+  await expect(ap.getByRole('status').filter({ hasText: 'Acknowledgment revoked.' })).toBeVisible()
+  await expect(ap.getByRole('row').filter({ hasText: MATRIC })).toHaveCount(0)
+  const csv = await ap.request.get('/api/ra/acknowledgments/csv')
+  expect(await csv.text()).not.toContain(MATRIC)
+  await ap.context().close()
+})
