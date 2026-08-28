@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   Bell as BellIcon, BellPlus, Check, Hash, AtSign, MessageSquare,
   CalendarClock, CalendarCheck, CalendarX, UserPlus, CircleCheck, ClipboardCheck, Megaphone,
+  Smartphone, X,
   type LucideIcon,
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
@@ -13,6 +14,7 @@ import { humanTime } from '@/lib/humanize'
 import { notificationHref } from '@/lib/notification-href'
 import { shouldChime, shouldPingFromMessage, PingThrottle } from '@/lib/chime'
 import { usePushOptIn } from './hooks/use-push-optin'
+import { useInstallPrompt } from './hooks/use-install-prompt'
 import { useSoundsEnabled } from './hooks/use-sounds'
 import { useChat } from './chat/chat-store'
 import { useEvents } from './use-events'
@@ -126,6 +128,7 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
   const ref = useRef<HTMLDivElement>(null)
   const now = new Date() // viewer-local reference for humanized notification times
   const push = usePushOptIn() // desktop-push opt-in lives in this tray, not a separate top-bar icon
+  const install = useInstallPrompt() // PWA install affordance lives in this tray too
   const { enabled: sounds } = useSoundsEnabled(soundsSeed) // server seed until the device opts in/out itself
   // load is memoized (stable across renders), so it would capture a stale
   // `sounds`; mirror the live value into a ref it can read at fetch time.
@@ -311,6 +314,45 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
                   <span className="block text-xs text-subtle">Get alerted even when this tab is closed.</span>
                 </span>
               </button>
+            </div>
+          )}
+          {install.show && (
+            // PWA install affordance: Chromium fires the native sheet; iOS has
+            // no prompt event, so the row expands a Share → Add to Home Screen
+            // guide. Never nested buttons — dismiss is a sibling, not a child.
+            <div className="mt-1 border-t border-border pt-1">
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={() => (install.isIos ? install.openGuide() : void install.promptInstall())}
+                  className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-avatar)] bg-active text-muted">
+                    <Smartphone size={18} aria-hidden />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium text-default">Install app</span>
+                    <span className="block text-xs text-subtle">Add LabHub to your home screen.</span>
+                  </span>
+                </button>
+                {!install.isIos && (
+                  <button type="button" onClick={install.dismiss} aria-label="Dismiss install prompt"
+                    className="rounded p-1 text-subtle hover:bg-hover hover:text-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
+                    <X size={16} aria-hidden />
+                  </button>
+                )}
+              </div>
+              {install.guideOpen && (
+                <div className="px-2 pb-2 pt-1 text-xs text-muted">
+                  <p>On iPhone or iPad:</p>
+                  <ol className="mt-1 list-decimal space-y-0.5 pl-4">
+                    <li>Tap <span className="text-default">Share</span> (the square with an arrow) in the toolbar.</li>
+                    <li>Scroll down and tap <span className="text-default">Add to Home Screen</span>.</li>
+                    <li>Open LabHub from the home screen, then enable notifications from this bell.</li>
+                  </ol>
+                  <button type="button" onClick={install.dismiss}
+                    className="mt-2 rounded px-2 py-1 text-xs font-medium text-accent hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
+                    Got it
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
