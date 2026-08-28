@@ -20,6 +20,7 @@ type Options = {
 
 const RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]'
 const SMALL_BTN = `rounded-md border border-border px-2 py-1 text-xs hover:bg-hover active:bg-active ${RING}`
+const REVOKE_BTN = `rounded text-xs text-[var(--text-danger)] hover:underline ${RING}`
 
 export function RaClient({ name, options, mine, all, tz }: {
   name: string; options: Options; mine: RaAcknowledgmentDto[]; all?: RaAcknowledgmentDto[]; tz: string
@@ -119,7 +120,7 @@ export function RaClient({ name, options, mine, all, tz }: {
                 <span aria-hidden className="text-subtle">·</span>
                 <time dateTime={m.createdAt} className="text-subtle">{formatDateTime(new Date(m.createdAt), tz)}</time>
                 <button type="button" onClick={() => revoke(m.id, m.documentName, null)}
-                  className={`ml-1 rounded text-xs text-[var(--text-danger)] hover:underline ${RING}`}>
+                  className={`ml-1 ${REVOKE_BTN}`}>
                   Revoke
                 </button>
               </li>
@@ -165,7 +166,7 @@ export function RaClient({ name, options, mine, all, tz }: {
                       </td>
                       <td className="border-t border-border px-2 py-1.5">
                         <button type="button" onClick={() => revoke(r.id, r.documentName, r.author.name)}
-                          className={`rounded text-xs text-[var(--text-danger)] hover:underline ${RING}`}>
+                          className={REVOKE_BTN}>
                           Revoke
                         </button>
                       </td>

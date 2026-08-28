@@ -108,5 +108,13 @@ export async function revokeRaAcknowledgment(user: SessionUser, id: string): Pro
   const row = await prisma.raAcknowledgment.findUnique({ where: { id }, select: { id: true, userId: true } })
   if (!row) throw new PolicyError('not_found', 'Acknowledgment not found.')
   assertCanRevokeRaAcknowledgment(user, row)
-  await prisma.raAcknowledgment.delete({ where: { id: row.id } })
+  try {
+    await prisma.raAcknowledgment.delete({ where: { id: row.id } })
+  } catch (e) {
+    // Concurrent revoke: the row vanished between load and delete — the repo
+    // bars untranslated Prisma codes from reaching the client (issue-service
+    // deleteLabel pattern); for the user this is simply "already gone".
+    if ((e as { code?: string }).code === 'P2025') throw new PolicyError('not_found', 'Acknowledgment not found.')
+    throw e
+  }
 }
