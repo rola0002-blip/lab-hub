@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- RA acknowledgements can now be revoked. A wrongly-added submission is
+  corrected by the person who made it (a Revoke action on each of "My
+  acknowledgments"), and admins can revoke any row in the records table.
+  Revocation is a hard delete: the record disappears from the table and the
+  CSV export, and the person can acknowledge the same RA again afterwards.
+- The desktop app now downloads files. Attachment downloads (e.g. the admin
+  Export CSV on `/ra`) were silently dropped by the embedded webview; they now
+  save to your Downloads folder under the suggested filename — with
+  ` (n)` suffixes instead of overwriting — and a silent completion
+  notification confirms where the file landed.
+
 ## [0.23.0] - 2026-08-26
 
 ### Added
