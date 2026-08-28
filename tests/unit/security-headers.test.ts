@@ -4,7 +4,7 @@ import nextConfig from '../../next.config'
 describe('next.config security headers', () => {
   it('applies the internet-facing header set to every route', async () => {
     const rules = await nextConfig.headers!()
-    expect(rules).toHaveLength(1)
+    expect(rules).toHaveLength(2)
     const rule = rules[0]
     expect(rule.source).toBe('/:path*')
     const map = Object.fromEntries(rule.headers.map((h) => [h.key, h.value]))
@@ -21,5 +21,15 @@ describe('next.config security headers', () => {
     expect(map['Strict-Transport-Security']).not.toContain('preload')
     // The enforcing CSP header must NOT ship this wave — only the report-only variant.
     expect(map['Content-Security-Policy']).toBeUndefined()
+  })
+
+  it('pins /sw.js to no-cache as the last rule so it wins the Cache-Control conflict', async () => {
+    const rules = await nextConfig.headers!()
+    // Next lets the LAST matching entry win a same-key conflict, so the /sw.js
+    // pin must come after the /:path* catch-all — otherwise its Cache-Control
+    // would lose and stale service workers could stall updates.
+    const swRule = rules[rules.length - 1]
+    expect(swRule.source).toBe('/sw.js')
+    expect(swRule.headers).toEqual([{ key: 'Cache-Control', value: 'no-cache' }])
   })
 })
