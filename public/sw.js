@@ -1,6 +1,8 @@
 // LabHub service worker: Web Push delivery + a minimal offline shell.
 // The fetch handler ONLY catches failed navigations and serves the precached
 // /offline.html — app data routes are force-dynamic and stay network-only.
+// Bump the version when offline.html changes — installed copies keep the old
+// precached page until the cache name changes.
 const OFFLINE_CACHE = 'labhub-offline-v1'
 const OFFLINE_URL = '/offline.html'
 
@@ -24,7 +26,7 @@ self.addEventListener('fetch', (event) => {
   if (event.request.mode !== 'navigate') return
   event.respondWith(
     fetch(event.request).catch(() =>
-      caches.match(OFFLINE_URL).then((r) => r || Response.error()),
+      caches.open(OFFLINE_CACHE).then((c) => c.match(OFFLINE_URL)).then((r) => r || Response.error()),
     ),
   )
 })
