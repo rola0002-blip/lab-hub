@@ -14,7 +14,7 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use tauri::webview::NewWindowResponse;
+use tauri::webview::{DownloadEvent, NewWindowResponse};
 use tauri::{
     AppHandle, LogicalPosition, LogicalSize, Manager, Url, Webview, WebviewBuilder, WebviewUrl,
     Window, WindowBuilder,
@@ -23,6 +23,7 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::badges;
 use crate::config::{AppConfig, ServerConfig};
+use crate::notify;
 use crate::servers::same_origin;
 #[cfg(target_os = "macos")]
 use crate::servers::store_key;
@@ -304,6 +305,26 @@ fn create_content_webview(
         })
         .on_page_load(|wv, payload| {
             log::info!("page load [{}] {:?} {}", wv.label(), payload.event(), payload.url());
+        })
+        .on_download(|wv, event| {
+            match event {
+                DownloadEvent::Requested { url, destination } => {
+                    // wry already seeded <Downloads>/<suggested-filename> on both
+                    // platforms (macOS deduped; Windows from WebView2's
+                    // ResultFilePath) — accept as-is, never rewrite.
+                    log::info!("download [{}] {} -> {}", wv.label(), url, destination.display());
+                }
+                DownloadEvent::Finished { url, path, success } => {
+                    if !success {
+                        log::warn!("download [{}] {} failed", wv.label(), url);
+                    } else if let Some(p) = path {
+                        log::info!("download [{}] {} saved", wv.label(), p.display());
+                        notify::show_toast(wv.app_handle(), "Download complete", &download_done_body(&p));
+                    }
+                }
+                _ => (),
+            }
+            true
         });
 
     // Session isolation. macOS WKWebView has no per-webview data directory,
@@ -388,6 +409,28 @@ fn is_scheme_upgrade(server: &Url, nav: &Url) -> bool {
 /// escape hatch while hidden — pure so the matrix is unit-testable.
 pub fn rail_visible(server_count: usize, revealed: bool) -> bool {
     server_count != 1 || revealed
+}
+
+/// Download-completion toast body: `Saved <file> to <dir>`, name bounded so a
+/// hostile filename cannot balloon the toast (notify.rs truncates at 200 chars
+/// anyway — this keeps the useful prefix). Pure so it is unit-testable.
+#[doc(hidden)]
+pub fn download_done_body(path: &std::path::Path) -> String {
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "file".to_string());
+    let dir = path
+        .parent()
+        .map(|p| p.display().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "your downloads folder".to_string());
+    let mut name: String = name.chars().collect();
+    if name.chars().count() > 80 {
+        let bounded: String = name.chars().take(80).collect();
+        name = format!("{bounded}…");
+    }
+    format!("Saved {name} to {dir}")
 }
 
 /// Which server's webview should be VISIBLE: the configured active server
@@ -610,5 +653,38 @@ mod tests {
     #[test]
     fn tray_reveal_shows_the_hidden_rail() {
         assert!(rail_visible(1, true));
+    }
+
+    // --- downloads (wave 10) ---
+
+    #[test]
+    fn download_done_body_names_file_and_dir() {
+        let body = download_done_body(std::path::Path::new(
+            "/Users/roland/Downloads/ra-acknowledgments.csv",
+        ));
+        assert_eq!(
+            body,
+            "Saved ra-acknowledgments.csv to /Users/roland/Downloads"
+        );
+    }
+
+    #[test]
+    fn download_done_body_survives_missing_metadata() {
+        assert!(download_done_body(std::path::Path::new("")).starts_with("Saved "));
+        assert!(download_done_body(std::path::Path::new("/only-dir/")).starts_with("Saved "));
+    }
+
+    #[test]
+    fn download_done_body_bounds_a_hostile_filename() {
+        let long = std::path::Path::new("/tmp/").join("x".repeat(300));
+        let body = download_done_body(&long);
+        assert!(
+            body.chars().count() <= 100,
+            "bounded body, got {}",
+            body.chars().count()
+        );
+        // The ellipsis terminates the truncated NAME mid-body (`Saved <name>…
+        // to <dir>`), so assert presence, not a body-final position.
+        assert!(body.contains('…'));
     }
 }

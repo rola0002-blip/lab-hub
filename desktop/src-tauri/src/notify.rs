@@ -163,6 +163,16 @@ pub fn truncate_chars(s: &str, max_chars: usize) -> String {
     }
 }
 
+/// The single delivery site for shell toasts (silent by module contract —
+/// never `.sound(...)`). Shared by the `desktop_notify` command and the
+/// download-completion toast (webviews.rs). Fire-and-forget: a failed show is
+/// logged, never propagated.
+pub fn show_toast(app: &AppHandle, title: &str, body: &str) {
+    if let Err(e) = app.notification().builder().title(title).body(body).show() {
+        log::warn!("notification show failed: {e}");
+    }
+}
+
 /// Remote-page -> native toast bridge, invoked by the notify shim
 /// (`desktop/ui/notify-shim.js`). The calling webview is injected by
 /// Tauri, and its CURRENT url — never any caller-supplied value — is the
@@ -210,18 +220,10 @@ pub fn desktop_notify(
 
     // Delivery is best-effort: the OS may suppress the toast (Focus / Do
     // Not Disturb / permission denied after the one-time prompt), and the
-    // page can do nothing with that error — so failures are logged here
-    // and the command still resolves Ok (delivery failure ≠ bad request).
-    if let Err(e) = app
-        .notification()
-        .builder()
-        .title(&title)
-        .body(&body)
-        .show()
-    {
-        log::warn!("desktop_notify show failed: {e}");
-        return Ok(());
-    }
+    // page can do nothing with that error — so failures are logged inside
+    // [`show_toast`] and the command still resolves Ok (delivery failure ≠
+    // bad request).
+    show_toast(&app, &title, &body);
     log::info!("desktop_notify delivered: title={title:?} server={target:?}");
     Ok(())
 }
