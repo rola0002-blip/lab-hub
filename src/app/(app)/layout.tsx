@@ -17,6 +17,7 @@ import { ImageViewerDialog } from '@/components/chat/image-viewer-dialog'
 import { ProjectUpdateModal } from '@/components/issues/project-update-modal'
 import { IssueHotkeys } from '@/components/issues/issue-hotkeys'
 import { ChatTitleBadge } from '@/components/chat-title-badge'
+import { SwRegister } from '@/components/sw-register'
 import { UserMenu } from '@/components/user-menu'
 import { ToastHost } from '@/components/ui/toast'
 import { RegionCycler } from '@/components/region-cycler'
@@ -106,6 +107,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {/* Unread-chats "(N)" tab title — mounted once in the app shell (inside
           ChatProvider); same live derivation as the sidebar Chat badge. */}
       <ChatTitleBadge />
+      {/* Registers the service worker (push + offline shell) on every load. */}
+      <SwRegister />
       {/* Global toast host — mounted once so `toast()` works from any page. */}
       <ToastHost />
       {/* Accessibility: F6 region cycling + SSE live regions mounted at first

@@ -1,4 +1,5 @@
 import { ThemeToggle } from '@/components/theme-toggle'
+import { SwRegister } from '@/components/sw-register'
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -9,6 +10,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <ThemeToggle />
       </div>
       {children}
+      <SwRegister />
     </main>
   )
 }
