@@ -20,7 +20,12 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: "standalone",
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      // Browser SW scripts must revalidate every hit or updates stall for up to
+      // 24h on some UAs. Specific sources evaluate before the '/:path*' catch-all.
+      { source: "/sw.js", headers: [{ key: "Cache-Control", value: "no-cache" }] },
+      { source: "/:path*", headers: securityHeaders },
+    ];
   },
 };
 
