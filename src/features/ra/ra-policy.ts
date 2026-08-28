@@ -2,8 +2,8 @@ import type { Role } from '@/lib/session'
 import { PolicyError, policyStatus } from '@/features/issues/issue-policy'
 
 // The RA-acknowledgment permission choke point (wave 9). Client-safe: imports
-// nothing server-only; the /ra client imports the predicates for cosmetic
-// gating, the real gate is the service's asserts.
+// nothing server-only; the /ra page imports the predicates for role-adaptive
+// data fetching, the real gate is the service's asserts.
 export { PolicyError, policyStatus }
 
 // The Files folder whose documents are acknowledgable risk assessments. Folder
@@ -25,4 +25,16 @@ export function canReviewRa(role: Role): boolean {
 }
 export function assertCanReviewRa(role: Role): void {
   if (!canReviewRa(role)) throw new PolicyError('forbidden', 'Only admins can view RA records.')
+}
+
+// Revoke = the acknowledger or an admin (the canDeleteDocument author-or-admin
+// shape): a wrongly-added submission is corrected by the person who made it,
+// and admins clean up records (e.g. test rows) like any other due-diligence data.
+export function canRevokeRaAcknowledgment(user: { id: string; role: Role }, row: { userId: string }): boolean {
+  return user.role === 'admin' || row.userId === user.id
+}
+export function assertCanRevokeRaAcknowledgment(user: { id: string; role: Role }, row: { userId: string }): void {
+  if (!canRevokeRaAcknowledgment(user, row)) {
+    throw new PolicyError('forbidden', 'Only the acknowledger or an admin can revoke this record.')
+  }
 }

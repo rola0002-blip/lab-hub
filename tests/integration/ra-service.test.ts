@@ -4,7 +4,7 @@ import { resetDb, makeUser, makeDocumentFolder, makeDocument, makeRaAcknowledgme
 import type { SessionUser } from '@/lib/session'
 import { PolicyError } from '@/features/ra/ra-policy'
 import {
-  raOptions, submitRaAcknowledgment, listMyRaAcknowledgments, listAllRaAcknowledgments,
+  raOptions, submitRaAcknowledgment, listMyRaAcknowledgments, listAllRaAcknowledgments, revokeRaAcknowledgment,
 } from '@/features/ra/ra-service'
 
 const su = (u: { id: string; name: string; email: string; role: string }): SessionUser =>
@@ -135,5 +135,46 @@ describe('ra-service', () => {
     await resetDb()
     const bare = await makeUser({ role: 'guest' })
     expect(await raOptions(su(bare))).toEqual({ folderExists: false, documents: [], acknowledgedDocumentIds: [] })
+  })
+
+  describe('revokeRaAcknowledgment', () => {
+    it('lets the author revoke their own row (any role) and frees re-acknowledgement', async () => {
+      const g = await makeUser({ role: 'guest' })
+      const folder = await makeDocumentFolder({ name: 'RA' })
+      const doc = await makeDocument(g.id, { folderId: folder.id, name: 'sop-2026.pdf' })
+      const ack = await makeRaAcknowledgment(g.id, doc.id)
+      await revokeRaAcknowledgment(su(g), ack.id)
+      expect(await prisma.raAcknowledgment.count()).toBe(0)
+      // the unique freed: the same user+document can be acknowledged again
+      const again = await submitRaAcknowledgment(su(g), { documentId: doc.id, matricNumber: 'B7654321Z' })
+      expect(again.documentId).toBe(doc.id)
+    })
+
+    it('lets an admin revoke someone else’s row', async () => {
+      const m = await makeUser({ role: 'member' })
+      const a = await makeUser({ role: 'admin' })
+      const folder = await makeDocumentFolder({ name: 'RA' })
+      const doc = await makeDocument(m.id, { folderId: folder.id })
+      const ack = await makeRaAcknowledgment(m.id, doc.id)
+      await revokeRaAcknowledgment(su(a), ack.id)
+      expect(await prisma.raAcknowledgment.count()).toBe(0)
+    })
+
+    it('rejects a non-author non-admin with forbidden, keeping the row', async () => {
+      const m = await makeUser({ role: 'member' })
+      const other = await makeUser({ role: 'member' })
+      const folder = await makeDocumentFolder({ name: 'RA' })
+      const doc = await makeDocument(m.id, { folderId: folder.id })
+      const ack = await makeRaAcknowledgment(m.id, doc.id)
+      await expect(revokeRaAcknowledgment(su(other), ack.id))
+        .rejects.toMatchObject({ code: 'forbidden', message: 'Only the acknowledger or an admin can revoke this record.' })
+      expect(await prisma.raAcknowledgment.count()).toBe(1)
+    })
+
+    it('not_found for a missing id, invalid for a forged non-string', async () => {
+      const m = await makeUser({ role: 'member' })
+      await expect(revokeRaAcknowledgment(su(m), 'nope')).rejects.toMatchObject({ code: 'not_found' })
+      await expect(revokeRaAcknowledgment(su(m), 42 as unknown as string)).rejects.toMatchObject({ code: 'invalid' })
+    })
   })
 })

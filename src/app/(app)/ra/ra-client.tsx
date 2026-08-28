@@ -8,7 +8,7 @@ import { formatDateTime } from '@/lib/time'
 // TYPE-ONLY: ra-service.ts is `server-only`, so a value import here would fail
 // the build. The DTO shape is all the client needs.
 import type { RaAcknowledgmentDto } from '@/features/ra/ra-service'
-import { submitRaAction } from './actions'
+import { submitRaAction, revokeRaAction } from './actions'
 
 // The raOptions() return restated inline — same reason as the type-only import
 // above: the service module must never be pulled into the client bundle.
@@ -20,6 +20,7 @@ type Options = {
 
 const RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]'
 const SMALL_BTN = `rounded-md border border-border px-2 py-1 text-xs hover:bg-hover active:bg-active ${RING}`
+const REVOKE_BTN = `rounded text-xs text-[var(--text-danger)] hover:underline ${RING}`
 
 export function RaClient({ name, options, mine, all, tz }: {
   name: string; options: Options; mine: RaAcknowledgmentDto[]; all?: RaAcknowledgmentDto[]; tz: string
@@ -43,6 +44,17 @@ export function RaClient({ name, options, mine, all, tz }: {
       if (r.ok) { toast('Acknowledged — recorded.'); setDocumentId(''); setMatric(''); router.refresh() }
       else toast(r.message)
     })
+  }
+
+  // The files del() idiom: confirm, await, toast + refresh (no per-button
+  // pending — the row leaving via router.refresh is the durable signal).
+  async function revoke(id: string, doc: string, whose: string | null) {
+    const q = whose
+      ? `Revoke ${whose}'s acknowledgment of “${doc}”? This removes the record.`
+      : `Revoke your acknowledgment of “${doc}”? You can acknowledge it again afterwards.`
+    if (!confirm(q)) return
+    const r = await revokeRaAction(id)
+    if (r.ok) { toast('Acknowledgment revoked.'); router.refresh() } else toast(r.message)
   }
 
   // No folder ⇒ nothing to acknowledge: one friendly empty state, no form (the
@@ -107,6 +119,10 @@ export function RaClient({ name, options, mine, all, tz }: {
                 <span className="text-muted">{m.matricNumber}</span>
                 <span aria-hidden className="text-subtle">·</span>
                 <time dateTime={m.createdAt} className="text-subtle">{formatDateTime(new Date(m.createdAt), tz)}</time>
+                <button type="button" onClick={() => revoke(m.id, m.documentName, null)}
+                  className={`ml-1 ${REVOKE_BTN}`}>
+                  Revoke
+                </button>
               </li>
             ))}
           </ul>
@@ -123,7 +139,7 @@ export function RaClient({ name, options, mine, all, tz }: {
             <a href="/api/ra/acknowledgments/csv" className={`${SMALL_BTN} text-default`}>Export CSV</a>
           </div>
           {all.length > 0 ? (
-            // 375px: five columns cannot fit — the repo's scroll-container
+            // 375px: six columns cannot fit — the repo's scroll-container
             // idiom (booking day page, schedule-view) keeps the page width
             // stable while the table pans inside its own scrollbar.
             <div className="mt-3 overflow-x-auto">
@@ -135,6 +151,12 @@ export function RaClient({ name, options, mine, all, tz }: {
                     <th scope="col" className="px-2 py-1.5 font-medium">Matric</th>
                     <th scope="col" className="px-2 py-1.5 font-medium">RA</th>
                     <th scope="col" className="px-2 py-1.5 text-right font-medium">When</th>
+                    {/* aria-label, not an sr-only span: sr-only is absolutely
+                        positioned with no positioned ancestor inside the
+                        overflow-x-auto scroller, so its 1px box escapes the
+                        clip and breaks the 375px no-horizontal-overflow
+                        invariant (wave-10 physical pass). */}
+                    <th scope="col" aria-label="Actions" className="px-2 py-1.5 font-medium" />
                   </tr>
                 </thead>
                 <tbody>
@@ -146,6 +168,12 @@ export function RaClient({ name, options, mine, all, tz }: {
                       <td className="border-t border-border px-2 py-1.5 text-default">{r.documentName}</td>
                       <td className="border-t border-border px-2 py-1.5 text-right text-subtle">
                         <time dateTime={r.createdAt}>{formatDateTime(new Date(r.createdAt), tz)}</time>
+                      </td>
+                      <td className="border-t border-border px-2 py-1.5">
+                        <button type="button" onClick={() => revoke(r.id, r.documentName, r.author.name)}
+                          className={REVOKE_BTN}>
+                          Revoke
+                        </button>
                       </td>
                     </tr>
                   ))}

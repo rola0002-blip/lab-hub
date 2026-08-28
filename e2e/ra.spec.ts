@@ -1,11 +1,16 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
 import { wipe, seedSystem, runWizard, signIn, waitForHydration, ADMIN, createMemberViaInvite, acceptInvite } from './helpers'
 
-// W9-B — RA acknowledgments: the /ra round trip. Test order is load-bearing —
-// journey 1 must run BEFORE any 'RA' folder exists (it asserts the friendly
-// empty state); journey 2 creates the folder + uploads the risk assessment
-// through the real Files UI; journey 3 reads the admin records table + CSV.
-// The member's matric 'NTU2026ABS' is the thread the three journeys share.
+// W9-B — RA acknowledgments: the /ra round trip. Test order is load-bearing:
+// the four journeys are ORDER-DEPENDENT (serial mode, one shared database),
+// so running any single one with --grep fails by design. Journey 1 must run
+// BEFORE any 'RA' folder exists (it asserts the friendly empty state);
+// journey 2 creates the folder + uploads the risk assessment through the
+// real Files UI; journey 3 reads the admin records table + CSV; journey 4
+// revokes on both sides — the member's own revoke frees re-acknowledgement,
+// and the re-ack it creates is the row the admin then revokes from Records.
+// The member's matric 'NTU2026ABS' is the thread the journeys share —
+// consumed and re-created by journey 4 itself.
 //
 // Per-context client IP so better-auth's per-IP sign-in/up limit never trips.
 // Bands 10.10–10.91 are taken by the other suites (see feedback.spec.ts's
@@ -140,4 +145,40 @@ test('3: admin sees records + CSV export', async ({ browser }) => {
   expect(body).toContain('"name","email","matric","ra","acknowledgedAt"')
 
   await page.context().close()
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+test('4: revoke — own row frees re-acknowledgement; admin revoke removes the record', async ({ browser }) => {
+  test.setTimeout(150_000)
+
+  // Member revokes their own acknowledgment (journey 2's row).
+  const mp = await newPage(browser)
+  await signIn(mp, MEMBER.email, MEMBER.pass)
+  await mp.goto('/ra')
+  await waitForHydration(mp)
+  mp.once('dialog', (d) => d.accept())
+  await mp.getByRole('listitem').filter({ hasText: RA_DOC }).getByRole('button', { name: 'Revoke' }).click()
+  await expect(mp.getByRole('status').filter({ hasText: 'Acknowledgment revoked.' })).toBeVisible()
+  await expect(mp.getByRole('listitem').filter({ hasText: RA_DOC })).toHaveCount(0)
+  await expect(mp.getByText('You have not acknowledged any RA yet.')).toBeVisible()
+
+  // Re-acknowledgement is possible again: the option is enabled and submits.
+  await mp.getByRole('combobox', { name: 'Which RA did you read?' }).selectOption({ label: RA_DOC })
+  await mp.getByLabel('Matriculation number').fill(MATRIC)
+  await mp.getByRole('button', { name: 'I have read this RA' }).click()
+  await expect(mp.getByRole('status').filter({ hasText: 'Acknowledged — recorded.' })).toBeVisible()
+  await mp.context().close()
+
+  // Admin revokes the member's row from Records; the CSV stops carrying it.
+  const ap = await newPage(browser)
+  await signIn(ap, ADMIN.email, ADMIN.password)
+  await ap.goto('/ra')
+  await expect(ap.getByRole('heading', { name: 'Records' })).toBeVisible()
+  ap.once('dialog', (d) => d.accept())
+  await ap.getByRole('row').filter({ hasText: MATRIC }).getByRole('button', { name: 'Revoke' }).click()
+  await expect(ap.getByRole('status').filter({ hasText: 'Acknowledgment revoked.' })).toBeVisible()
+  await expect(ap.getByRole('row').filter({ hasText: MATRIC })).toHaveCount(0)
+  const csv = await ap.request.get('/api/ra/acknowledgments/csv')
+  expect(await csv.text()).not.toContain(MATRIC)
+  await ap.context().close()
 })

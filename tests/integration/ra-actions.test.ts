@@ -12,7 +12,7 @@ vi.mock('@/lib/session', () => ({
 // directly in Vitest — stub it (we assert the action's return value, not caching).
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
-import { submitRaAction } from '@/app/(app)/ra/actions'
+import { submitRaAction, revokeRaAction } from '@/app/(app)/ra/actions'
 import { GET } from '@/app/api/ra/acknowledgments/csv/route'
 
 const signIn = (u: { id: string; name: string; email: string; role: string }) => {
@@ -52,6 +52,30 @@ describe('RA server actions', () => {
     signIn(member)
     expect(await submitRaAction(42 as never, 'A1')).toEqual({ ok: false, message: 'Invalid acknowledgment.' })
     expect(await prisma.raAcknowledgment.count()).toBe(0)
+  })
+
+  describe('revokeRaAction', () => {
+    it('returns ok:true and deletes the row for the author', async () => {
+      const m = await makeUser({ role: 'member' })
+      mockUser.current = m
+      const folder = await makeDocumentFolder({ name: 'RA' })
+      const doc = await makeDocument(m.id, { folderId: folder.id })
+      const ack = await makeRaAcknowledgment(m.id, doc.id)
+      const r = await revokeRaAction(ack.id)
+      expect(r).toEqual({ ok: true })
+      expect(await prisma.raAcknowledgment.count()).toBe(0)
+    })
+
+    it('returns {ok:false,message} — never rejects — for a non-author non-admin', async () => {
+      const m = await makeUser({ role: 'member' })
+      const other = await makeUser({ role: 'member' })
+      mockUser.current = other
+      const folder = await makeDocumentFolder({ name: 'RA' })
+      const doc = await makeDocument(m.id, { folderId: folder.id })
+      const ack = await makeRaAcknowledgment(m.id, doc.id)
+      const r = await revokeRaAction(ack.id)
+      expect(r).toEqual({ ok: false, message: 'Only the acknowledger or an admin can revoke this record.' })
+    })
   })
 })
 

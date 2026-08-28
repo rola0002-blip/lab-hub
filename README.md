@@ -63,6 +63,8 @@ Details: [docs/desktop.md](docs/desktop.md).
 - **Files** — shared document library with 100 MB uploads and search.
 - **RA acknowledgments** — members and guests record reading a risk
   assessment from Files' "RA" folder; admins review records and export CSV.
+  A wrongly-added acknowledgement can be revoked (your own rows; any row for
+  admins) and re-acknowledged afterwards.
 - **Platform** — roles (admin/member/guest), invitations, light/dark + 10
   accents, ⌘K palette, WCAG-checked accessibility.
 

@@ -2,7 +2,7 @@ import 'server-only'
 import type { Prisma } from '@prisma/client'
 import type { SessionUser } from '@/lib/session'
 import { prisma } from '@/lib/db'
-import { RA_FOLDER_NAME, PolicyError, assertCanSubmitRa, assertCanReviewRa } from './ra-policy'
+import { RA_FOLDER_NAME, PolicyError, assertCanSubmitRa, assertCanReviewRa, assertCanRevokeRaAcknowledgment } from './ra-policy'
 
 // RA acknowledgments (wave 9): silent by design — no bell, no announce, no SSE
 // (revalidatePath + router.refresh, the Files posture). documentName is snapshotted
@@ -98,4 +98,23 @@ export async function listAllRaAcknowledgments(user: SessionUser): Promise<RaAck
   assertCanReviewRa(user.role) // permission before existence: no id leak
   const rows = await prisma.raAcknowledgment.findMany({ orderBy: RA_ORDER, include: { user: AUTHOR_SELECT } })
   return rows.map(toDto)
+}
+
+// Hard delete (wave 10 D2): the wrongly-added use case. The (userId, documentId)
+// unique frees with the row, so the user can re-acknowledge afterwards.
+export async function revokeRaAcknowledgment(user: SessionUser, id: string): Promise<void> {
+  // RPC guard first: a forged non-string id must degrade to PolicyError.
+  if (typeof id !== 'string') throw new PolicyError('invalid', 'Invalid acknowledgment.')
+  const row = await prisma.raAcknowledgment.findUnique({ where: { id }, select: { id: true, userId: true } })
+  if (!row) throw new PolicyError('not_found', 'Acknowledgment not found.')
+  assertCanRevokeRaAcknowledgment(user, row)
+  try {
+    await prisma.raAcknowledgment.delete({ where: { id: row.id } })
+  } catch (e) {
+    // Concurrent revoke: the row vanished between load and delete — the repo
+    // bars untranslated Prisma codes from reaching the client (issue-service
+    // deleteLabel pattern); for the user this is simply "already gone".
+    if ((e as { code?: string }).code === 'P2025') throw new PolicyError('not_found', 'Acknowledgment not found.')
+    throw e
+  }
 }
