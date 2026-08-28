@@ -16,7 +16,7 @@ describe('applyAppBadge', () => {
   })
 
   it('clears at 0', () => {
-    const s = stub(true)
+    const s = stub()
     applyAppBadge(0, s)
     expect(s.clearAppBadge).toHaveBeenCalled()
     expect(s.setAppBadge).not.toHaveBeenCalled()
@@ -24,10 +24,18 @@ describe('applyAppBadge', () => {
 
   it('no-ops where the API is missing (iOS Safari)', () => {
     expect(() => applyAppBadge(5, {})).not.toThrow()
+    expect(() => applyAppBadge(5)).not.toThrow()
   })
 
   it('swallows rejections (uninstalled tab) without unhandled-promise noise', async () => {
-    applyAppBadge(1, stub(true))
-    await new Promise((r) => setTimeout(r, 0)) // a tick for the rejection's catch
+    const unhandled = vi.fn()
+    process.on('unhandledRejection', unhandled)
+    try {
+      applyAppBadge(1, stub(true))
+      await new Promise((r) => setTimeout(r, 0))
+      expect(unhandled).not.toHaveBeenCalled()
+    } finally {
+      process.off('unhandledRejection', unhandled)
+    }
   })
 })

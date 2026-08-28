@@ -5,7 +5,9 @@ import type { MetadataRoute } from 'next'
 // registers, so the spec's "iOS support via installed PWA" push path is dead.
 // `id` + `scope` pin install identity so later manifest edits don't orphan
 // existing installs; background_color matches the dark canvas
-// (globals.css:156 --bg-canvas) to avoid a white splash flash.
+// (globals.css:156 --bg-canvas) to avoid a white splash flash on dark
+// devices. Light users see the inverse; a single manifest value can't
+// media-query.
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: '/',

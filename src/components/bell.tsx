@@ -98,7 +98,7 @@ function playChime() {
   }
 }
 
-// iOS starts non-gesture AudioContexts suspended and rejects gesture-less
+// iOS starts non-gesture AudioContexts suspended and ignores gesture-less
 // resume() — create + resume on the FIRST user gesture so chimes are audible
 // from cold load. Behavior-preserving no-op on desktop/Android.
 function primeChime() {

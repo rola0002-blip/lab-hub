@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, it, expect } from 'vitest'
 import manifest from './manifest'
 
@@ -21,6 +23,13 @@ describe('web app manifest', () => {
     expect(sizes).toContain('192x192:any')
     expect(sizes).toContain('512x512:any')
     expect(sizes).toContain('512x512:maskable')
+  })
+
+  it('references icon files that actually exist in public/', () => {
+    for (const i of m.icons ?? []) {
+      const p = join(__dirname, '../../public', i.src.replace(/^\//, ''))
+      expect(existsSync(p)).toBe(true)
+    }
   })
 
   it('shortcuts target real routes', () => {

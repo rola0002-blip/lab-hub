@@ -2,7 +2,7 @@
 //!
 //! The ONLY unread encoding the web app uses is a leading `(n) ` prefix on
 //! the document title, written by `ChatTitleBadge`
-//! (src/components/chat-title-badge.tsx:19-21):
+//! (src/components/chat-title-badge.tsx:20-22):
 //!
 //! ```text
 //! document.title = n > 0 ? `(${n}) ${base.current}` : base.current
@@ -49,7 +49,7 @@ impl BadgeState {
 ///
 /// Real formats (see module docs):
 /// - `LabHub` -> `None` (src/app/layout.tsx:19)
-/// - `(3) LabHub` -> `Some(3)` (src/components/chat-title-badge.tsx:21)
+/// - `(3) LabHub` -> `Some(3)` (src/components/chat-title-badge.tsx:22)
 ///
 /// Parsing is strict because the app's format is exact: an optional-none is
 /// returned unless the title is `(` + ASCII digits + `) ` + non-empty base.
@@ -167,7 +167,7 @@ mod tests {
         assert_eq!(unread_from_title("LabHub"), None);
     }
 
-    /// The one unread encoding the app has (chat-title-badge.tsx:21).
+    /// The one unread encoding the app has (chat-title-badge.tsx:22).
     #[test]
     fn unread_prefix_parses() {
         assert_eq!(unread_from_title("(3) LabHub"), Some(3));
@@ -186,7 +186,7 @@ mod tests {
         assert_eq!(unread_from_title("(4096) LabHub"), Some(4096));
     }
 
-    /// n > 0 gate (chat-title-badge.tsx:21): `(0)` is never emitted, and
+    /// n > 0 gate (chat-title-badge.tsx:22): `(0)` is never emitted, and
     /// 0 unread means no unread -> None.
     #[test]
     fn zero_prefix_is_none() {
