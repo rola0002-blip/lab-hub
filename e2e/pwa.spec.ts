@@ -6,10 +6,10 @@ import { wipe, runWizard, signIn, ADMIN, waitForHydration } from './helpers'
 // iOS Add-to-Home-Screen guide path).
 //
 // Per-context client IP so better-auth's per-IP limit never trips. Bands up to
-// 10.90 belong to other suites and 10.91 is mobile.spec's — this file claims
-// 10.92.x.
+// 10.90 belong to other suites, 10.91 is mobile.spec's and 10.92 is ra.spec's —
+// this file claims 10.93.x.
 let ipSeq = 0
-const ip = () => `10.92.${++ipSeq}.7`
+const ip = () => `10.93.${++ipSeq}.7`
 
 test.describe.configure({ mode: 'serial' })
 test.beforeEach(async () => { await wipe() })
@@ -18,7 +18,7 @@ const IOS_UA =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
 
 async function openBell(page: import('@playwright/test').Page) {
-  await page.getByRole('button', { name: 'Notifications' }).click()
+  await page.getByRole('button', { name: 'Notifications', exact: true }).click()
 }
 
 test('manifest: install identity, dark boot, shortcuts, maskable icon, sw headers', async ({ request }) => {
@@ -31,6 +31,7 @@ test('manifest: install identity, dark boot, shortcuts, maskable icon, sw header
   expect(m.icons.some((i: { purpose?: string }) => i.purpose === 'maskable')).toBe(true)
   expect(m.shortcuts.map((s: { url: string }) => s.url)).toEqual(['/chat', '/booking', '/issues'])
   const swHead = await request.get('/sw.js')
+  expect(swHead.status()).toBe(200)
   expect(swHead.headers()['cache-control']).toContain('no-cache')
 })
 
@@ -56,10 +57,10 @@ test('service worker controls the page and serves the offline shell', async ({ b
 
 test('install row (Chromium): sheet path, dismiss persists', async ({ browser }) => {
   const ctx = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': ip() } })
-  // Synthetic deferred prompt, dispatched post-hydration — real Chrome fires
-  // beforeinstallprompt on engagement heuristics while the app is open, and
-  // the landing after sign-in is a client-side router.push (no `load` event
-  // after the bell mounts, so a load-timed dispatch is never heard).
+  // Synthetic deferred prompt — real Chrome fires beforeinstallprompt on
+  // engagement heuristics while the app is open, and the landing after
+  // sign-in is a client-side router.push (no `load` event after the bell
+  // mounts, so a load-timed dispatch is never heard).
   const fireInstallPrompt = (page: import('@playwright/test').Page) =>
     page.evaluate(() => {
       const ev = new Event('beforeinstallprompt', { cancelable: true })
@@ -70,8 +71,10 @@ test('install row (Chromium): sheet path, dismiss persists', async ({ browser })
   await runWizard(page)
   await signIn(page, ADMIN.email, ADMIN.password)
   await waitForHydration(page)
-  await fireInstallPrompt(page)
+  // Open the tray first: the tray click auto-waits for the Bell to be
+  // actionable — its effect (and listener) is attached before this dispatch.
   await openBell(page)
+  await fireInstallPrompt(page)
   await expect(page.getByRole('button', { name: 'Install app' })).toBeVisible()
   // Dismiss → gone now and stays gone after reload (localStorage), even when
   // Chrome re-fires beforeinstallprompt after engagement re-qualification.
@@ -100,7 +103,7 @@ test('install row (iOS): guide path', async ({ browser }) => {
   await openBell(page)
   await expect(page.getByRole('button', { name: 'Install app' })).toBeVisible()
   await page.getByRole('button', { name: 'Install app' }).tap()
-  await expect(page.getByText('Add to Home Screen')).toBeVisible()
+  await expect(page.getByRole('list').filter({ hasText: 'Add to Home Screen' })).toBeVisible()
   await page.getByRole('button', { name: 'Got it' }).tap()
   await expect(page.getByRole('button', { name: 'Install app' })).toBeHidden()
   await ctx.close()
