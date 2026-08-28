@@ -197,4 +197,7 @@ operation). Operators use `scripts\windows\{init-env,backup,update,rollback}.ps1
 stays the development + release-cutting machine. Onboarding needs no SMTP — the People page
 offers copyable invite links, and Settings shows an email-delivery indicator when SMTP is
 unconfigured. PWA install + Web Push are dormant on plain HTTP and light up unchanged the
-day an HTTPS ingress is added.
+day an HTTPS ingress is added. The install UX ships in-app: an "Install app"
+row in the bell tray (native sheet on Android, an Add-to-Home-Screen guide on
+iOS), a cached offline shell served by the service worker, and (Android) a
+launcher unread badge mirroring the tab-title count.

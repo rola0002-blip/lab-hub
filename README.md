@@ -52,6 +52,25 @@ a click in the tray menu.
 
 Details: [docs/desktop.md](docs/desktop.md).
 
+## Mobile app (PWA)
+
+LabHub installs on phones as a progressive web app — a home-screen icon,
+fullscreen, with push notifications for mentions and DMs. The server must be
+reachable over HTTPS (service workers and push require a secure context); the
+Cloudflare Tunnel option above provides it.
+
+- **iPhone/iPad (iOS 16.4+)**: open the site in Safari → **Share** →
+  **Add to Home Screen** → launch LabHub from the icon (notifications only
+  work when it is launched from the home screen, not from a Safari tab) →
+  open the bell and enable notifications. In-app help: the bell tray's
+  "Install app" row walks you through it.
+- **Android**: open the site in Chrome → menu → **Install app** (or the
+  install banner; the bell tray's "Install app" row triggers it too) → open
+  the bell and enable notifications. Unread chats also show as a badge on
+  the launcher icon.
+- iOS removes home-screen web apps unused for ~7 days; if notifications
+  stop, open LabHub once and re-enable them from the bell.
+
 ## What's inside
 
 - **Equipment booking** — per-instrument policies, certification gating,
