@@ -26,3 +26,15 @@ export function canReviewRa(role: Role): boolean {
 export function assertCanReviewRa(role: Role): void {
   if (!canReviewRa(role)) throw new PolicyError('forbidden', 'Only admins can view RA records.')
 }
+
+// Revoke = the acknowledger or an admin (the canDeleteDocument author-or-admin
+// shape): a wrongly-added submission is corrected by the person who made it,
+// and admins clean up records (e.g. test rows) like any other due-diligence data.
+export function canRevokeRaAcknowledgment(user: { id: string; role: Role }, row: { userId: string }): boolean {
+  return user.role === 'admin' || row.userId === user.id
+}
+export function assertCanRevokeRaAcknowledgment(user: { id: string; role: Role }, row: { userId: string }): void {
+  if (!canRevokeRaAcknowledgment(user, row)) {
+    throw new PolicyError('forbidden', 'Only the acknowledger or an admin can revoke this record.')
+  }
+}
