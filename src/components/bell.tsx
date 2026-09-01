@@ -16,6 +16,7 @@ import { shouldChime, shouldPingFromMessage, PingThrottle } from '@/lib/chime'
 import { usePushOptIn } from './hooks/use-push-optin'
 import { useInstallPrompt } from './hooks/use-install-prompt'
 import { useSoundsEnabled } from './hooks/use-sounds'
+import { useActivity } from './hooks/use-activity'
 import { useChat } from './chat/chat-store'
 import { useEvents } from './use-events'
 
@@ -140,6 +141,7 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
   const push = usePushOptIn() // desktop-push opt-in lives in this tray, not a separate top-bar icon
   const install = useInstallPrompt() // PWA install affordance lives in this tray too
   const { enabled: sounds } = useSoundsEnabled(soundsSeed) // server seed until the device opts in/out itself
+  useActivity() // activity heartbeat feeding the server's push-idle gate
   // load is memoized (stable across renders), so it would capture a stale
   // `sounds`; mirror the live value into a ref it can read at fetch time.
   const soundsRef = useRef(false)
