@@ -2097,7 +2097,7 @@ dependencies = [
 
 [[package]]
 name = "labhub-desktop"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "log",
  "reqwest 0.12.28",
