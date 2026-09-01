@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { shouldChime, shouldPingFromMessage, PingThrottle } from './chime'
+import { shouldChime, shouldPingFromMessage, PingThrottle, alertRendering } from './chime'
 const item = (id: string, type: string, createdAt: string) => ({ id, type, createdAt })
 
 describe('shouldChime', () => {
@@ -92,5 +92,15 @@ describe('PingThrottle', () => {
     expect(t.canPing(t0 + 1500)).toBe(false)
     // window is measured from the last EMITTED ping, not the swallowed hit
     expect(t.canPing(t0 + 3001)).toBe(true)
+  })
+})
+
+describe('alertRendering', () => {
+  it('browser/PWA: chime yes, toast no', () => {
+    expect(alertRendering(false)).toEqual({ chime: true, toast: false })
+  })
+
+  it('desktop shell: OS-sounded toast yes, in-page chime suppressed (no double-ding)', () => {
+    expect(alertRendering(true)).toEqual({ chime: false, toast: true })
   })
 })

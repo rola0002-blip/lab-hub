@@ -48,3 +48,12 @@ export class PingThrottle {
     return true
   }
 }
+
+// 2026-09 notifications: where the SOUND lives. In the desktop shell the
+// native toast carries an OS sound, so the in-page WebAudio chime is
+// suppressed (no double-ding); browsers/PWA keep the chime. Shell toasts
+// render regardless of the per-device sound toggle — the toggle sets the
+// toast's `silent` flag rather than hiding the toast.
+export function alertRendering(inShell: boolean): { chime: boolean; toast: boolean } {
+  return { chime: !inShell, toast: inShell }
+}

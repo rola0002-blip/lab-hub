@@ -12,7 +12,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { EmptyState } from '@/components/ui/empty-state'
 import { humanTime } from '@/lib/humanize'
 import { notificationHref } from '@/lib/notification-href'
-import { shouldChime, shouldPingFromMessage, PingThrottle } from '@/lib/chime'
+import { shouldChime, shouldPingFromMessage, PingThrottle, alertRendering } from '@/lib/chime'
 import { usePushOptIn } from './hooks/use-push-optin'
 import { useInstallPrompt } from './hooks/use-install-prompt'
 import { useSoundsEnabled } from './hooks/use-sounds'
@@ -167,28 +167,36 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
   useEffect(() => { openCidRef.current = openCid }, [openCid])
   const throttle = useRef(new PingThrottle(3000))
 
-  // Both chime paths funnel here: throttle (one ping per burst, no backlog)
-  // then sound + the shell toast (unchanged shape). The toast is shell-only by
-  // construction — `__TAURI__` exists only in the Tauri webviews, and the app
-  // never requests direct Notification permission in browsers (push opt-in
-  // goes through the service worker), so a 'granted' permission in a normal
-  // browser means a push subscription whose toasts the SW already shows —
-  // gating on the shell marker prevents a second toast from here.
-  const ping = useCallback((hit?: Item) => {
-    if (!soundsRef.current) return
+  // Both chime paths funnel here: throttle (one ping per burst, no backlog),
+  // then WHERE the alert renders (alertRendering): in the desktop shell every
+  // alert becomes an OS-sounded native toast (the shell bridges Notification
+  // natively and attaches the OS sound) and the in-page chime stays silent —
+  // exactly one sound. Browsers/PWA keep the WebAudio chime. The shell toast
+  // renders regardless of the sound toggle — `silent` carries the toggle —
+  // while in browsers sounds-off still means total silence. `__TAURI__`
+  // exists only in the Tauri webviews, and the app never requests direct
+  // Notification permission in browsers (push opt-in goes through the service
+  // worker), so a 'granted' permission in a normal browser means a push
+  // subscription whose toasts the SW already shows — gating on the shell
+  // marker prevents a second toast from here.
+  const ping = useCallback((hit?: Item, msgAlert?: { title: string; body: string; tag: string }) => {
     if (!throttle.current.canPing()) return
-    playChime()
-    if (hit && '__TAURI__' in window && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    const { chime, toast } = alertRendering('__TAURI__' in window)
+    if (toast && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       try {
-        const body = typeof hit.payload?.message === 'string' ? hit.payload.message : ''
-        // title/body mirror what the tray and the sw push payload derive
-        // from the same fanout strings (sender + channel/DM + snippet);
-        // tag is passed forward-compatible (native Notification may
-        // implement tag collapse; the desktop shim does not, one day).
-        const toast = new Notification(LABEL[hit.type] ?? hit.type, hit.payload?.conversationId ? { body, tag: hit.payload.conversationId } : { body })
-        toast.onclick = () => window.focus()
+        const title = msgAlert?.title ?? (hit ? LABEL[hit.type] ?? hit.type : 'LabHub')
+        const body = msgAlert?.body ?? (hit && typeof hit.payload?.message === 'string' ? hit.payload.message : '')
+        const tag = msgAlert?.tag ?? hit?.payload?.conversationId
+        // silent: respects the per-device sound toggle — the shell's OS
+        // toast sound is the sound (the chime never runs here).
+        const opts: NotificationOptions = { body, silent: !soundsRef.current }
+        if (tag) opts.tag = tag
+        const t = new Notification(title, opts)
+        t.onclick = () => window.focus()
       } catch { /* best-effort */ }
+      return
     }
+    if (chime && soundsRef.current) playChime()
   }, [])
 
   const load = useCallback(async () => {
@@ -232,11 +240,21 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
     if (openCid === cid && document.hasFocus()) return
     void fetch(`/api/chat/messages/${e.mid}`).then(async (r) => {
       if (!r.ok) return
-      const d = (await r.json()) as { message: { author: { id: string }; kind: string } }
+      // MessageDto.body is `string` (empty for attachment-only/deleted rows,
+      // never null) — hence `||` for the '(attachment)' fallback (fanout parity).
+      const d = (await r.json()) as { message: { author: { id: string }; kind: string; body: string } }
       if (shouldPingFromMessage(
         { cid, authorId: d.message.author.id, kind: d.message.kind, muted: false },
         { openCid, focused: document.hasFocus(), selfId },
-      )) ping()
+      )) {
+        // Slack-shaped toast text (fanout parity): DM -> sender name,
+        // channel -> #name; body "sender: preview". Sender name comes from
+        // the chat store (the thin {cid,mid} SSE event never carries it).
+        const senderName = users.find((u) => u.id === d.message.author.id)?.name ?? 'Someone'
+        const title = conv.type === 'DM' ? senderName : `#${conv.name ?? 'channel'}`
+        const body = `${senderName}: ${(d.message.body || '(attachment)').slice(0, 120)}`
+        ping(undefined, { title, body, tag: cid })
+      }
     })
   })
 
