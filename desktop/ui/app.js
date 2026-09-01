@@ -10,6 +10,7 @@ const state = {
   servers: [],
   active: null,
   closeToTray: false,
+  launchAtLogin: false,
 };
 
 const listEl = document.getElementById("server-list");
@@ -19,6 +20,7 @@ const addUrl = document.getElementById("add-url");
 const addSubmit = document.getElementById("add-submit");
 const addError = document.getElementById("add-error");
 const trayCheckbox = document.getElementById("close-to-tray");
+const loginCheckbox = document.getElementById("launch-at-login");
 
 const badgeListeners = new Map(); // server id -> unlisten fn
 
@@ -30,6 +32,7 @@ async function load() {
   state.servers = servers;
   state.active = config.active_server;
   state.closeToTray = config.close_to_tray;
+  state.launchAtLogin = await invoke("get_launch_at_login");
   render();
 }
 
@@ -97,6 +100,7 @@ function render() {
   }
 
   trayCheckbox.checked = state.closeToTray;
+  loginCheckbox.checked = state.launchAtLogin;
   syncBadgeListeners();
 }
 
@@ -216,6 +220,15 @@ trayCheckbox.addEventListener("change", async () => {
   } catch (err) {
     console.error("set_close_to_tray failed", err);
     trayCheckbox.checked = !trayCheckbox.checked;
+  }
+});
+
+loginCheckbox.addEventListener("change", async () => {
+  try {
+    await invoke("set_launch_at_login", { v: loginCheckbox.checked });
+  } catch (err) {
+    console.error("set_launch_at_login failed", err);
+    loginCheckbox.checked = !loginCheckbox.checked;
   }
 });
 

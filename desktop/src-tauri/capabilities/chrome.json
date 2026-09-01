@@ -11,6 +11,8 @@
     "allow-set-active",
     "allow-get-app-config",
     "allow-set-close-to-tray",
+    "allow-get-launch-at-login",
+    "allow-set-launch-at-login",
     "opener:default",
     "core:event:default"
   ]

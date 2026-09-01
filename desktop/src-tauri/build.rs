@@ -11,6 +11,8 @@ fn main() {
             "set_active",
             "get_app_config",
             "set_close_to_tray",
+            "get_launch_at_login",
+            "set_launch_at_login",
             "desktop_notify",
         ]),
     ))

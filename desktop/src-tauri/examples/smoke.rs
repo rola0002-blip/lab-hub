@@ -800,6 +800,10 @@ fn main() {
         .plugin(labhub_desktop::window_state_plugin())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         // Updater + process plugins registered so bootstrap's updater::init
         // runs against the real plugin state (its registration log line is
         // the Task 8 smoke evidence). No check ever fires here: the
@@ -814,6 +818,8 @@ fn main() {
             commands::set_active,
             commands::get_app_config,
             commands::set_close_to_tray,
+            commands::get_launch_at_login,
+            commands::set_launch_at_login,
             labhub_desktop::notify::desktop_notify,
         ])
         .on_window_event(labhub_desktop::handle_window_event)

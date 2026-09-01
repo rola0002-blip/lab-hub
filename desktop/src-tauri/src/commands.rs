@@ -146,3 +146,24 @@ pub fn set_close_to_tray(
 // `desktop_notify` lives in `notify.rs` alongside the rate limiter and the
 // click-routing state it depends on (Task 6); the command name — and
 // therefore the capability grant and the JS seam — is unchanged.
+
+// Launch-at-Login (2026-09 notifications): an app that is not running
+// cannot alert. Wrapped as our own commands so the remote-page capability
+// surface stays exactly desktop_notify + scoped opener.
+#[tauri::command]
+pub fn get_launch_at_login(app: AppHandle) -> bool {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autolaunch().is_enabled().unwrap_or(false)
+}
+
+#[tauri::command]
+pub fn set_launch_at_login(app: AppHandle, v: bool) -> Result<(), String> {
+    use tauri_plugin_autostart::ManagerExt;
+    let manager = app.autolaunch();
+    let result = if v {
+        manager.enable()
+    } else {
+        manager.disable()
+    };
+    result.map_err(|e| format!("autostart toggle failed: {e}"))
+}

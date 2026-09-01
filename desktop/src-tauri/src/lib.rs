@@ -99,6 +99,10 @@ pub fn run() {
         .plugin(window_state_plugin())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         // Auto-updater (Task 8): endpoints/pubkey live in
         // tauri.conf.json `plugins.updater`; all driving is Rust-side
         // (updater.rs) — no capability grants the JS API, so remote pages
@@ -143,6 +147,8 @@ pub fn run() {
             commands::set_active,
             commands::get_app_config,
             commands::set_close_to_tray,
+            commands::get_launch_at_login,
+            commands::set_launch_at_login,
             notify::desktop_notify,
         ])
         .run(tauri::generate_context!())
