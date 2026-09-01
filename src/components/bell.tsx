@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { EmptyState } from '@/components/ui/empty-state'
+import { renderBody } from '@/features/chat/mentions'
 import { humanTime } from '@/lib/humanize'
 import { notificationHref } from '@/lib/notification-href'
 import { shouldChime, shouldPingFromMessage, PingThrottle, alertRendering } from '@/lib/chime'
@@ -249,10 +250,14 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
       )) {
         // Slack-shaped toast text (fanout parity): DM -> sender name,
         // channel -> #name; body "sender: preview". Sender name comes from
-        // the chat store (the thin {cid,mid} SSE event never carries it).
+        // the chat store (the thin {cid,mid} SSE event never carries it);
+        // the preview resolves mention tokens with the chat store too,
+        // mirroring fanout's renderBody.
         const senderName = users.find((u) => u.id === d.message.author.id)?.name ?? 'Someone'
         const title = conv.type === 'DM' ? senderName : `#${conv.name ?? 'channel'}`
-        const body = `${senderName}: ${(d.message.body || '(attachment)').slice(0, 120)}`
+        const names = new Map(users.map((u) => [u.id, u.name]))
+        const bodyText = renderBody(d.message.body || '(attachment)', names).slice(0, 120)
+        const body = `${senderName}: ${bodyText}`
         ping(undefined, { title, body, tag: cid })
       }
     })
