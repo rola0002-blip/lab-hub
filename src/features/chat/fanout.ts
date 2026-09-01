@@ -13,6 +13,8 @@ type Seams = {
   hasLive?: (uid: string) => boolean
   isActive?: (uid: string) => boolean
   push?: (uid: string, p: { title: string; body: string; url: string; tag?: string }) => Promise<void>
+  // NOTE: the default (tryReservePush) is STATEFUL — returning true reserves
+  // the 60s squelch window. Injected test seams usually want a stateless stub.
   canPush?: (uid: string, cid: string) => boolean
 }
 

@@ -81,6 +81,11 @@ describe('fanoutMessage', () => {
     expect(await prisma.notification.count({ where: { userId: mutedB.id, type: 'message_dm' } })).toBe(1)
     expect(push).toHaveBeenCalledTimes(1) // mention pierces mute for the alert too
     expect(push.mock.calls[0][0]).toBe(mutedB.id)
+
+    // An ACTIVE mentioned user: bell yes, push no — no urgent tier by design.
+    await fanoutMessage({ message: msg({ conversationId: dm.id, userId: a.id, mentionUserIds: [mutedB.id], id: 'm10' }) as never, conversation: convo, senderName: 'A' }, { hasLive: () => true, isActive: () => true, push })
+    expect(await prisma.notification.count({ where: { userId: mutedB.id, type: 'message_dm' } })).toBe(2)
+    expect(push).toHaveBeenCalledTimes(1) // only the earlier idle send pushed
   })
 
   it('channel mention to an offline recipient: bell + mention email + push with the Slack-shaped payload', async () => {
@@ -131,6 +136,17 @@ describe('fanoutMessage', () => {
     expect(await prisma.notification.count({ where: { userId: mutedUser.id } })).toBe(0)
     expect(push).toHaveBeenCalledTimes(1)
     expect(push.mock.calls[0][0]).toBe(rcpt.id)
+
+    // Direct mention pierces mute in a CHANNEL too — bell AND alert (the
+    // classic regression case for the bell, pinned on the channel shape).
+    push.mockClear()
+    await fanoutMessage(
+      { message: msg({ conversationId: ch.id, userId: sender.id, mentionUserIds: [mutedUser.id], id: 'm9' }) as never, conversation: convo, senderName: 'Sender' },
+      { hasLive: () => true, isActive: () => false, push },
+    )
+    expect(await prisma.notification.count({ where: { userId: mutedUser.id, type: 'message_mention' } })).toBe(1)
+    expect(push).toHaveBeenCalledTimes(1)
+    expect(push).toHaveBeenCalledWith(mutedUser.id, expect.objectContaining({ tag: ch.id }))
   })
 
   it('squelch: a second push to the same (user, conversation) inside 60s is swallowed; the bell is NOT squelched', async () => {
@@ -156,5 +172,8 @@ describe('fanoutMessage', () => {
     )
     expect(await prisma.notification.count({ where: { userId: rcpt.id } })).toBe(1) // @channel bell still fires
     expect(push).not.toHaveBeenCalled() // but bot chatter must never buzz phones
+    // Offline @channel bells still email (unchanged) — 2, not 1: setup()'s
+    // sender is also an unmuted offline member here, so rcpt AND sender queue.
+    expect(await prisma.emailOutbox.count()).toBe(2)
   })
 })
