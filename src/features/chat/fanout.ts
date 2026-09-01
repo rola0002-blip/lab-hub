@@ -3,13 +3,17 @@ import type { Message, Conversation } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { notify } from '@/lib/notify'
 import { hasLiveConnection } from '@/lib/events'
+import { isActive as isActiveUser } from '@/lib/activity'
+import { tryReservePush } from '@/lib/push-squelch'
 import { sendPush } from '@/lib/push'
 import { mentionEmail, dmEmail } from '@/lib/email/templates'
 import { renderBody } from './mentions'
 
 type Seams = {
   hasLive?: (uid: string) => boolean
+  isActive?: (uid: string) => boolean
   push?: (uid: string, p: { title: string; body: string; url: string; tag?: string }) => Promise<void>
+  canPush?: (uid: string, cid: string) => boolean
 }
 
 export async function fanoutMessage(
@@ -21,7 +25,9 @@ export async function fanoutMessage(
     // service never calls fanout for them; this guard makes that invariant explicit.
     if (args.message.kind === 'system') return
     const hasLive = seams.hasLive ?? hasLiveConnection
+    const isActive = seams.isActive ?? isActiveUser
     const push = seams.push ?? sendPush
+    const canPush = seams.canPush ?? tryReservePush
     const { message: m, conversation: c } = args
     const members = await prisma.conversationMember.findMany({
       where: { conversationId: c.id, userId: { not: m.userId } },
@@ -32,25 +38,40 @@ export async function fanoutMessage(
     const org = await prisma.organization.findFirst()
     const orgName = org?.name ?? 'LabHub'
     const where = c.type === 'DM' ? 'a direct message' : `#${c.name ?? 'channel'}`
-    const url = `/chat/${c.id}`
+    // Slack-shaped push text (2026-09): DM -> sender name, channel -> #name;
+    // body "sender: preview"; tag = conversationId so the SW's
+    // showNotification collapses a burst into one OS toast (W9-D7).
+    const pushTitle = c.type === 'DM' ? args.senderName : `#${c.name ?? 'channel'}`
+    const pushBody = `${args.senderName}: ${preview}`
+    const pushUrl = `/chat/${c.id}?msg=${m.id}`
+    // Bot senders (LabHub Bot announcements) must never buzz phones.
+    const senderRow = await prisma.user.findUnique({ where: { id: m.userId }, select: { isSystem: true } })
+    const senderIsBot = senderRow?.isSystem ?? false
 
     for (const member of members) {
       if (member.user.banned || member.user.isSystem) continue
       const direct = m.mentionUserIds.includes(member.userId)
-      // Mute suppresses everything except direct <@userId> mentions.
-      // Channels: only mentions notify (direct or @channel). DMs: every message notifies.
-      const shouldNotify = direct || (!member.muted && (c.type === 'DM' || m.mentionsChannel))
-      if (!shouldNotify) continue
-      const type = c.type === 'DM' ? 'message_dm' as const : 'message_mention' as const
-      const offline = !hasLive(member.userId)
-      const email = offline
-        ? (c.type === 'DM' ? dmEmail(orgName, args.senderName, preview) : mentionEmail(orgName, args.senderName, where, preview))
-        : undefined
-      await notify(member.userId, type, { message: `${args.senderName} in ${where}: ${preview}`, conversationId: c.id, messageId: m.id, senderId: m.userId }, email)
-      if (offline) {
-        // tag = conversationId: the SW's showNotification collapses same-tag
-        // toasts, so a message burst is ONE OS notification, not a stack (W9-D).
-        await push(member.userId, { title: `${args.senderName} — ${where}`, body: preview, url, tag: c.id }).catch(() => {})
+      // BELL (unchanged policy): DMs always; channels on direct mention or
+      // @channel. Mute suppresses the bell except for a direct <@userId> mention.
+      const shouldBell = direct || (!member.muted && (c.type === 'DM' || m.mentionsChannel))
+      // ALERT (2026-09, Slack-like "all new messages"): every message in an
+      // unmuted conversation pings; a direct mention pierces mute. Bot
+      // senders never alert.
+      const shouldAlert = !senderIsBot && (direct || !member.muted)
+      if (shouldBell) {
+        const type = c.type === 'DM' ? 'message_dm' as const : 'message_mention' as const
+        const offline = !hasLive(member.userId)
+        const email = offline
+          ? (c.type === 'DM' ? dmEmail(orgName, args.senderName, preview) : mentionEmail(orgName, args.senderName, where, preview))
+          : undefined
+        await notify(member.userId, type, { message: `${args.senderName} in ${where}: ${preview}`, conversationId: c.id, messageId: m.id, senderId: m.userId }, email)
+      }
+      // Push is ACTIVITY-gated, not connection-gated: an open tab or a
+      // desktop app in the tray must not silence the phone — only real,
+      // recent use may. The server-side squelch caps one push per
+      // (user, conversation) / 60 s.
+      if (shouldAlert && !isActive(member.userId) && canPush(member.userId, c.id)) {
+        await push(member.userId, { title: pushTitle, body: pushBody, url: pushUrl, tag: c.id }).catch(() => {})
       }
     }
   } catch (e) {
