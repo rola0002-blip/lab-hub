@@ -6,6 +6,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Slack-like chat notifications. Every message in an unmuted conversation
+  now alerts: an in-app chime while you are at a keyboard, and — once you
+  have been idle for two minutes — a Web Push to every subscribed phone and
+  a sounded native toast on the desktop app, even with a browser tab open or
+  the app sitting in the tray (an open tab no longer silences the phone). A
+  direct @mention still pierces mute; bot posts never alert. Bursts collapse
+  to one buzz per conversation per minute.
+- "Set up notifications" wizard in the bell tray: walks a member through
+  install (Add to Home Screen on iOS), notification permission, and push
+  subscription, then sends a real test notification to confirm sound works.
+  An amber dot on the bell marks devices that have not finished setup.
+- "Notification delivery" panel in admin settings listing which members
+  have push enabled.
+- Desktop: toasts now carry the OS notification sound (with a dock bounce
+  or taskbar flash when the window is hidden or unfocused), fresh installs
+  default to keep-running-in-background on close, and the rail gains a
+  Launch at Login toggle — a quit app cannot alert.
+
+### Changed
+- Push delivery is gated on real activity (focus, typing, scrolling) rather
+  than connection presence, so being "online" no longer suppresses phone
+  notifications while you are away from the desk. Notification emails and
+  the in-app bell list are unchanged.
+
 ## [0.24.0] - 2026-08-28
 
 ### Added
