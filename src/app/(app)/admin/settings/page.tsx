@@ -4,10 +4,12 @@ import { ThemeToggle } from '@/components/theme-toggle'
 import SettingsForm from './settings-form'
 import { APP_VERSION } from '@/lib/version'
 import { env } from '@/lib/env'
+import { listPushStatus } from '@/features/admin/push-status'
 
 export default async function SettingsPage() {
   await requireAdmin()
   const org = await getOrg()
+  const pushRows = await listPushStatus()
   if (!org) return null
   return (
     <div>
@@ -34,6 +36,19 @@ export default async function SettingsPage() {
           <p className="mt-3 text-sm text-muted">Email delivery: disabled — no SMTP configured. Invitations and notifications will not be sent by email; share invite links directly.</p>
         </section>
       )}
+
+      <section className="mt-8 max-w-md rounded-lg border border-border p-4">
+        <h2 className="text-sm font-semibold text-default">Notification delivery</h2>
+        <p className="mt-1 text-xs text-subtle">Members with phone/desktop push enabled (each member: bell, then Set up notifications).</p>
+        <ul className="mt-3 space-y-1">
+          {pushRows.map((r) => (
+            <li key={r.id} className="flex items-center justify-between text-sm">
+              <span className="text-muted">{r.name}</span>
+              <span className={r.pushEnabled ? 'font-medium text-accent' : 'text-subtle'}>{r.pushEnabled ? 'Push on' : 'No push'}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   )
 }
