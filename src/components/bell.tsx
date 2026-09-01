@@ -14,7 +14,8 @@ import { renderBody } from '@/features/chat/mentions'
 import { humanTime } from '@/lib/humanize'
 import { notificationHref } from '@/lib/notification-href'
 import { shouldChime, shouldPingFromMessage, PingThrottle, alertRendering } from '@/lib/chime'
-import { usePushOptIn } from './hooks/use-push-optin'
+import { useNotificationStatus } from './hooks/use-notification-state'
+import { NotificationWizard } from './notification-wizard'
 import { useInstallPrompt } from './hooks/use-install-prompt'
 import { useSoundsEnabled } from './hooks/use-sounds'
 import { useActivity } from './hooks/use-activity'
@@ -139,7 +140,9 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const now = new Date() // viewer-local reference for humanized notification times
-  const push = usePushOptIn() // desktop-push opt-in lives in this tray, not a separate top-bar icon
+  const notify = useNotificationStatus() // wizard state lives in this tray
+  const [wizardOpen, setWizardOpen] = useState(false)
+  const notifyAttention = notify.status !== null && notify.status !== 'shell' && notify.status !== 'done'
   const install = useInstallPrompt() // PWA install affordance lives in this tray too
   const { enabled: sounds } = useSoundsEnabled(soundsSeed) // server seed until the device opts in/out itself
   useActivity() // activity heartbeat feeding the server's push-idle gate
@@ -304,6 +307,7 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
       <button onClick={toggle} aria-label="Notifications" className="relative rounded-full p-2 text-muted transition-colors hover:bg-hover hover:text-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
         <BellIcon size={20} aria-hidden />
         {unread > 0 && <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-accent-on">{unread}</span>}
+        {notifyAttention && <span aria-hidden className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-amber-500" />}
       </button>
       {open && (
         <div className="absolute right-0 z-20 mt-2 max-h-[70vh] w-80 overflow-y-auto rounded-xl border border-border bg-surface p-2 shadow-menu">
@@ -344,19 +348,16 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
               <div key={g.key} className="flex gap-2.5 rounded-lg p-2 transition-colors hover:bg-hover">{inner}</div>
             )
           })}
-          {push.show && (
-            // Desktop-push opt-in — shown only while this device isn't subscribed
-            // (usePushOptIn), pinned to the tray's foot. A successful subscribe flips
-            // push.show off and the row disappears.
+          {notifyAttention && (
             <div className="mt-1 border-t border-border pt-1">
-              <button type="button" onClick={() => void push.enable()} disabled={push.busy}
-                className="flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] disabled:opacity-50">
+              <button type="button" onClick={() => setWizardOpen(true)}
+                className="flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-avatar)] bg-active text-muted">
                   <BellPlus size={18} aria-hidden />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-default">Enable desktop notifications</span>
-                  <span className="block text-xs text-subtle">Get alerted even when this tab is closed.</span>
+                  <span className="block text-sm font-medium text-default">Set up notifications</span>
+                  <span className="block text-xs text-subtle">Get sounds and alerts on your devices.</span>
                 </span>
               </button>
             </div>
@@ -403,6 +404,7 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
           )}
         </div>
       )}
+      <NotificationWizard open={wizardOpen} onClose={() => { setWizardOpen(false); notify.refresh() }} />
     </div>
   )
 }

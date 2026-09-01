@@ -12,11 +12,36 @@ function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
   return arr
 }
 
-// Web Push opt-in state + subscribe flow, extracted so the notification tray can
-// render the opt-in inline. Opt-in must never break the surface it lives on, so
-// every failure is swallowed with console.warn. SSR-safe: `show` stays false until
-// the client confirms service-worker support AND that this device isn't already
-// subscribed; a successful `enable()` flips it back off so the affordance vanishes.
+// The subscribe flow, extracted so the tray opt-in and the notification wizard
+// share one path: register SW → VAPID key → subscribe → POST. Failures are
+// swallowed with console.warn (returns false) so no caller's surface breaks.
+export async function subscribeToPush(): Promise<boolean> {
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js')
+    const vr = await fetch('/api/push/vapid')
+    const { publicKey } = await vr.json()
+    if (!publicKey) return false // push disabled server-side (no VAPID keys)
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey),
+    })
+    const j = sub.toJSON()
+    await fetch('/api/push/subscription', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint: j.endpoint, keys: j.keys }),
+    })
+    return true
+  } catch (e) {
+    console.warn('Push opt-in failed:', e)
+    return false
+  }
+}
+
+// Web Push opt-in state, extracted so the notification tray can render the
+// opt-in inline. Opt-in must never break the surface it lives on, so every
+// failure is swallowed with console.warn (inside subscribeToPush). SSR-safe:
+// `show` stays false until the client confirms service-worker support AND that
+// this device isn't already subscribed; a successful `enable()` flips it back
+// off so the affordance vanishes.
 export function usePushOptIn(): { show: boolean; busy: boolean; enable: () => Promise<void> } {
   const [show, setShow] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -45,21 +70,7 @@ export function usePushOptIn(): { show: boolean; busy: boolean; enable: () => Pr
   async function enable() {
     setBusy(true)
     try {
-      const reg = await navigator.serviceWorker.register('/sw.js')
-      const vr = await fetch('/api/push/vapid')
-      const { publicKey } = await vr.json()
-      if (!publicKey) { setShow(false); return } // push disabled server-side (no VAPID keys)
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey),
-      })
-      const j = sub.toJSON()
-      await fetch('/api/push/subscription', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ endpoint: j.endpoint, keys: j.keys }),
-      })
-      setShow(false)
-    } catch (e) {
-      console.warn('Push opt-in failed:', e)
+      if (await subscribeToPush()) setShow(false) // a successful subscribe flips the row off
     } finally {
       setBusy(false)
     }
