@@ -5,18 +5,21 @@
 // already present when this runs).
 //
 // App usage contract, verified against the web app source on 2026-08-21:
-// - src/components/hooks/use-push-optin.ts:25 gates on `'Notification' in window`
-//   before ever touching the API
-// - src/components/hooks/use-push-optin.ts:29 reads `Notification.permission === 'granted'`
+// - src/components/hooks/use-notification-state.ts gates on
+//   `'Notification' in window` before ever touching the API and reads
+//   `Notification.permission === 'granted'`
 //   (and only then looks for a push subscription — WKWebView ships no
 //   service workers for web content, so the push opt-in stays hidden in the
 //   shell and these checks are the whole in-window surface today)
+// - src/lib/push-subscribe.ts owns the subscribe flow
 // - public/sw.js:3 calls registration.showNotification — service-worker
 //   context, out of this window shim's reach by design
 // - the web app NEVER calls `new Notification(...)` or requestPermission;
 //   the constructor bridge below is the forward contract for future
 //   in-page notification calls. The app enforces its own mute/permission
 //   rules BEFORE notifying — the shell just renders what it is given.
+// - options.silent (optional, default false) maps to the shell's ToastSound:
+//   absent/false -> OS default sound; true -> silent toast (downloads).
 //
 // Browser harmlessness: if window.__TAURI__ is absent (plain browser), this
 // script leaves the native Notification API completely untouched.
@@ -41,11 +44,16 @@
     try {
       body = options && options.body != null ? String(options.body) : ''
     } catch (e) { /* non-object options keep an empty body */ }
+    var silent = false
+    try {
+      silent = !!(options && options.silent)
+    } catch (e) { /* non-object options keep sound on */ }
     try {
       window.__TAURI__.core
         .invoke('desktop_notify', {
           title: title == null ? '' : String(title),
           body: body,
+          silent: silent,
         })
         .catch(function (err) {
           console.warn('desktop_notify failed', err)

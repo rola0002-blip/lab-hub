@@ -29,14 +29,13 @@
 //! show + focus, see [`consume_pending_click`]) then consumes it and
 //! lands the user on the notifying server.
 //!
-//! Toast audio (W9-D7): the native toast is SILENT on every platform —
-//! the webview's own ping sound is THE sound. macOS notifications are
-//! silent unless a sound is attached (we attach none); on Windows the
-//! chain tauri-plugin-notification 2.3.3 → notify-rust 4.18 →
-//! tauri-winrt-notification 0.7.3 maps an UNSET sound name to
-//! `Toast::sound(None)`, which emits `<audio silent="true"/>` in the
-//! toast XML. Nothing here may call the builder's `.sound(...)` — that
-//! would opt the toast INTO an OS sound on top of the webview ping.
+//! Toast audio (2026-09 notifications): message toasts carry the OS default
+//! sound (Slack-like delivery — this flips the old W9-D7 silent contract,
+//! because the webview chime fails when the window is hidden or another
+//! lab's webview is focused). Housekeeping toasts (download complete) opt
+//! out with `silent: true` from the page. The in-page chime is suppressed
+//! inside the shell by the web app itself, so there is exactly one sound
+//! per alert.
 
 use std::collections::VecDeque;
 use std::sync::Mutex;
@@ -163,14 +162,44 @@ pub fn truncate_chars(s: &str, max_chars: usize) -> String {
     }
 }
 
-/// The single delivery site for shell toasts (silent by module contract —
-/// never `.sound(...)`). Shared by the `desktop_notify` command and the
-/// download-completion toast (webviews.rs). Fire-and-forget with a result:
-/// `true` when the show succeeded, `false` when the OS/plugin refused it —
-/// the failure is warned HERE (the only failure log; callers must not
-/// double-log) and callers gate their own "delivered" logging on the bool.
-pub fn show_toast(app: &AppHandle, title: &str, body: &str) -> bool {
-    match app.notification().builder().title(title).body(body).show() {
+/// Toast sound policy: message alerts ring (OS default); housekeeping
+/// toasts (downloads) stay silent.
+pub enum ToastSound {
+    Default,
+    Silent,
+}
+
+impl ToastSound {
+    fn sound_name(&self) -> Option<&'static str> {
+        match self {
+            ToastSound::Default => Some("default"),
+            ToastSound::Silent => None,
+        }
+    }
+}
+
+/// The shim's `silent` flag; ABSENT means sound ON (the download toast is
+/// the only in-tree caller that passes true today).
+fn toast_sound_from_flag(silent: Option<bool>) -> ToastSound {
+    if silent.unwrap_or(false) {
+        ToastSound::Silent
+    } else {
+        ToastSound::Default
+    }
+}
+
+/// The single delivery site for shell toasts. Shared by the
+/// `desktop_notify` command and the download-completion toast
+/// (webviews.rs). Fire-and-forget with a result: `true` when the show
+/// succeeded, `false` when the OS/plugin refused it — the failure is
+/// warned HERE (the only failure log; callers must not double-log) and
+/// callers gate their own "delivered" logging on the bool.
+pub fn show_toast(app: &AppHandle, title: &str, body: &str, sound: ToastSound) -> bool {
+    let mut builder = app.notification().builder().title(title).body(body);
+    if let Some(name) = sound.sound_name() {
+        builder = builder.sound(name);
+    }
+    match builder.show() {
         Ok(()) => true,
         Err(e) => {
             log::warn!("notification show failed: {e}");
@@ -191,6 +220,7 @@ pub fn desktop_notify(
     webview: Webview,
     title: String,
     body: String,
+    silent: Option<bool>,
 ) -> Result<(), String> {
     let state = app.state::<NotifyState>();
 
@@ -230,7 +260,7 @@ pub fn desktop_notify(
     // [`show_toast`] and the command still resolves Ok (delivery failure ≠
     // bad request). The "delivered" log is gated on the show result so it
     // never overclaims a suppressed toast.
-    if show_toast(&app, &title, &body) {
+    if show_toast(&app, &title, &body, toast_sound_from_flag(silent)) {
         log::info!("desktop_notify delivered: title={title:?} server={target:?}");
     }
     Ok(())
@@ -462,6 +492,27 @@ mod tests {
         assert_eq!(truncate_chars("", 200), "");
         assert_eq!(truncate_chars("x", 0), "");
         assert_eq!(truncate_chars("xyz", 0), "");
+    }
+
+    // --- ToastSound ---
+
+    #[test]
+    fn default_sound_maps_to_os_default_silent_maps_to_none() {
+        assert_eq!(ToastSound::Default.sound_name(), Some("default"));
+        assert_eq!(ToastSound::Silent.sound_name(), None);
+    }
+
+    #[test]
+    fn silent_flag_absent_means_sound_on() {
+        assert!(matches!(toast_sound_from_flag(None), ToastSound::Default));
+        assert!(matches!(
+            toast_sound_from_flag(Some(false)),
+            ToastSound::Default
+        ));
+        assert!(matches!(
+            toast_sound_from_flag(Some(true)),
+            ToastSound::Silent
+        ));
     }
 
     // --- NotifyState pending target ---

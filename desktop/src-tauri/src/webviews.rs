@@ -328,7 +328,7 @@ fn create_content_webview(
                         match resolve_finished_path(path, remembered) {
                             Some(p) => {
                                 log::info!("download [{}] {} saved", wv.label(), p.display());
-                                notify::show_toast(wv.app_handle(), "Download complete", &download_done_body(&p));
+                                notify::show_toast(wv.app_handle(), "Download complete", &download_done_body(&p), notify::ToastSound::Silent);
                             }
                             None => {
                                 log::warn!("download [{}] {} finished without a known path", wv.label(), url);
