@@ -76,7 +76,10 @@ manually-installed release, then future releases auto-update again.
   the taskbar (Windows) when the window is hidden or unfocused. Fresh
   installs default to keep-running-in-background on close, and the rail
   offers a Launch at Login toggle — a quit app cannot alert. The web-push
-  opt-in is hidden inside the shell.
+  opt-in is hidden inside the shell. Deploy-order note: update the lab's
+  server image before (or alongside) the desktop app — an old web app still
+  chimes inside the new shell, doubling the alert sound until the server
+  catches up.
 - ⌘/Ctrl+1..9 switch servers while the rail has keyboard focus (v1
   limitation — content webviews keep their keys).
 - Dev: `desktop/README.md`; regression harness `cargo run --example smoke`
