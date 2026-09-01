@@ -35,7 +35,9 @@
 //! lab's webview is focused). Housekeeping toasts (download complete) opt
 //! out with `silent: true` from the page. The in-page chime is suppressed
 //! inside the shell by the web app itself, so there is exactly one sound
-//! per alert.
+//! per alert. The default sound NAME is case-sensitive per platform —
+//! macOS needs "default", Windows' toast parser needs "Default" — see
+//! [`ToastSound::sound_name`].
 
 use std::collections::VecDeque;
 use std::sync::Mutex;
@@ -172,6 +174,15 @@ pub enum ToastSound {
 impl ToastSound {
     fn sound_name(&self) -> Option<&'static str> {
         match self {
+            // The sound NAME string is platform-case-sensitive: macOS's
+            // mac-notification-sys wants exactly "default" (the value of
+            // NSUserNotificationDefaultSoundName); Windows' winrt toast
+            // parser (tauri-winrt-notification) matches "Default" with a
+            // capital D and silently mutes anything else. Do NOT
+            // "normalize" this split away.
+            #[cfg(windows)]
+            ToastSound::Default => Some("Default"),
+            #[cfg(not(windows))]
             ToastSound::Default => Some("default"),
             ToastSound::Silent => None,
         }
@@ -519,7 +530,11 @@ mod tests {
 
     #[test]
     fn default_sound_maps_to_os_default_silent_maps_to_none() {
-        assert_eq!(ToastSound::Default.sound_name(), Some("default"));
+        if cfg!(windows) {
+            assert_eq!(ToastSound::Default.sound_name(), Some("Default"));
+        } else {
+            assert_eq!(ToastSound::Default.sound_name(), Some("default"));
+        }
         assert_eq!(ToastSound::Silent.sound_name(), None);
     }
 
