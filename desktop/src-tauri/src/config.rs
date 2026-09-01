@@ -25,14 +25,32 @@ pub struct ServerConfig {
 
 /// Root config document. All fields default so older/partial files keep
 /// deserializing as new fields are added.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AppConfig {
     #[serde(default)]
     pub servers: Vec<ServerConfig>,
     #[serde(default)]
     pub active_server: Option<String>,
-    #[serde(default)]
+    #[serde(default = "default_close_to_tray")]
     pub close_to_tray: bool,
+}
+
+fn default_close_to_tray() -> bool {
+    true
+}
+
+// Derived Default would hard-code close_to_tray = false; the shipped default
+// is ON (2026-09 notifications design: quitting is the only way to lose
+// desktop alerts). Explicit `close_to_tray: false` in an existing
+// config.json still wins, so no install silently changes its saved choice.
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            servers: Vec::new(),
+            active_server: None,
+            close_to_tray: true,
+        }
+    }
 }
 
 /// Normalizes a user-entered server URL to `scheme://host[:port]`.

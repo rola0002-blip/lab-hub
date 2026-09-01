@@ -82,7 +82,7 @@ fn app_config_missing_fields_default() {
     assert_eq!(config, AppConfig::default());
     assert!(config.servers.is_empty());
     assert!(config.active_server.is_none());
-    assert!(!config.close_to_tray);
+    assert!(config.close_to_tray);
 
     let config: AppConfig = serde_json::from_str(r#"{"servers": []}"#).expect("servers only");
     assert_eq!(config, AppConfig::default());
@@ -143,4 +143,24 @@ fn default_name_strips_www_and_port() {
         default_name("https://lab.example.com", &HealthInfo { version: None }),
         "lab.example.com"
     );
+}
+
+// 2026-09 notifications: the shipped default keeps the app in the tray on
+// close — quitting is the only way to lose desktop alerts. An explicit
+// false in config.json still wins.
+#[test]
+fn default_config_has_close_to_tray_on() {
+    assert!(AppConfig::default().close_to_tray);
+}
+
+#[test]
+fn config_missing_close_to_tray_field_parses_to_on() {
+    let c = parse_or_default(r#"{"servers":[]}"#);
+    assert!(c.close_to_tray);
+}
+
+#[test]
+fn config_explicit_close_to_tray_false_is_preserved() {
+    let c = parse_or_default(r#"{"servers":[],"close_to_tray":false}"#);
+    assert!(!c.close_to_tray);
 }
