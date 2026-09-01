@@ -95,3 +95,4 @@ artifacts, uploads dmg / app.tar.gz / exe / latest.json → manually dispatch
 ## Known limitations
 
 - "Open in new window" (the chat conversation ⋯ menu and the Files page header) opens the system browser, which has no sign-in session, so it lands on the sign-in page inside the desktop app. Use the in-app view instead. (Recorded 2026-09-01; a shell-aware behavior is deferred.)
+- Attachment files download when clicked in chat (the anchor's download attribute drives the webview's download machinery), but navigating an attachment URL directly — pasting it into a chat message and clicking the resulting text link, for instance — shows the file inline instead of downloading when the webview can render its type (text, PDF, images). The embedded webview only converts a response to a download when it cannot display the type; clicking the attachment chip itself is unaffected. (Recorded 2026-09-01; an upstream webview limitation.)
