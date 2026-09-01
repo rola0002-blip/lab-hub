@@ -7,9 +7,9 @@ const g = globalThis as unknown as { labhubPushSquelch?: Map<string, number> }
 g.labhubPushSquelch ??= new Map()
 
 export const SQUELCH_WINDOW_MS = 60_000
-const MAX_ENTRIES = 50_000 // cheap bounded-memory guard for long uptimes
+export const MAX_ENTRIES = 50_000 // cheap bounded-memory guard for long uptimes
 
-export function canPushNow(userId: string, conversationId: string, now: number = Date.now()): boolean {
+export function tryReservePush(userId: string, conversationId: string, now: number = Date.now()): boolean {
   const map = g.labhubPushSquelch!
   const key = `${userId}:${conversationId}`
   const last = map.get(key)

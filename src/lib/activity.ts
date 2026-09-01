@@ -4,6 +4,8 @@
 // decide phone push. Single-instance by design — the same assumption the
 // SSE registry in events.ts makes; a restart resets the map (worst case one
 // extra push round, exactly like presence today).
+// No eviction needed here (unlike push-squelch): the key space is bounded by
+// the org's user count, not users x conversations.
 const g = globalThis as unknown as { labhubActivity?: Map<string, number> }
 g.labhubActivity ??= new Map()
 
