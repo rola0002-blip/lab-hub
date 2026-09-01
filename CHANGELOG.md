@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.1] - 2026-09-01
+
 ### Fixed
 - The desktop app now accepts files dragged into it. A drag-and-drop onto the
   chat pane was silently ignored by the desktop shell: the embedded webview
