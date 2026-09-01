@@ -80,13 +80,10 @@ export function NotificationWizard({ open, onClose }: { open: boolean; onClose: 
           <p className="mt-3 text-sm text-muted">Notification permission is blocked for this site. Re-enable it in your browser or OS site settings, then open this bell again.</p>
         )}
         {(status === 'ready' || status === 'denied') && (
-          <>
-            <button type="button" onClick={() => void enable()} disabled={busy}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-on hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] disabled:opacity-50">
-              <BellPlus size={16} aria-hidden /> Enable notifications
-            </button>
-            {error && <p role="alert" className="mt-2 text-xs text-[var(--text-danger)]">Couldn&apos;t enable notifications — check the permission prompt and try again.</p>}
-          </>
+          <button type="button" onClick={() => void enable()} disabled={busy}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-on hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] disabled:opacity-50">
+            <BellPlus size={16} aria-hidden /> Enable notifications
+          </button>
         )}
         {status === 'done' && (
           <div className="mt-3">
@@ -101,6 +98,7 @@ export function NotificationWizard({ open, onClose }: { open: boolean; onClose: 
           </div>
         )}
       </div>
+      {error && <p role="alert" className="mt-2 text-xs text-[var(--text-danger)]">Couldn&apos;t enable notifications — check the permission prompt and try again.</p>}
     </Modal>
   )
 }

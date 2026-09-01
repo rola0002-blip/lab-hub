@@ -8,8 +8,7 @@ import { listPushStatus } from '@/features/admin/push-status'
 
 export default async function SettingsPage() {
   await requireAdmin()
-  const org = await getOrg()
-  const pushRows = await listPushStatus()
+  const [org, pushRows] = await Promise.all([getOrg(), listPushStatus()])
   if (!org) return null
   return (
     <div>
