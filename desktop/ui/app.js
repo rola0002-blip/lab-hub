@@ -32,7 +32,7 @@ async function load() {
   state.servers = servers;
   state.active = config.active_server;
   state.closeToTray = config.close_to_tray;
-  state.launchAtLogin = await invoke("get_launch_at_login");
+  state.launchAtLogin = await invoke("get_launch_at_login").catch(() => false);
   render();
 }
 
