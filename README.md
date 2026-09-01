@@ -35,8 +35,9 @@ the latest `.dmg` / `-setup.exe` from
 [GitHub Releases](https://github.com/rola0002-blip/lab-hub/releases/latest),
 open it, and add your lab's URL. Sign in once per lab; the app remembers
 each workspace side by side (like a Slack workspace switcher), shows unread
-badges on the dock icon and sidebar, and sends native notifications for
-mentions and DMs. It checks for updates automatically; installing one is
+badges on the dock icon and sidebar, and sends sounded native notifications
+for every unmuted message (plus a dock bounce when you're not looking). It
+checks for updates automatically; installing one is
 a click in the tray menu.
 
 - **macOS 14+**: first launch of an unsigned app — after dragging it to
