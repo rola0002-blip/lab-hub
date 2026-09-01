@@ -262,8 +262,29 @@ pub fn desktop_notify(
     // never overclaims a suppressed toast.
     if show_toast(&app, &title, &body, toast_sound_from_flag(silent)) {
         log::info!("desktop_notify delivered: title={title:?} server={target:?}");
+        request_attention_if_unfocused(&app);
     }
     Ok(())
+}
+
+/// Pure decision (unit-tested): request OS attention only for a DELIVERED
+/// alert while the main window is unfocused/hidden — Slack-style single
+/// dock bounce on macOS (Informational), taskbar flash on Windows.
+pub fn attention_wanted(window_focused: bool, delivered: bool) -> bool {
+    delivered && !window_focused
+}
+
+fn request_attention_if_unfocused(app: &AppHandle) {
+    let Some(window) = app.get_window(crate::webviews::WINDOW_LABEL) else {
+        return;
+    };
+    let focused = window.is_focused().unwrap_or(false);
+    if !attention_wanted(focused, true) {
+        return;
+    }
+    if let Err(e) = window.request_user_attention(Some(tauri::UserAttentionType::Informational)) {
+        log::warn!("request_user_attention failed: {e}");
+    }
 }
 
 /// Consumes the pending notification click target on main-window focus
@@ -513,6 +534,15 @@ mod tests {
             toast_sound_from_flag(Some(true)),
             ToastSound::Silent
         ));
+    }
+
+    // --- attention ---
+
+    #[test]
+    fn attention_only_for_delivered_alerts_while_unfocused() {
+        assert!(attention_wanted(false, true)); // hidden/unfocused + delivered -> bounce
+        assert!(!attention_wanted(true, true)); // already focused -> no bounce
+        assert!(!attention_wanted(false, false)); // suppressed toast -> no bounce
     }
 
     // --- NotifyState pending target ---
