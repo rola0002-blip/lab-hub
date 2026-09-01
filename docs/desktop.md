@@ -91,3 +91,7 @@ Tag `vX.Y.Z` push → `release.yml` (server image + GitHub Release) →
 `desktop-release.yml` waits for the release, builds macOS universal + Windows
 artifacts, uploads dmg / app.tar.gz / exe / latest.json → manually dispatch
 `Installer smoke`. Verify the release page lists all artifacts.
+
+## Known limitations
+
+- "Open in new window" (the chat conversation ⋯ menu and the Files page header) opens the system browser, which has no sign-in session, so it lands on the sign-in page inside the desktop app. Use the in-app view instead. (Recorded 2026-09-01; a shell-aware behavior is deferred.)
