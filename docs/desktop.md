@@ -66,8 +66,17 @@ manually-installed release, then future releases auto-update again.
 - Desktop version always equals the repo `package.json` version (build-time
   assertion in `desktop/src-tauri/build.rs`).
 - Notifications: the web app fires them from its chime decision point (mute
-  rules enforced there); the shell renders them natively. The web-push opt-in
-  is hidden inside the shell.
+  rules enforced there); the shell renders them natively. Desktop toasts
+  ring: `desktop_notify` attaches the OS default sound (message alerts)
+  unless the page passes `silent: true` (download-complete toasts). The
+  sound name is platform-fussy — "default" on macOS, "Default" (capital D)
+  on Windows — see the guard comment in `notify.rs`. The web app suppresses
+  its in-page chime inside the shell, so each alert has exactly one sound.
+  A delivered, non-silent toast bounces the dock icon (macOS) or flashes
+  the taskbar (Windows) when the window is hidden or unfocused. Fresh
+  installs default to keep-running-in-background on close, and the rail
+  offers a Launch at Login toggle — a quit app cannot alert. The web-push
+  opt-in is hidden inside the shell.
 - ⌘/Ctrl+1..9 switch servers while the rail has keyboard focus (v1
   limitation — content webviews keep their keys).
 - Dev: `desktop/README.md`; regression harness `cargo run --example smoke`

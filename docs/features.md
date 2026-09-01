@@ -22,15 +22,18 @@ its own window, and a stray file drop inside chat never navigates the tab
 away. Signing in returns you to the conversation you last had open.
 Full-text search spans every conversation
 you belong to. Delivery is realtime over one Server-Sent-Events stream per
-tab (no WebSockets), fanned out with Postgres `LISTEN`/`NOTIFY`. Web Push
-notifies you of mentions and DMs when you have no tab open — opt-in, and
-silenced per conversation by mute (except direct @mentions), with same-
-conversation pushes collapsing into one OS notification. A soft ping
-(profile → Appearance, on by default since v0.23) covers every new message
-in unmuted conversations — at most one ping per burst of messages, and none
-for the conversation you're viewing while its window is focused — and a
-60-minute unread-chat digest email follows (at most one per hour; mentions,
-DMs, and thread replies — never bot messages).
+tab (no WebSockets), fanned out with Postgres `LISTEN`/`NOTIFY`. Chat
+notifications (Slack-like, 2026-09): every message in an unmuted
+conversation alerts — in-app chime plus desktop toast while a member is at
+a keyboard, and Web Push to every subscribed device once the member has
+been idle for 2 minutes (an open tab or the desktop app in the tray no
+longer silences the phone). A direct @mention still pierces mute. Push is
+squashed server-side to one buzz per conversation per minute and collapsed
+client-side by the service-worker tag. Bot posts never alert. Members
+enable phone push via the bell's "Set up notifications" wizard, which ends
+with a real test ping; the admin settings page shows who has push enabled.
+A 60-minute unread-chat digest email follows (at most one per hour;
+mentions, DMs, and thread replies — never bot messages).
 Membership is the single authorization rule: you only ever read, search, or
 receive events for conversations you are a member of.
 

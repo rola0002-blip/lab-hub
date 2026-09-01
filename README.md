@@ -72,6 +72,11 @@ Cloudflare Tunnel option above provides it.
   for ~7 days; if notifications stop, open LabHub once and re-enable them
   from the bell.
 
+Members who complete the bell's **Set up notifications** wizard (install,
+permission, test ping) receive sounded push for every unmuted message
+whenever they are idle or away — the same Slack-like behavior as the
+desktop app.
+
 ## What's inside
 
 - **Equipment booking** — per-instrument policies, certification gating,
