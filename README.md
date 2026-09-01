@@ -55,7 +55,8 @@ Details: [docs/desktop.md](docs/desktop.md).
 ## Mobile app (PWA)
 
 LabHub installs on phones as a progressive web app — a home-screen icon,
-fullscreen, with push notifications for mentions and DMs. The server must be
+fullscreen, with push notifications for every unmuted message once you've
+been idle for two minutes (a direct @mention still pierces mute). The server must be
 reachable over HTTPS (service workers and push require a secure context); the
 Cloudflare Tunnel option above provides it.
 
