@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { isIosUa } from '@/lib/install-state'
 
 export type NotifyStatus = 'shell' | 'insecure' | 'ios-install' | 'unsupported' | 'denied' | 'ready' | 'done'
@@ -20,6 +20,9 @@ export type NotifyInputs = {
 // the Enable button, and enable() is idempotent.
 export function notifyStatus(c: NotifyInputs): NotifyStatus {
   if (c.tauri) return 'shell'
+  // A device can ship SW + PushManager yet no Notification API (some embedded
+  // webviews) — it can never show the permission prompt, so it can never enable.
+  if (c.permission === 'unsupported') return 'unsupported'
   if (!c.https) return 'insecure'
   if (c.ios && !c.standalone) return 'ios-install'
   if (!c.serviceWorker || !c.pushApi) return 'unsupported'
@@ -30,7 +33,10 @@ export function notifyStatus(c: NotifyInputs): NotifyStatus {
 
 export function useNotificationStatus(): { status: NotifyStatus | null; refresh: () => void } {
   const [inputs, setInputs] = useState<NotifyInputs | null>(null)
-  const read = async () => {
+  // Plain closure over browser APIs + the stable setInputs, so [] deps are
+  // safe — and refresh inherits that stability, letting consumers (Bell's
+  // closeWizard useCallback) depend on it without re-creating their handlers.
+  const read = useCallback(async () => {
     if (typeof window === 'undefined') return
     let subscribed = false
     try {
@@ -51,13 +57,14 @@ export function useNotificationStatus(): { status: NotifyStatus | null; refresh:
       permission: 'Notification' in window ? Notification.permission : 'unsupported',
       subscribed,
     })
-  }
+  }, [])
   useEffect(() => {
     // read() is this hook's mount-time device probe: its setState fills the
     // null initial state (idempotent single read, no cascading renders) and
     // only runs after awaited registration checks on already-granted devices.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void read()
-  }, [])
-  return { status: inputs ? notifyStatus(inputs) : null, refresh: () => void read() }
+  }, [read])
+  const refresh = useCallback(() => void read(), [read])
+  return { status: inputs ? notifyStatus(inputs) : null, refresh }
 }

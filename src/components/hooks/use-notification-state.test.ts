@@ -25,6 +25,10 @@ describe('notifyStatus', () => {
     expect(notifyStatus({ ...base, pushApi: false })).toBe('unsupported')
   })
 
+  it('missing Notification API (SW+Push present) means unsupported — can never enable', () => {
+    expect(notifyStatus({ ...base, permission: 'unsupported' })).toBe('unsupported')
+  })
+
   it('denied permission is its own state (OS-settings guidance)', () => {
     expect(notifyStatus({ ...base, permission: 'denied' })).toBe('denied')
   })

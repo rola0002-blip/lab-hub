@@ -7,8 +7,9 @@ type DeferredPrompt = Event & {
   userChoice?: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
 
-// Install-app affordance state for the bell tray (usePushOptIn pattern:
-// SSR-safe, shell-gated, every failure swallowed). Chromium: capture
+// Install-app affordance state for the bell tray (same pattern as the other
+// bell-tray hooks: SSR-safe, shell-gated, every failure swallowed). Chromium:
+// capture
 // beforeinstallprompt and show the native sheet. iOS: no prompt event exists,
 // so the row expands into an until-dismissed Share → Add to Home Screen guide.
 // beforeinstallprompt fired before hydration is missed by design (spec §6) — the row appears on a later load.

@@ -140,9 +140,14 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const now = new Date() // viewer-local reference for humanized notification times
-  const notify = useNotificationStatus() // wizard state lives in this tray
+  // Wizard state lives in this tray. refresh is useCallback-stable (see
+  // use-notification-state), so closeWizard below keeps one identity across
+  // the 30 s poll / SSE re-renders — an inline onClose would give the
+  // wizard's open-transition effect a fresh key every render.
+  const { status: notifyState, refresh: refreshNotify } = useNotificationStatus()
   const [wizardOpen, setWizardOpen] = useState(false)
-  const notifyAttention = notify.status !== null && notify.status !== 'shell' && notify.status !== 'done'
+  const notifyAttention = notifyState !== null && notifyState !== 'shell' && notifyState !== 'done'
+  const closeWizard = useCallback(() => { setWizardOpen(false); refreshNotify() }, [refreshNotify])
   const install = useInstallPrompt() // PWA install affordance lives in this tray too
   const { enabled: sounds } = useSoundsEnabled(soundsSeed) // server seed until the device opts in/out itself
   useActivity() // activity heartbeat feeding the server's push-idle gate
@@ -404,7 +409,7 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
           )}
         </div>
       )}
-      <NotificationWizard open={wizardOpen} onClose={() => { setWizardOpen(false); notify.refresh() }} />
+      <NotificationWizard open={wizardOpen} onClose={closeWizard} />
     </div>
   )
 }

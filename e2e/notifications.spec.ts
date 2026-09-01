@@ -1,9 +1,10 @@
 import { test, expect } from '@playwright/test'
-import { db, wipe, runWizard, signIn, ADMIN, waitForHydration } from './helpers'
+import { wipe, runWizard, signIn, ADMIN, waitForHydration } from './helpers'
 
 test.beforeEach(async ({ page }) => {
   await wipe()
-  if (!(await db.organization.findFirst())) await runWizard(page)
+  // wipe() empties the org, so every test re-runs the first-run wizard
+  await runWizard(page)
   await signIn(page, ADMIN.email, ADMIN.password)
   await waitForHydration(page)
 })
