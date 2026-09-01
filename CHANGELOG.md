@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The desktop app now accepts files dragged into it. A drag-and-drop onto the
+  chat pane was silently ignored by the desktop shell: the embedded webview
+  claimed every file drag before the page could see it, so attaching by
+  dragging — the natural gesture on a laptop — did nothing, while the attach
+  button and paste kept working. Drags now reach the app like any browser.
+
 ## [0.25.0] - 2026-09-01
 
 ### Added

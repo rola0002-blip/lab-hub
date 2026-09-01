@@ -342,6 +342,17 @@ fn create_content_webview(
             true
         });
 
+    // Wave 11: let OS file drags reach the web app's own HTML5 dropzones
+    // (chat drag-drop attach, wave 6 F1). Tauri's default installs wry's
+    // native drop interceptor, which consumes file drags at the OS level so
+    // the page never sees a DOM drop event — attach-by-drag was silently
+    // dead inside the shell on every prior version. The rail webview
+    // (CHROME_LABEL) has no dropzones and keeps the default. A drop where
+    // the web app has no dropzone is already guarded web-side (no tab
+    // navigation), and the on_navigation origin guard blocks any file://
+    // escape as a second line of defense.
+    builder = builder.disable_drag_drop_handler();
+
     // Session isolation. macOS WKWebView has no per-webview data directory,
     // so a UUID-derived non-persistent-unique data store key is used
     // instead (spike S2); other desktop platforms use a real directory.
