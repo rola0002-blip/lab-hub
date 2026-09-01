@@ -37,7 +37,9 @@
 //! inside the shell by the web app itself, so there is exactly one sound
 //! per alert. The default sound NAME is case-sensitive per platform —
 //! macOS needs "default", Windows' toast parser needs "Default" — see
-//! [`ToastSound::sound_name`].
+//! [`ToastSound::sound_name`]. On macOS "default" matches no NSSound, and
+//! the OS (10.13+) plays the standard notification sound for such
+//! unresolvable names.
 
 use std::collections::VecDeque;
 use std::sync::Mutex;
@@ -174,12 +176,15 @@ pub enum ToastSound {
 impl ToastSound {
     fn sound_name(&self) -> Option<&'static str> {
         match self {
-            // The sound NAME string is platform-case-sensitive: macOS's
-            // mac-notification-sys wants exactly "default" (the value of
-            // NSUserNotificationDefaultSoundName); Windows' winrt toast
-            // parser (tauri-winrt-notification) matches "Default" with a
-            // capital D and silently mutes anything else. Do NOT
-            // "normalize" this split away.
+            // The sound NAME strings are platform-fussy — do NOT "normalize" them:
+            // - Windows: tauri-winrt-notification parses names CASE-SENSITIVELY and
+            //   silently mutes unknown ones; the accepted arm is "Default" (capital D).
+            // - macOS: "default" is NOT the NSUserNotificationDefaultSoundName constant;
+            //   it resolves to no NSSound, and macOS (10.13+) then plays the standard
+            //   notification sound for the unresolvable name — verified empirically,
+            //   undocumented but stable. The true mac-notification-sys sentinel would
+            //   be the literal "NSUserNotificationDefaultSoundName"; do not switch to it
+            //   without re-testing both platforms.
             #[cfg(windows)]
             ToastSound::Default => Some("Default"),
             #[cfg(not(windows))]
@@ -273,7 +278,9 @@ pub fn desktop_notify(
     // never overclaims a suppressed toast.
     if show_toast(&app, &title, &body, toast_sound_from_flag(silent)) {
         log::info!("desktop_notify delivered: title={title:?} server={target:?}");
-        request_attention_if_unfocused(&app);
+        if attention_eligible(silent) {
+            request_attention_if_unfocused(&app);
+        }
     }
     Ok(())
 }
@@ -281,8 +288,14 @@ pub fn desktop_notify(
 /// Pure decision (unit-tested): request OS attention only for a DELIVERED
 /// alert while the main window is unfocused/hidden — Slack-style single
 /// dock bounce on macOS (Informational), taskbar flash on Windows.
-pub fn attention_wanted(window_focused: bool, delivered: bool) -> bool {
+fn attention_wanted(window_focused: bool, delivered: bool) -> bool {
     delivered && !window_focused
+}
+
+/// Silent toasts never request attention (a muted housekeeping toast must
+/// not bounce the dock); absent flag means sound-on, i.e. attention-eligible.
+pub fn attention_eligible(silent: Option<bool>) -> bool {
+    !silent.unwrap_or(false)
 }
 
 fn request_attention_if_unfocused(app: &AppHandle) {
@@ -558,6 +571,19 @@ mod tests {
         assert!(attention_wanted(false, true)); // hidden/unfocused + delivered -> bounce
         assert!(!attention_wanted(true, true)); // already focused -> no bounce
         assert!(!attention_wanted(false, false)); // suppressed toast -> no bounce
+    }
+
+    #[test]
+    fn silent_flag_suppresses_attention() {
+        assert!(
+            attention_eligible(None),
+            "absent flag = sound-on = eligible"
+        );
+        assert!(attention_eligible(Some(false)));
+        assert!(
+            !attention_eligible(Some(true)),
+            "silent toast must not bounce the dock"
+        );
     }
 
     // --- NotifyState pending target ---
