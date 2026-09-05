@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-09-05
+
 ### Added
 - Training records. Granting a certification now records a training entry —
   who was trained, on which instrument, by whom, and on what date — in an

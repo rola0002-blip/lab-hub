@@ -1,6 +1,6 @@
 [package]
 name = "labhub-desktop"
-version = "0.25.1"
+version = "0.26.0"
 description = "LabHub desktop shell"
 edition = "2021"
 
