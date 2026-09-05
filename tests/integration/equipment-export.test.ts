@@ -1,0 +1,90 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import ExcelJS from 'exceljs'
+import { prisma } from '@/lib/db'
+import { resetDb, makeUser, makeEquipment } from '../factories'
+
+const mockUser = vi.hoisted(() => ({ current: null as null | { id: string; name: string; email: string; role: string } }))
+vi.mock('@/lib/session', () => ({
+  getSessionUser: async () => mockUser.current,
+  requireUser: async () => mockUser.current,
+  requireAdmin: async () => mockUser.current,
+}))
+
+import { GET } from '@/app/api/equipment/[id]/export/route'
+
+const signIn = (u: { id: string; name: string; email: string; role: string }) => {
+  mockUser.current = { id: u.id, name: u.name, email: u.email, role: u.role }
+}
+const call = (id: string) => GET(new Request('http://x/api'), { params: Promise.resolve({ id }) })
+
+describe('equipment records export route', () => {
+  beforeEach(async () => { await resetDb(); mockUser.current = null })
+
+  async function seed() {
+    const admin = await makeUser({ role: 'admin', name: 'Alice Admin' })
+    const member = await makeUser({ role: 'member', name: 'Mira Member' })
+    const trainer = await makeUser({ role: 'member', name: 'Ted Trainer' })
+    const eq = await makeEquipment({ name: 'PECVD' })
+    await prisma.booking.create({ data: {
+      userId: member.id, equipmentId: eq.id, status: 'CONFIRMED', purpose: 'grow hBN',
+      startsAt: new Date('2026-09-01T02:00:00Z'), endsAt: new Date('2026-09-01T05:00:00Z'),
+      decidedById: admin.id, decidedAt: new Date('2026-08-30T06:00:00Z'),
+      sessionStartedAt: new Date('2026-09-01T02:05:00Z'), sessionEndedAt: new Date('2026-09-01T04:55:00Z'),
+      sessionNote: 'stage heater acting up',
+    } })
+    await prisma.certification.create({ data: { userId: member.id, equipmentId: eq.id, grantedById: admin.id } })
+    await prisma.trainingRecord.create({ data: {
+      userId: member.id, equipmentId: eq.id, trainedById: trainer.id, trainedOn: '2026-08-30', note: 'hands-on pump down',
+    } })
+    return { admin, member, trainer, eq }
+  }
+
+  it('admin exports a 3-sheet workbook with resolved names', async () => {
+    const { admin, eq } = await seed()
+    signIn(admin)
+    const res = await call(eq.id)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    expect(res.headers.get('content-disposition')).toContain('attachment')
+    expect(res.headers.get('content-disposition')).toContain('labhub-pecvd-records.xlsx')
+    const wb = new ExcelJS.Workbook()
+    await wb.xlsx.load(Buffer.from(await res.arrayBuffer()))
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['Bookings', 'Training records', 'Certifications'])
+    const bookings = wb.getWorksheet('Bookings')!
+    expect(bookings.getRow(1).getCell(1).value).toBe('When')
+    expect(bookings.getRow(2).getCell(2).value).toBe('Mira Member')
+    expect(bookings.getRow(2).getCell(8).value).toBe('stage heater acting up')
+    expect(bookings.getRow(2).getCell(9).value).toBe('Alice Admin') // decidedById resolved from the bare-id map
+    expect(bookings.getRow(2).getCell(1).value).toBe('Tue 1 Sep, 10:00–13:00') // org-tz (UTC+8) formatted window: 02:00Z renders 10:00
+    const training = wb.getWorksheet('Training records')!
+    expect(training.getRow(2).getCell(4).value).toBe('Ted Trainer')
+    const certs = wb.getWorksheet('Certifications')!
+    expect(certs.getRow(2).getCell(1).value).toBe('Mira Member')
+    expect(certs.getRow(2).getCell(3).value).toBe('Alice Admin') // grantedById resolved
+  })
+
+  it('an equipment manager (non-admin) may export', async () => {
+    const { member, eq } = await seed()
+    await prisma.equipmentManager.create({ data: { userId: member.id, equipmentId: eq.id } })
+    signIn(member)
+    expect((await call(eq.id)).status).toBe(200)
+  })
+
+  it('a plain member, a guest, and a signed-out caller all get 404 (no leak)', async () => {
+    const { member, eq } = await seed()
+    const guest = await makeUser({ role: 'guest', name: 'Gus Guest' })
+    for (const u of [member, guest, null]) {
+      mockUser.current = u ? { id: u.id, name: u.name, email: u.email, role: u.role } : null
+      expect((await call(eq.id)).status).toBe(404)
+    }
+  })
+
+  it('unknown equipment: identical 404 for admin and member', async () => {
+    const admin = await makeUser({ role: 'admin' })
+    const member = await makeUser({ role: 'member' })
+    for (const u of [admin, member]) {
+      signIn(u)
+      expect((await call('does-not-exist')).status).toBe(404)
+    }
+  })
+})
