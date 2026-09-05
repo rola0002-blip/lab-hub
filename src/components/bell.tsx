@@ -315,94 +315,106 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
         {notifyAttention && <span aria-hidden className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-amber-500" />}
       </button>
       {open && (
-        <div className="absolute right-0 z-20 mt-2 max-h-[70vh] w-80 overflow-y-auto rounded-xl border border-border bg-surface p-2 shadow-menu">
-          <p className="px-2 pb-1 pt-0.5 text-xs font-semibold uppercase tracking-wide text-subtle">Notifications</p>
-          {groups.length === 0 ? (
-            <EmptyState icon={Check} title="You're all caught up."
-              hint="New mentions, messages and booking updates will show up here." />
-          ) : groups.map((g) => {
-            const head = g.items[0]
-            const face = faceFor(head)
-            const unreadGroup = g.items.some((it) => !it.readAt)
-            // Every notification type resolves to its target: issue → /issues/<id>,
-            // DM/mention/channel → the conversation (deep-linked to the message when
-            // known), booking → its bookings/approvals page. Grouping only merges
-            // same-conversation rows, so the head is representative of the group.
-            const href = notificationHref(head)
-            const inner = (
-              <>
-                <FaceAvatar face={face} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <p className={`truncate text-sm ${unreadGroup ? 'font-semibold text-default' : 'text-muted'}`}>{LABEL[head.type] ?? head.type}</p>
-                    <time className="shrink-0 text-2xs text-subtle">{humanTime(head.createdAt, now)}</time>
+        // Pinned-footer tray (W12-A): the "Set up notifications" / "Install app"
+        // rows used to sit at the bottom of ONE scroll container, so a full
+        // notification list buried them below the fold. Sidebar bounded-scroller
+        // idiom instead: flex column, the list alone scrolls (min-h-0 flex-1
+        // overflow-y-auto), and the setup sections stay pinned in a shrink-0
+        // footer that no list length can push out of view.
+        <div className="absolute right-0 z-20 mt-2 flex max-h-[70vh] w-80 flex-col rounded-xl border border-border bg-surface shadow-menu">
+          <p className="shrink-0 px-4 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-subtle">Notifications</p>
+          <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+            {groups.length === 0 ? (
+              <EmptyState icon={Check} title="You're all caught up."
+                hint="New mentions, messages and booking updates will show up here." />
+            ) : groups.map((g) => {
+              const head = g.items[0]
+              const face = faceFor(head)
+              const unreadGroup = g.items.some((it) => !it.readAt)
+              // Every notification type resolves to its target: issue → /issues/<id>,
+              // DM/mention/channel → the conversation (deep-linked to the message when
+              // known), booking → its bookings/approvals page. Grouping only merges
+              // same-conversation rows, so the head is representative of the group.
+              const href = notificationHref(head)
+              const inner = (
+                <>
+                  <FaceAvatar face={face} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <p className={`truncate text-sm ${unreadGroup ? 'font-semibold text-default' : 'text-muted'}`}>{LABEL[head.type] ?? head.type}</p>
+                      <time className="shrink-0 text-2xs text-subtle">{humanTime(head.createdAt, now)}</time>
+                    </div>
+                    {g.items.map((it) => (
+                      typeof it.payload?.message === 'string'
+                        ? <p key={it.id} className="mt-0.5 line-clamp-2 text-xs text-muted">{it.payload.message}</p>
+                        : null
+                    ))}
                   </div>
-                  {g.items.map((it) => (
-                    typeof it.payload?.message === 'string'
-                      ? <p key={it.id} className="mt-0.5 line-clamp-2 text-xs text-muted">{it.payload.message}</p>
-                      : null
-                  ))}
+                </>
+              )
+              return href ? (
+                // Close the tray on navigate — the outside-click guard skips in-panel
+                // clicks, so without this the panel would sit on top of the target page.
+                <Link key={g.key} href={href} onClick={() => setOpen(false)} className="flex gap-2.5 rounded-lg p-2 transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">{inner}</Link>
+              ) : (
+                <div key={g.key} className="flex gap-2.5 rounded-lg p-2 transition-colors hover:bg-hover">{inner}</div>
+              )
+            })}
+          </div>
+          {(notifyAttention || install.show) && (
+            <div className="shrink-0 p-2 pt-1">
+              {notifyAttention && (
+                <div className="mt-1 border-t border-border pt-1">
+                  <button type="button" onClick={() => setWizardOpen(true)}
+                    className="flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-avatar)] bg-active text-muted">
+                      <BellPlus size={18} aria-hidden />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium text-default">Set up notifications</span>
+                      <span className="block text-xs text-subtle">Get sounds and alerts on your devices.</span>
+                    </span>
+                  </button>
                 </div>
-              </>
-            )
-            return href ? (
-              // Close the tray on navigate — the outside-click guard skips in-panel
-              // clicks, so without this the panel would sit on top of the target page.
-              <Link key={g.key} href={href} onClick={() => setOpen(false)} className="flex gap-2.5 rounded-lg p-2 transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">{inner}</Link>
-            ) : (
-              <div key={g.key} className="flex gap-2.5 rounded-lg p-2 transition-colors hover:bg-hover">{inner}</div>
-            )
-          })}
-          {notifyAttention && (
-            <div className="mt-1 border-t border-border pt-1">
-              <button type="button" onClick={() => setWizardOpen(true)}
-                className="flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-avatar)] bg-active text-muted">
-                  <BellPlus size={18} aria-hidden />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-default">Set up notifications</span>
-                  <span className="block text-xs text-subtle">Get sounds and alerts on your devices.</span>
-                </span>
-              </button>
-            </div>
-          )}
-          {install.show && (
-            // PWA install affordance: Chromium fires the native sheet; iOS has
-            // no prompt event, so the row expands a Share → Add to Home Screen
-            // guide. Never nested buttons — dismiss is a sibling, not a child.
-            <div className="mt-1 border-t border-border pt-1">
-              <div className="flex items-center gap-1">
-                <button type="button" onClick={() => (install.isIos ? install.openGuide() : void install.promptInstall())}
-                  aria-expanded={install.isIos ? install.guideOpen : undefined}
-                  className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-avatar)] bg-active text-muted">
-                    <Smartphone size={18} aria-hidden />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium text-default">Install app</span>
-                    <span className="block text-xs text-subtle">Add LabHub to your home screen.</span>
-                  </span>
-                </button>
-                {!install.isIos && (
-                  <button type="button" onClick={install.dismiss} aria-label="Dismiss install prompt"
-                    className="rounded p-1 text-subtle hover:bg-hover hover:text-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
-                    <X size={16} aria-hidden />
-                  </button>
-                )}
-              </div>
-              {install.guideOpen && (
-                <div className="px-2 pb-2 pt-1 text-xs text-muted">
-                  <p>On iPhone or iPad:</p>
-                  <ol className="mt-1 list-decimal space-y-0.5 pl-4">
-                    <li>Tap <span className="text-default">Share</span> (the square with an arrow) in the toolbar.</li>
-                    <li>Scroll down and tap <span className="text-default">Add to Home Screen</span>.</li>
-                    <li>Open LabHub from the home screen, then enable notifications from this bell.</li>
-                  </ol>
-                  <button type="button" onClick={install.dismiss}
-                    className="mt-2 rounded px-2 py-1 text-xs font-medium text-accent hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
-                    Got it
-                  </button>
+              )}
+              {install.show && (
+                // PWA install affordance: Chromium fires the native sheet; iOS has
+                // no prompt event, so the row expands a Share → Add to Home Screen
+                // guide. Never nested buttons — dismiss is a sibling, not a child.
+                <div className="mt-1 border-t border-border pt-1">
+                  <div className="flex items-center gap-1">
+                    <button type="button" onClick={() => (install.isIos ? install.openGuide() : void install.promptInstall())}
+                      aria-expanded={install.isIos ? install.guideOpen : undefined}
+                      className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-avatar)] bg-active text-muted">
+                        <Smartphone size={18} aria-hidden />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-medium text-default">Install app</span>
+                        <span className="block text-xs text-subtle">Add LabHub to your home screen.</span>
+                      </span>
+                    </button>
+                    {!install.isIos && (
+                      <button type="button" onClick={install.dismiss} aria-label="Dismiss install prompt"
+                        className="rounded p-1 text-subtle hover:bg-hover hover:text-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
+                        <X size={16} aria-hidden />
+                      </button>
+                    )}
+                  </div>
+                  {install.guideOpen && (
+                    <div className="px-2 pb-2 pt-1 text-xs text-muted">
+                      <p>On iPhone or iPad:</p>
+                      <ol className="mt-1 list-decimal space-y-0.5 pl-4">
+                        <li>Tap <span className="text-default">Share</span> (the square with an arrow) in the toolbar.</li>
+                        <li>Scroll down and tap <span className="text-default">Add to Home Screen</span>.</li>
+                        <li>Open LabHub from the home screen, then enable notifications from this bell.</li>
+                      </ol>
+                      <button type="button" onClick={install.dismiss}
+                        className="mt-2 rounded px-2 py-1 text-xs font-medium text-accent hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
+                        Got it
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
