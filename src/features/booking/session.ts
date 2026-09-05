@@ -1,7 +1,8 @@
 // W12-C: usage-session windows — pure + CLIENT-SAFE (the policy.ts posture; the
 // bookings client imports SESSION_LATE_MS for loose button visibility). Windows are
 // absolute-instant math (the advance-window precedent); managers bypass WINDOWS
-// only, never the state machine (settled D3).
+// only, never the state machine (settled D3). Start owns the CONFIRMED gate; a
+// factually-started session stays closeable even after a post-start cancel.
 export const SESSION_EARLY_MS = 15 * 60_000
 export const SESSION_LATE_MS = 30 * 60_000
 
@@ -37,7 +38,6 @@ export function canStartSession(b: SessionInput, now: Date, opts: { manager: boo
 export function canEndSession(b: SessionInput, now: Date, opts: { manager: boolean }): SessionVerdict {
   if (!b.sessionStartedAt) return { ok: false, message: 'Log on before logging off.' }
   if (b.sessionEndedAt) return { ok: false, message: 'This session was already logged off.' }
-  if (b.status !== 'CONFIRMED') return { ok: false, message: 'Sessions can only be logged on confirmed bookings.' }
   if (!opts.manager && now.getTime() > ms(b.endsAt) + SESSION_LATE_MS) {
     return { ok: false, message: 'The log-off window (30 minutes after the slot) has closed — ask a manager to correct it.' }
   }

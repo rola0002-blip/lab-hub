@@ -266,9 +266,11 @@ export async function cancelRecurring(args: { bookingId: string; byUserId: strin
   return { ok: true }
 }
 
-// W12-C: usage session logging — the cancelBooking posture verbatim (load →
+// W12-C: usage session logging — the cancelBooking posture (load →
 // friendly not-found → owner-or-manager → pure-policy gate with real now →
 // update). Managers bypass the windows (settled D3) but never the state machine.
+// Double-fire is benign — same-row last-write-wins timestamps, no row duplication
+// (unlike W12-B's append-only grant).
 export async function startBookingSession(args: { bookingId: string; byUserId: string }): Promise<{ ok: boolean; message?: string }> {
   const b = await prisma.booking.findUnique({ where: { id: args.bookingId } })
   if (!b) return { ok: false, message: 'Booking not found.' }

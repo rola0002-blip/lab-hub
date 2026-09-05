@@ -105,6 +105,18 @@ describe('startBookingSession / endBookingSession / setSessionNote (W12-C)', () 
     expect((await prisma.booking.findUniqueOrThrow({ where: { id: b.id } })).sessionNote).toBe('writeup after the fact')
   })
 
+  it('manager may close a session on a post-start-cancelled booking', async () => {
+    const b = await seedBooking({
+      status: 'CANCELLED',
+      sessionStartedAt: new Date(Date.now() - 20 * 60_000),
+      endsAt: new Date(Date.now() + 40 * 60_000),
+    })
+    const mgr = await makeUser({ role: 'member' })
+    await setManagers(b.equipmentId, [mgr.id])
+    expect(await endBookingSession({ bookingId: b.id, byUserId: mgr.id })).toEqual({ ok: true })
+    expect((await prisma.booking.findUniqueOrThrow({ where: { id: b.id } })).sessionEndedAt).not.toBeNull()
+  })
+
   it('missing booking degrades to the friendly not-found message', async () => {
     expect(await startBookingSession({ bookingId: 'nope', byUserId: 'anyone' })).toEqual({ ok: false, message: 'Booking not found.' })
     expect(await endBookingSession({ bookingId: 'nope', byUserId: 'anyone' })).toEqual({ ok: false, message: 'Booking not found.' })

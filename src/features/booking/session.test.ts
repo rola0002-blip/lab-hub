@@ -72,11 +72,11 @@ describe('manager bypass (windows only, never the state machine)', () => {
     expect(v).toEqual({ ok: false, message: 'Log on before logging off.' })
   })
 
-  it('manager is still rejected on non-CONFIRMED (start and end)', () => {
+  it('manager start still gated on CONFIRMED; manager may close a session on a post-start-cancelled booking', () => {
     const v = canStartSession({ ...base(), status: 'PENDING' }, at(0), { manager: true })
     expect(v).toEqual({ ok: false, message: 'Sessions can only be logged on confirmed bookings.' })
     const ve = canEndSession({ ...base(), status: 'CANCELLED', sessionStartedAt: new Date(T0) }, at(0), { manager: true })
-    expect(ve).toEqual({ ok: false, message: 'Sessions can only be logged on confirmed bookings.' })
+    expect(ve).toEqual({ ok: true })
   })
 })
 

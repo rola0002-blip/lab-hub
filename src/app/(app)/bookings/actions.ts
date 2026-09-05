@@ -23,7 +23,7 @@ export async function logOnAction(bookingId: string): Promise<{ ok: boolean; mes
 }
 
 export async function logOffAction(bookingId: string, note: string | null): Promise<{ ok: boolean; message?: string }> {
-  const parsed = z.object({ bookingId: z.string().min(1), note: z.string().max(2000).nullable() }).safeParse({ bookingId, note })
+  const parsed = z.object({ bookingId: z.string().min(1), note: z.string().trim().max(1000, 'Session notes are limited to 1000 characters.').nullable() }).safeParse({ bookingId, note })
   if (!parsed.success) return { ok: false, message: 'Invalid session note.' }
   const me = await requireUser()
   const r = await endBookingSession({ bookingId: parsed.data.bookingId, byUserId: me.id, note: parsed.data.note ?? undefined })
@@ -32,7 +32,7 @@ export async function logOffAction(bookingId: string, note: string | null): Prom
 }
 
 export async function saveSessionNoteAction(bookingId: string, note: string): Promise<{ ok: boolean; message?: string }> {
-  const parsed = z.object({ bookingId: z.string().min(1), note: z.string().max(2000) }).safeParse({ bookingId, note })
+  const parsed = z.object({ bookingId: z.string().min(1), note: z.string().trim().max(1000, 'Session notes are limited to 1000 characters.') }).safeParse({ bookingId, note })
   if (!parsed.success) return { ok: false, message: 'Invalid session note.' }
   const me = await requireUser()
   const r = await setSessionNote({ bookingId: parsed.data.bookingId, byUserId: me.id, note: parsed.data.note })
