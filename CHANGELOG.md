@@ -6,6 +6,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Training records. Granting a certification now records a training entry —
+  who was trained, on which instrument, by whom, and on what date — in an
+  append-only history shown beneath the certification matrix. Checking a cell
+  opens a small dialog so the granting manager can name the trainer and date
+  (both default to themselves and today); re-checking an existing grant stays a
+  no-op, and revoke → re-grant appends a fresh entry. Future training dates are
+  rejected.
+- Equipment session logging. A confirmed booking can now be "logged on" from
+  15 minutes before its slot until the slot ends, and "logged off" until 30
+  minutes after it ends, capturing actual usage against booked time. While a
+  session is running you can keep a free-text note — anything odd with the
+  instrument, observed in the moment — which is saved with the booking. An
+  open session keeps its row under Upcoming until it is closed, even if the
+  booking itself was cancelled mid-session. Managers and admins are exempt
+  from the time windows so a forgotten log-off can always be corrected.
+
+### Fixed
+- The notifications tray now keeps its "Set up notifications" and "Install app"
+  rows pinned below the list instead of hiding them at the bottom of a long,
+  scrolling pile of notifications.
+
 ## [0.25.1] - 2026-09-01
 
 ### Fixed

@@ -10,6 +10,7 @@ import { isCertified } from '@/features/certifications/service'
 import * as bot from '@/features/bot'
 import { evaluateBooking, type Verdict, type Role, type PolicyInput } from './policy'
 import { expandWeekly } from './recurrence'
+import { canStartSession, canEndSession } from './session'
 
 export type CreateBookingInput = { userId: string; equipmentId: string; startsAt: Date; endsAt: Date; purpose: string }
 export type CreateBookingResult =
@@ -262,5 +263,46 @@ export async function cancelRecurring(args: { bookingId: string; byUserId: strin
     where: { recurrenceRuleId: b.recurrenceRuleId, status: { in: ['PENDING', 'CONFIRMED'] }, startsAt: { gte: b.startsAt, gt: new Date() } },
     data: { status: 'CANCELLED' },
   })
+  return { ok: true }
+}
+
+// W12-C: usage session logging — the cancelBooking posture (load →
+// friendly not-found → owner-or-manager → pure-policy gate with real now →
+// update). Managers bypass the windows (settled D3) but never the state machine.
+// Double-fire is benign — same-row last-write-wins timestamps, no row duplication
+// (unlike W12-B's append-only grant).
+export async function startBookingSession(args: { bookingId: string; byUserId: string }): Promise<{ ok: boolean; message?: string }> {
+  const b = await prisma.booking.findUnique({ where: { id: args.bookingId } })
+  if (!b) return { ok: false, message: 'Booking not found.' }
+  const isMgr = await isManagerOf(args.byUserId, b.equipmentId)
+  if (b.userId !== args.byUserId && !isMgr) return { ok: false, message: 'You can only log sessions on your own bookings.' }
+  const v = canStartSession(b, new Date(), { manager: isMgr })
+  if (!v.ok) return v
+  await prisma.booking.update({ where: { id: b.id }, data: { sessionStartedAt: new Date() } })
+  return { ok: true }
+}
+
+export async function endBookingSession(args: { bookingId: string; byUserId: string; note?: string }): Promise<{ ok: boolean; message?: string }> {
+  const b = await prisma.booking.findUnique({ where: { id: args.bookingId } })
+  if (!b) return { ok: false, message: 'Booking not found.' }
+  const isMgr = await isManagerOf(args.byUserId, b.equipmentId)
+  if (b.userId !== args.byUserId && !isMgr) return { ok: false, message: 'You can only log sessions on your own bookings.' }
+  const v = canEndSession(b, new Date(), { manager: isMgr })
+  if (!v.ok) return v
+  const note = args.note?.trim()
+  await prisma.booking.update({
+    where: { id: b.id },
+    data: note ? { sessionEndedAt: new Date(), sessionNote: note.slice(0, 1000) } : { sessionEndedAt: new Date() },
+  })
+  return { ok: true }
+}
+
+export async function setSessionNote(args: { bookingId: string; byUserId: string; note: string }): Promise<{ ok: boolean; message?: string }> {
+  const b = await prisma.booking.findUnique({ where: { id: args.bookingId } })
+  if (!b) return { ok: false, message: 'Booking not found.' }
+  const isMgr = await isManagerOf(args.byUserId, b.equipmentId)
+  if (b.userId !== args.byUserId && !isMgr) return { ok: false, message: 'You can only log sessions on your own bookings.' }
+  if (b.status !== 'CONFIRMED' || !b.sessionStartedAt) return { ok: false, message: 'Notes can be added once the session has started.' }
+  await prisma.booking.update({ where: { id: b.id }, data: { sessionNote: args.note.trim().slice(0, 1000) } })
   return { ok: true }
 }

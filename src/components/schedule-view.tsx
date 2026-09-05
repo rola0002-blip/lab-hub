@@ -16,6 +16,7 @@ import {
 export type CalSlot = {
   id: string; kind: 'booking' | 'maintenance'
   startsAt: string; endsAt: string; label: string; status?: string; own?: boolean
+  sessionStartedAt?: string | null; sessionEndedAt?: string | null; sessionNote?: string | null
 }
 
 type Props = {
@@ -40,6 +41,13 @@ const DAY_NAV = 'flex h-11 w-11 items-center justify-center rounded-md text-lg t
 function canCancelSlot(s: CalSlot, canManage: boolean): boolean {
   return s.kind === 'booking' && (s.own || canManage) && new Date(s.startsAt) > new Date()
     && (s.status === 'PENDING' || s.status === 'CONFIRMED')
+}
+
+// W12-C: session controls on the day view — own-or-manage, confirmed, not yet ended:
+// the canCancelSlot shape minus its future clause, plus !sessionEndedAt (loose —
+// the server gates the window).
+function canSessionSlot(s: CalSlot, canManage: boolean): boolean {
+  return s.kind === 'booking' && (s.own || canManage) && s.status === 'CONFIRMED' && !s.sessionEndedAt
 }
 
 export default function ScheduleView({ equipmentId, timezone, weekStartISO, slots, canManage, allowRecurring, retired, equipmentName, equipmentLocation, initialDay }: Props) {
@@ -240,7 +248,7 @@ export default function ScheduleView({ equipmentId, timezone, weekStartISO, slot
       )}
       {details && (
         <SlotDetailsModal slot={details} timezone={timezone}
-          canCancel={canCancelSlot(details, canManage)} onClose={() => setDetails(null)} />
+          canCancel={canCancelSlot(details, canManage)} canSession={canSessionSlot(details, canManage)} onClose={() => setDetails(null)} />
       )}
     </div>
   )

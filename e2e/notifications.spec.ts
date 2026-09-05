@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { wipe, runWizard, signIn, ADMIN, waitForHydration } from './helpers'
+import { wipe, runWizard, signIn, ADMIN, waitForHydration, db } from './helpers'
 
 test.beforeEach(async ({ page }) => {
   await wipe()
@@ -31,4 +31,24 @@ test('push test endpoint answers ok for a signed-in member', async ({ page }) =>
   await page.goto('/chat')
   const status = await page.evaluate(() => fetch('/api/push/test', { method: 'POST' }).then((r) => r.status))
   expect(status).toBe(200)
+})
+
+test('setup row stays visible without scrolling when the list overflows', async ({ page }) => {
+  // Seed BEFORE first visit so even a mount-time fetch sees the rows.
+  const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  await db.notification.createMany({
+    data: Array.from({ length: 12 }, (_, i) => ({
+      userId: me.id, type: 'issue_assigned', payload: { message: `overflow row ${i}` },
+    })),
+  })
+  await page.setViewportSize({ width: 1280, height: 500 }) // 70vh tray = 350px < 12 rows
+  await page.goto('/chat')
+  await page.getByRole('button', { name: 'Notifications' }).click()
+  const setup = page.getByRole('button', { name: 'Set up notifications' })
+  await expect(setup).toBeVisible()
+  const box = await setup.boundingBox()
+  expect(box!.y).toBeGreaterThanOrEqual(0)
+  expect(box!.y + box!.height).toBeLessThanOrEqual(500)
+  // The list really is populated AND scrolls in its own region — not an empty-tray fluke.
+  await expect(page.getByText('overflow row 11')).toBeVisible()
 })

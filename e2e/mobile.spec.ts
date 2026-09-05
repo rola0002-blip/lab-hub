@@ -1,7 +1,7 @@
 import { test, expect, type Browser, type Locator, type Page } from '@playwright/test'
 import { TZDate } from '@date-fns/tz'
 import { format } from 'date-fns'
-import { db, wipe, runWizard, signIn, ADMIN, createMemberViaInvite, acceptInvite } from './helpers'
+import { db, wipe, runWizard, signIn, ADMIN, createMemberViaInvite, acceptInvite, waitForHydration } from './helpers'
 import { ROW_PX_DAY, rangeToRows, rowsToRange } from '@/features/booking/grid'
 
 // v0.14 "mobile UX": the booking schedule becomes one responsive component — the
@@ -677,4 +677,33 @@ test('issues list collapses to two lines below md', async ({ browser }) => {
   await signIn(desk, ADMIN.email, ADMIN.password)
   await desk.goto('/issues')
   await expect(main(desk).locator('[role=listitem]').getByText(LONG_PROJECT)).toBeVisible()
+})
+
+// ── W12-C: session log-on from the phone day view ─────────────────────────────
+// Unlike the T5 tests (which seed a future slot and navigate ?week=&day= to it),
+// this seeds a slot straddling now on TODAY — so the plain goto lands on the
+// current week and the day view opens on today's column, where the block lives.
+test('session log-on from the day view (phone)', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await phonePage(browser)
+  await runWizard(page)
+  const eq = await db.equipment.create({ data: { name: 'Sputter', approvalPolicy: 'NONE' } })
+  await signIn(page, ADMIN.email, ADMIN.password)
+  const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  await db.booking.create({ data: {
+    userId: me.id, equipmentId: eq.id, status: 'CONFIRMED', purpose: 'mobile session',
+    startsAt: new Date(Date.now() - 30 * 60_000), endsAt: new Date(Date.now() + 60 * 60_000),
+  } })
+  await page.goto(`/booking/${eq.id}`) // current week — the in-window block is today
+  await waitForHydration(page)
+  await expect(dayColumn(page)).toHaveCount(1)
+  await main(page).getByRole('button', { name: /Roland/ }).click()
+  const details = page.getByRole('dialog', { name: 'Booking details' })
+  await expect(details).toBeVisible()
+  const logOn = details.getByRole('button', { name: 'Log on' })
+  expect((await logOn.boundingBox())!.height).toBeGreaterThanOrEqual(44) // §4.3 touch bar
+  await logOn.click()
+  await expect(details).toHaveCount(0)
+  const b = await db.booking.findFirstOrThrow({ where: { equipmentId: eq.id } })
+  expect(b.sessionStartedAt).not.toBeNull()
 })
