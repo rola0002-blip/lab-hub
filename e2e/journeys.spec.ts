@@ -205,3 +205,38 @@ test('catalogue segments by certification and names the managers', async ({ page
   await expect(aside.getByRole('heading', { name: 'Managers' })).toBeVisible()
   await expect(aside.getByText('Roland')).toBeVisible()
 })
+
+// W12-C: the usage-session journey on /bookings — log on (loose-visible button,
+// server-gated window), note mid-session, log off through the prefilled modal.
+// The slot straddles now (-30m/+60m) so it is Upcoming AND inside the log-on
+// window; the row stays <li>→listitem and the modal's dialogs are located by
+// their titles, so every press is scoped to the row or the dialog.
+test('member logs a session on a booking (log on → note → log off)', async ({ page }) => {
+  await runWizard(page)
+  const eq = await db.equipment.create({ data: { name: 'PECVD', approvalPolicy: 'NONE' } })
+  await signIn(page, ADMIN.email, ADMIN.password)
+  const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  await db.booking.create({ data: {
+    userId: me.id, equipmentId: eq.id, status: 'CONFIRMED', purpose: 'session e2e',
+    startsAt: new Date(Date.now() - 30 * 60_000), endsAt: new Date(Date.now() + 60 * 60_000),
+  } })
+  await page.goto('/bookings')
+  await waitForHydration(page)
+  const row = page.getByRole('listitem').filter({ hasText: 'PECVD' }).first()
+  await row.getByRole('button', { name: 'Log on' }).click()
+  await expect(row.getByRole('button', { name: 'Log off' })).toBeVisible()
+  await row.getByRole('button', { name: 'Note' }).click()
+  const note = page.getByRole('dialog', { name: 'Session note' })
+  await note.locator('textarea').fill('stage heater acting up')
+  await note.getByRole('button', { name: 'Save note' }).click()
+  await expect(note).toHaveCount(0)
+  await row.getByRole('button', { name: 'Log off' }).click()
+  const off = page.getByRole('dialog', { name: 'Log off session' })
+  await off.getByRole('button', { name: 'Save & log off' }).click()
+  await expect(off).toHaveCount(0)
+  await expect(row.getByText(/^Session:/)).toBeVisible()
+  const after = await db.booking.findFirstOrThrow({ where: { equipmentId: eq.id } })
+  expect(after.sessionStartedAt).not.toBeNull()
+  expect(after.sessionEndedAt).not.toBeNull()
+  expect(after.sessionNote).toContain('heater')
+})

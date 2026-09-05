@@ -51,6 +51,9 @@ export default async function EquipmentPage({ params, searchParams }: {
     ...bookings.map((b) => ({
       id: b.id, kind: 'booking' as const, startsAt: b.startsAt.toISOString(), endsAt: b.endsAt.toISOString(),
       label: b.user.name, status: b.status, own: b.userId === me.id,
+      sessionStartedAt: b.sessionStartedAt?.toISOString() ?? null,
+      sessionEndedAt: b.sessionEndedAt?.toISOString() ?? null,
+      sessionNote: b.sessionNote ?? '',
     })),
     ...maintenance.map((m) => ({
       id: m.id, kind: 'maintenance' as const, startsAt: m.startsAt.toISOString(), endsAt: m.endsAt.toISOString(), label: `Maintenance: ${m.reason}`,
