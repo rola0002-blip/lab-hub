@@ -275,3 +275,29 @@ test('cancel during an active session keeps the row closeable in Upcoming', asyn
   expect(after.status).toBe('CANCELLED')
   expect(after.sessionEndedAt).not.toBeNull()
 })
+
+// W13-A: per-equipment records export — the action-row anchor is manager-gated
+// server-side (canManage), and the download is the ics/RA posture.
+test('admin downloads the equipment records workbook', async ({ page }) => {
+  await runWizard(page)
+  const eq = await db.equipment.create({ data: { name: 'Export E2E', approvalPolicy: 'NONE' } })
+  await signIn(page, ADMIN.email, ADMIN.password)
+  const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  await db.booking.create({ data: {
+    userId: me.id, equipmentId: eq.id, status: 'CONFIRMED', purpose: 'export e2e',
+    startsAt: new Date(Date.now() - 60 * 60_000), endsAt: new Date(Date.now() + 60 * 60_000),
+    sessionStartedAt: new Date(Date.now() - 55 * 60_000), sessionEndedAt: new Date(Date.now() - 5 * 60_000),
+    sessionNote: 'e2e note',
+  } })
+  await page.goto(`/booking/${eq.id}`)
+  await waitForHydration(page)
+  const link = page.getByRole('link', { name: 'Export records' })
+  await expect(link).toBeVisible()
+  await expect(link).toHaveAttribute('href', `/api/equipment/${eq.id}/export`)
+  // page.request shares the page's storage state — this GET is the admin session.
+  const xlsx = await page.request.get(`/api/equipment/${eq.id}/export`)
+  expect(xlsx.status()).toBe(200)
+  expect(xlsx.headers()['content-type']).toContain('spreadsheetml')
+  const buf = await xlsx.body() // APIResponse.body(): Buffer (Playwright has no arrayBuffer())
+  expect(buf!.subarray(0, 2).toString()).toBe('PK') // zip magic — a real workbook
+})

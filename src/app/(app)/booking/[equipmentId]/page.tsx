@@ -79,6 +79,9 @@ export default async function EquipmentPage({ params, searchParams }: {
             <Link href={`?week=${next}`} className="rounded-md border border-border px-2 py-1 text-default transition-colors hover:bg-hover">Next →</Link>
           </div>
           {canManage && <MaintenanceDialogButton equipmentId={equipmentId} />}
+          {canManage && (
+            <a href={`/api/equipment/${equipmentId}/export`} className="rounded-md border border-border px-2 py-1 text-default transition-colors hover:bg-hover">Export records</a>
+          )}
           <NewBookingButton equipmentId={equipmentId} timezone={org.timezone} allowRecurring={eq.allowRecurring}
             equipmentName={eq.name} equipmentLocation={eq.location} retired={retired} />
         </div>
