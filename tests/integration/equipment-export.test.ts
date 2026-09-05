@@ -17,6 +17,16 @@ const signIn = (u: { id: string; name: string; email: string; role: string }) =>
 }
 const call = (id: string) => GET(new Request('http://x/api'), { params: Promise.resolve({ id }) })
 
+// exceljs's typings declare their own module-local `interface Buffer extends
+// ArrayBuffer` — nominally incompatible with Node's Buffer. Bridge through the
+// parameter's own type instead of guessing at theirs.
+const parseWorkbook = async (res: Response): Promise<ExcelJS.Workbook> => {
+  const wb = new ExcelJS.Workbook()
+  const buf = Buffer.from(await res.arrayBuffer())
+  await wb.xlsx.load(buf as unknown as Parameters<ExcelJS.Workbook['xlsx']['load']>[0])
+  return wb
+}
+
 describe('equipment records export route', () => {
   beforeEach(async () => { await resetDb(); mockUser.current = null })
 
@@ -47,8 +57,7 @@ describe('equipment records export route', () => {
     expect(res.headers.get('content-type')).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     expect(res.headers.get('content-disposition')).toContain('attachment')
     expect(res.headers.get('content-disposition')).toContain('labhub-pecvd-records.xlsx')
-    const wb = new ExcelJS.Workbook()
-    await wb.xlsx.load(Buffer.from(await res.arrayBuffer()))
+    const wb = await parseWorkbook(res)
     expect(wb.worksheets.map((w) => w.name)).toEqual(['Bookings', 'Training records', 'Certifications'])
     const bookings = wb.getWorksheet('Bookings')!
     expect(bookings.getRow(1).getCell(1).value).toBe('When')
@@ -113,8 +122,7 @@ describe('equipment records export route', () => {
     } })
 
     signIn(admin)
-    const wbA = new ExcelJS.Workbook()
-    await wbA.xlsx.load(Buffer.from(await (await call(eqA.id)).arrayBuffer()))
+    const wbA = await parseWorkbook(await call(eqA.id))
     const bookingsA = wbA.getWorksheet('Bookings')!
     // 02:00Z renders 11:00 in Asia/Tokyo — org-present tz path (fallback test above covers UTC+8).
     expect(bookingsA.getRow(2).getCell(1).value).toBe('Tue 1 Sep, 11:00–14:00')
@@ -131,8 +139,7 @@ describe('equipment records export route', () => {
     // Header + the single pending booking, nothing else.
     expect(bookingsA.rowCount).toBe(2)
 
-    const wbB = new ExcelJS.Workbook()
-    await wbB.xlsx.load(Buffer.from(await (await call(eqB.id)).arrayBuffer()))
+    const wbB = await parseWorkbook(await call(eqB.id))
     const bookingsB = wbB.getWorksheet('Bookings')!
     // Dangling decidedById: name lookup misses → blank, not a crash, not the raw id.
     expect(bookingsB.getRow(2).getCell(9).value).toBe('')
