@@ -60,6 +60,8 @@ model User {
 
   feedback Feedback[]
   raAcknowledgments RaAcknowledgment[]
+  trainings          TrainingRecord[] @relation("TrainingUser")
+  trainingsAsTrainer TrainingRecord[] @relation("TrainingTrainer")
 
   @@map("user")
 }
@@ -167,6 +169,7 @@ model Equipment {
 
   bookings       Booking[]
   certifications Certification[]
+  trainings TrainingRecord[]
   managers       EquipmentManager[]
   maintenance    MaintenanceWindow[]
   recurrences    RecurrenceRule[]
@@ -218,7 +221,10 @@ model Booking {
   recurrenceRuleId String?
   recurrenceRule   RecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id])
   reminderSentAt   DateTime?
-  createdAt        DateTime        @default(now())
+  sessionStartedAt DateTime?
+  sessionEndedAt   DateTime?
+  sessionNote      String    @default("")
+  createdAt        DateTime  @default(now())
 
   @@index([equipmentId, startsAt])
   @@index([userId, startsAt])
@@ -725,4 +731,24 @@ model RaAcknowledgment {
 
   @@unique([userId, documentId])
   @@index([createdAt])
+}
+
+// v0.26 W12-B: append-only training log. One row per NEW certification grant (a
+// re-check of an existing cert is a no-op; revoke → re-grant appends). trainedOn is
+// an org-tz yyyy-MM-dd string (the Milestone.date convention). People RESTRICT (the
+// RaAcknowledgment posture), equipment CASCADEs (the Certification posture).
+model TrainingRecord {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation("TrainingUser", fields: [userId], references: [id], onDelete: Restrict)
+  equipmentId String
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  trainedById String
+  trainedBy   User      @relation("TrainingTrainer", fields: [trainedById], references: [id], onDelete: Restrict)
+  trainedOn   String // org-tz yyyy-MM-dd
+  note        String    @default("") // ≤500, enforced in the action
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, equipmentId])
+  @@index([equipmentId])
 }
