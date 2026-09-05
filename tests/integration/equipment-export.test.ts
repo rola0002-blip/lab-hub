@@ -55,6 +55,7 @@ describe('equipment records export route', () => {
     expect(bookings.getRow(2).getCell(2).value).toBe('Mira Member')
     expect(bookings.getRow(2).getCell(8).value).toBe('stage heater acting up')
     expect(bookings.getRow(2).getCell(9).value).toBe('Alice Admin') // decidedById resolved from the bare-id map
+    // no Organization row in this test — this asserts the 'Asia/Singapore' fallback tz; the minimal-state test below covers the org-present path
     expect(bookings.getRow(2).getCell(1).value).toBe('Tue 1 Sep, 10:00–13:00') // org-tz (UTC+8) formatted window: 02:00Z renders 10:00
     const training = wb.getWorksheet('Training records')!
     expect(training.getRow(2).getCell(4).value).toBe('Ted Trainer')
@@ -86,5 +87,58 @@ describe('equipment records export route', () => {
       signIn(u)
       expect((await call('does-not-exist')).status).toBe(404)
     }
+  })
+
+  it('renders minimal and dangling-id states under an org timezone', async () => {
+    // The other tests rely on the 'Asia/Singapore' fallback (resetDb TRUNCATEs
+    // Organization and they never recreate it). Creating the org INSIDE this test
+    // isolates it and exercises the org-present tz path that production always runs.
+    await prisma.organization.create({ data: { name: 'Fix Lab', timezone: 'Asia/Tokyo' } })
+    const admin = await makeUser({ role: 'admin', name: 'Alice Admin' })
+    const member = await makeUser({ role: 'member', name: 'Mira Member' })
+    const eqA = await makeEquipment({ name: 'Min A' })
+    const eqB = await makeEquipment({ name: 'Ghost B' })
+    // eqA: PENDING, no decision, no session — the most common real-world state.
+    await prisma.booking.create({ data: {
+      userId: member.id, equipmentId: eqA.id, status: 'PENDING', purpose: 'pending only',
+      startsAt: new Date('2026-09-01T02:00:00Z'), endsAt: new Date('2026-09-01T05:00:00Z'),
+    } })
+    // eqB: REJECTED with a dangling decidedById (bare string, no user row) plus a
+    // rejectionReason — covers the null-branch inversion of every decidedById map miss.
+    await prisma.booking.create({ data: {
+      userId: member.id, equipmentId: eqB.id, status: 'REJECTED', purpose: 'ghost approver',
+      startsAt: new Date('2026-09-02T02:00:00Z'), endsAt: new Date('2026-09-02T03:00:00Z'),
+      rejectionReason: 'asked to stop', decidedById: 'deleted-user',
+      decidedAt: new Date('2026-09-01T06:00:00Z'),
+    } })
+
+    signIn(admin)
+    const wbA = new ExcelJS.Workbook()
+    await wbA.xlsx.load(Buffer.from(await (await call(eqA.id)).arrayBuffer()))
+    const bookingsA = wbA.getWorksheet('Bookings')!
+    // 02:00Z renders 11:00 in Asia/Tokyo — org-present tz path (fallback test above covers UTC+8).
+    expect(bookingsA.getRow(2).getCell(1).value).toBe('Tue 1 Sep, 11:00–14:00')
+    // No session, no decision, no rejection: every optional cell takes its '' branch.
+    expect(bookingsA.getRow(2).getCell(6).value).toBe('')
+    expect(bookingsA.getRow(2).getCell(7).value).toBe('')
+    expect(bookingsA.getRow(2).getCell(8).value).toBe('')
+    expect(bookingsA.getRow(2).getCell(9).value).toBe('')
+    expect(bookingsA.getRow(2).getCell(10).value).toBe('')
+    expect(bookingsA.getRow(2).getCell(11).value).toBe('')
+    // No trainings or certs on eqA: exceljs counts the header row, so header-only sheets are 1.
+    expect(wbA.getWorksheet('Training records')!.rowCount).toBe(1)
+    expect(wbA.getWorksheet('Certifications')!.rowCount).toBe(1)
+    // Header + the single pending booking, nothing else.
+    expect(bookingsA.rowCount).toBe(2)
+
+    const wbB = new ExcelJS.Workbook()
+    await wbB.xlsx.load(Buffer.from(await (await call(eqB.id)).arrayBuffer()))
+    const bookingsB = wbB.getWorksheet('Bookings')!
+    // Dangling decidedById: name lookup misses → blank, not a crash, not the raw id.
+    expect(bookingsB.getRow(2).getCell(9).value).toBe('')
+    // 06:00Z → 15:00 Tokyo; formatDateTime emits 'd MMM yyyy, h:mm a' → '3:00 PM' + year.
+    expect(String(bookingsB.getRow(2).getCell(10).value)).toContain('2026')
+    expect(String(bookingsB.getRow(2).getCell(10).value)).toContain('3:00 PM')
+    expect(bookingsB.getRow(2).getCell(11).value).toBe('asked to stop')
   })
 })
