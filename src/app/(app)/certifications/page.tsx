@@ -37,7 +37,11 @@ export default async function CertificationsPage() {
         <section className="mt-8">
           <h2 className="text-lg font-semibold text-default">Training history</h2>
           <div className="mt-2 overflow-x-auto rounded-xl border border-border bg-surface">
-            <table className="w-full text-sm">
+            {/* min-w-[34rem] (the /ra pan idiom, with the explicit floor its email
+                columns get for free): the Note column wraps to word-width so plain
+                w-full crushes it to ~60px at 375px — the floor makes the wrapper pan
+                instead, and md+ the table still grows to full width. */}
+            <table className="min-w-[34rem] w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-subtle">
                   <th className="p-2">Date</th><th className="p-2">Person</th><th className="p-2">Instrument</th>
