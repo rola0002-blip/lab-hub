@@ -7,7 +7,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 # LabHub repo guide
 
 Public open-source repo (MIT) at `rola0002-blip/lab-hub`. Self-hosted lab platform:
-equipment booking (certification gating + approvals), Slack-style chat (SSE realtime,
+equipment booking (certification gating + training records, approvals, usage
+logging), Slack-style chat (SSE realtime,
 web push), issue tracker (`LAB-n`) + projects, shared Files library, RA acknowledgments,
 feedback system — one Docker install per lab, plus a Tauri 2 desktop shell and an
 installable PWA. Node 22+ required. Full maintainer doctrine lives in `CLAUDE.md`

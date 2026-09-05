@@ -82,7 +82,9 @@ desktop app.
 ## What's inside
 
 - **Equipment booking** — per-instrument policies, certification gating,
-  approval queues, recurring bookings, maintenance windows, iCal sync.
+  approval queues, recurring bookings, maintenance windows, iCal sync,
+  training records at grant time, and log-on/log-off session tracking with
+  usage notes.
 - **Team chat** — channels, DMs, threads, @mentions, reactions, attachments,
   full-text search, realtime over SSE, web push, Slack import.
 - **Projects** — issue tracker (`LAB-n`), keyboard-accessible board,
