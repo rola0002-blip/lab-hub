@@ -77,3 +77,4 @@ docs/handoffs/
 
 # Local git worktrees
 .worktrees/
+.playwright-mcp/
