@@ -138,12 +138,21 @@ test('certification gate blocks, then unlocks after granting', async ({ page }) 
 
   await page.goto('/certifications')
   // The matrix checkbox is a controlled input: its checked state only flips
-  // after toggleCertAction runs and revalidatePath re-renders the page. That is
+  // after the grant action runs and revalidatePath re-renders the page. That is
   // not optimistic, so Playwright's .check() (which asserts the state changed
   // synchronously) fails — dispatch a plain click and let toBeChecked() poll
   // until the server round-trip lands.
   await page.locator('table input[type=checkbox]').first().click()
+  // W12-B: checking a cell now opens the Record-training dialog (defaults: today,
+  // granting admin). Save → grantCertAction → revalidatePath flips the CONTROLLED
+  // checkbox — still not optimistic, still poll-to-checked.
+  const dialog = page.getByRole('dialog', { name: /Record training/ })
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: 'Save' }).click()
   await expect(page.locator('table input[type=checkbox]').first()).toBeChecked()
+  // The training history table lands beneath the matrix.
+  await expect(page.getByRole('heading', { name: 'Training history' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Roland' }).first()).toBeVisible()
 
   const ok = await page.request.post('/api/bookings', {
     data: { equipmentId: eq.id, startsAt: starts, endsAt: new Date(+starts + 3_600_000), purpose: 'x' },
