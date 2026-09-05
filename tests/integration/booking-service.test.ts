@@ -115,10 +115,14 @@ describe('decideBooking / cancelBooking', () => {
   })
 
   it('certified guest on cert-required GUESTS instrument still routes to approval', async () => {
+    // grantCertification reads the org timezone (orgToday) and requires a training
+    // date — resetDb TRUNCATEs Organization, so recreate the row here (the
+    // certifications.test.ts resetWithOrg pattern).
+    await prisma.organization.create({ data: { name: 'Lab', timezone: 'Asia/Singapore' } })
     const g = await makeUser({ role: 'guest' })
     const admin = await makeUser({ role: 'admin' })
     const eq = await makeEquipment({ certificationRequired: true })
-    await grantCertification({ userId: g.id, equipmentId: eq.id, grantedById: admin.id })
+    await grantCertification({ userId: g.id, equipmentId: eq.id, grantedById: admin.id, trainedOn: '2020-01-01' })
     const r = await createBooking({ userId: g.id, equipmentId: eq.id, purpose: 'x', ...slot(24, 28) })
     expect(r).toMatchObject({ ok: true, pending: true })
   })

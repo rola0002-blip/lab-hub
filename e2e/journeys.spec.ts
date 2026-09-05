@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { db, wipe, runWizard, signIn, signOut, ADMIN, latestInviteToken, createMemberViaInvite, acceptInvite } from './helpers'
+import { db, wipe, runWizard, signIn, signOut, ADMIN, latestInviteToken, createMemberViaInvite, acceptInvite, waitForHydration } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -137,6 +137,7 @@ test('certification gate blocks, then unlocks after granting', async ({ page }) 
   expect(blocked.status()).toBe(422)
 
   await page.goto('/certifications')
+  await waitForHydration(page)
   // The matrix checkbox is a controlled input: its checked state only flips
   // after the grant action runs and revalidatePath re-renders the page. That is
   // not optimistic, so Playwright's .check() (which asserts the state changed
@@ -152,7 +153,8 @@ test('certification gate blocks, then unlocks after granting', async ({ page }) 
   await expect(page.locator('table input[type=checkbox]').first()).toBeChecked()
   // The training history table lands beneath the matrix.
   await expect(page.getByRole('heading', { name: 'Training history' })).toBeVisible()
-  await expect(page.getByRole('cell', { name: 'Roland' }).first()).toBeVisible()
+  const history = page.locator('section', { has: page.getByRole('heading', { name: 'Training history' }) })
+  await expect(history.getByRole('cell', { name: 'Roland' }).first()).toBeVisible()
 
   const ok = await page.request.post('/api/bookings', {
     data: { equipmentId: eq.id, startsAt: starts, endsAt: new Date(+starts + 3_600_000), purpose: 'x' },

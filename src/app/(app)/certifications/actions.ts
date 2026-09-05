@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { requireUser } from '@/lib/session'
 import { grantCertification, revokeCertification } from '@/features/certifications/service'
+import { PolicyError } from '@/features/certifications/policy'
 
 // W12-B: a Server Action is an RPC endpoint — zod-guard the wire args so a forged
 // non-string degrades to {ok:false,message}, never a PrismaClientValidationError 500
@@ -28,8 +29,8 @@ export async function grantCertAction(
       trainedById: parsed.data.trainedById, trainedOn: parsed.data.trainedOn, note: parsed.data.note,
     })
   } catch (e) {
-    if (e instanceof Error && e.message === 'invalid_date') return { ok: false, message: 'Training date cannot be in the future.' }
-    return { ok: false, message: 'You can only manage certifications for instruments you manage.' }
+    if (e instanceof PolicyError) return { ok: false, message: e.message }
+    return { ok: false, message: 'Could not save — check your connection and try again.' }
   }
   revalidatePath('/certifications')
   return { ok: true }
@@ -39,8 +40,9 @@ export async function revokeCertAction(userId: string, equipmentId: string): Pro
   const me = await requireUser()
   try {
     await revokeCertification({ userId, equipmentId, byId: me.id })
-  } catch {
-    return { ok: false, message: 'You can only manage certifications for instruments you manage.' }
+  } catch (e) {
+    if (e instanceof PolicyError) return { ok: false, message: e.message }
+    return { ok: false, message: 'Could not save — check your connection and try again.' }
   }
   revalidatePath('/certifications')
   return { ok: true }

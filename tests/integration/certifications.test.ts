@@ -34,7 +34,7 @@ describe('certifications', () => {
     await setManagers(eq.id, [mgr.id])
     await grantCertification({ userId: u.id, equipmentId: eq.id, grantedById: mgr.id, trainedOn: '2020-01-01' })
     expect(await isCertified(u.id, eq.id)).toBe(true)
-    await expect(grantCertification({ userId: u.id, equipmentId: eq.id, grantedById: rando.id, trainedOn: '2020-01-01' })).rejects.toThrow('forbidden')
+    await expect(grantCertification({ userId: u.id, equipmentId: eq.id, grantedById: rando.id, trainedOn: '2020-01-01' })).rejects.toThrow(/manage certifications/)
   })
 })
 
@@ -64,7 +64,15 @@ describe('training records (W12-B)', () => {
     const row = await prisma.trainingRecord.findFirstOrThrow()
     expect(row.trainedById).toBe(trainer.id)
     expect(row.note).toBe('hands-on bake')
-    await expect(grantCertification({ userId: trainee.id, equipmentId: eq.id, grantedById: admin.id, trainedOn: '2999-01-01' })).rejects.toThrow('invalid_date')
+    await expect(grantCertification({ userId: trainee.id, equipmentId: eq.id, grantedById: admin.id, trainedOn: '2999-01-01' })).rejects.toThrow(/cannot be in the future/i)
+  })
+
+  it('rejects a guest trainer id (the UI offers non-guests only)', async () => {
+    const admin = await makeUser({ role: 'admin' })
+    const guest = await makeUser({ role: 'guest' })
+    const trainee = await makeUser()
+    const eq = await makeEquipment()
+    await expect(grantCertification({ userId: trainee.id, equipmentId: eq.id, grantedById: admin.id, trainedById: guest.id, trainedOn: '2024-01-05' })).rejects.toThrow(/valid trainer/)
   })
 
   it('listTrainingRecords returns the joined DTO', async () => {

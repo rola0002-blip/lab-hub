@@ -2,9 +2,10 @@ import 'server-only'
 import { prisma } from '@/lib/db'
 import { isManagerOf } from '@/features/equipment/service'
 import { orgToday } from '@/features/issues/due'
+import { PolicyError } from './policy'
 
 async function assertCanManage(byId: string, equipmentId: string) {
-  if (!(await isManagerOf(byId, equipmentId))) throw new Error('forbidden')
+  if (!(await isManagerOf(byId, equipmentId))) throw new PolicyError('forbidden', 'You can only manage certifications for instruments you manage.')
 }
 
 async function orgTimezone(): Promise<string> {
@@ -18,8 +19,9 @@ export type TrainingRow = {
 }
 
 // W12-B: granting extends with the training declaration. The record is append-only
-// and fires ONLY when the certification is NEWLY created — the upsert's `update: {}`
-// no-op on an existing cert must not log (a re-check of a checked cell stays silent).
+// and fires ONLY when the certification is NEWLY created — createMany with
+// skipDuplicates (INSERT … ON CONFLICT DO NOTHING) inserts nothing for an existing
+// cert, so a re-check of a checked cell stays silent.
 // Revoke → re-grant legitimately appends a second record.
 export async function grantCertification(args: {
   userId: string; equipmentId: string; grantedById: string
@@ -28,17 +30,27 @@ export async function grantCertification(args: {
   await assertCanManage(args.grantedById, args.equipmentId)
   // Lexicographic yyyy-MM-dd compare against org-tz today (the due.ts convention) —
   // a future training date is a typo, not a plan.
-  if (args.trainedOn > orgToday(new Date(), await orgTimezone())) throw new Error('invalid_date')
+  if (args.trainedOn > orgToday(new Date(), await orgTimezone())) throw new PolicyError('invalid', 'Training date cannot be in the future.')
   await prisma.$transaction(async (tx) => {
-    const existing = await tx.certification.findUnique({
-      where: { userId_equipmentId: { userId: args.userId, equipmentId: args.equipmentId } },
+    // The service's accepted trainer set must equal the UI's offered set: a real,
+    // non-banned, non-system, non-guest human. Trainees stay unrestricted (guests
+    // ARE certifiable — pinned behavior).
+    const trainer = await tx.user.findUnique({
+      where: { id: args.trainedById ?? args.grantedById },
+      select: { banned: true, isSystem: true, role: true },
     })
-    await tx.certification.upsert({
-      where: { userId_equipmentId: { userId: args.userId, equipmentId: args.equipmentId } },
-      update: {},
-      create: { userId: args.userId, equipmentId: args.equipmentId, grantedById: args.grantedById },
+    if (!trainer || trainer.banned || trainer.isSystem || trainer.role === 'guest') {
+      throw new PolicyError('invalid', 'Choose a valid trainer.')
+    }
+    // Atomic novelty probe: createMany … ON CONFLICT DO NOTHING — r.count is the
+    // INSERT's own command-tag count, so the race loser deterministically sees 0
+    // and skips the record. (A double-Save or two managers granting concurrently
+    // can no longer append two records for one grant.)
+    const r = await tx.certification.createMany({
+      data: [{ userId: args.userId, equipmentId: args.equipmentId, grantedById: args.grantedById }],
+      skipDuplicates: true,
     })
-    if (!existing) {
+    if (r.count === 1) {
       await tx.trainingRecord.create({
         data: {
           userId: args.userId, equipmentId: args.equipmentId,
