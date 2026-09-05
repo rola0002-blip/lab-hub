@@ -240,3 +240,38 @@ test('member logs a session on a booking (log on → note → log off)', async (
   expect(after.sessionEndedAt).not.toBeNull()
   expect(after.sessionNote).toContain('heater')
 })
+
+// W12-C review: cancelling WHILE ACTIVE must not swallow the row — the session
+// branch keeps it in Upcoming (whatever the status) so Log off stays reachable;
+// Note disappears (its save path requires CONFIRMED server-side). startsAt +10m
+// sits inside the 15-minute early log-on window; endsAt +70m keeps log-off inside
+// its window. The Row cancel confirms via window.confirm — the dialog handler is
+// registered BEFORE the click (Playwright auto-dismisses unhandled dialogs).
+test('cancel during an active session keeps the row closeable in Upcoming', async ({ page }) => {
+  await runWizard(page)
+  const eq = await db.equipment.create({ data: { name: 'Sputter', approvalPolicy: 'NONE' } })
+  await signIn(page, ADMIN.email, ADMIN.password)
+  const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  await db.booking.create({ data: {
+    userId: me.id, equipmentId: eq.id, status: 'CONFIRMED', purpose: 'cancel mid-session',
+    startsAt: new Date(Date.now() + 10 * 60_000), endsAt: new Date(Date.now() + 70 * 60_000),
+  } })
+  await page.goto('/bookings')
+  await waitForHydration(page)
+  const upcoming = page.locator('section', { has: page.getByRole('heading', { name: 'Upcoming' }) })
+  const row = upcoming.getByRole('listitem').filter({ hasText: 'Sputter' })
+  await row.getByRole('button', { name: 'Log on' }).click()
+  await expect(row.getByRole('button', { name: 'Log off' })).toBeVisible()
+  page.on('dialog', (d) => d.accept())
+  await row.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect(row.getByText('cancelled')).toBeVisible() // row REMAINS in Upcoming, now cancelled
+  await expect(row.getByRole('button', { name: 'Log off' })).toBeVisible()
+  await expect(row.getByRole('button', { name: 'Note' })).toHaveCount(0)
+  await row.getByRole('button', { name: 'Log off' }).click()
+  const off = page.getByRole('dialog', { name: 'Log off session' })
+  await off.getByRole('button', { name: 'Save & log off' }).click()
+  await expect(off).toHaveCount(0)
+  const after = await db.booking.findFirstOrThrow({ where: { equipmentId: eq.id } })
+  expect(after.status).toBe('CANCELLED')
+  expect(after.sessionEndedAt).not.toBeNull()
+})

@@ -9,13 +9,18 @@ export default async function MyBookingsPage() {
   const org = await requireSetup()
   const now = new Date()
   const [upcoming, past] = await Promise.all([
-    // W12-C: an ACTIVE session (started, not ended) stays in Upcoming even after its
-    // slot ends — it must stay reachable for its 30-minute log-off window. An ENDED
-    // session with a past endsAt falls through to Past below and renders its label.
+    // W12-C: an ACTIVE session (started, not ended) stays in Upcoming until it is
+    // closed, WHATEVER the row's status — a cancelled-during-session row must remain
+    // visible so its Log off stays reachable (the status filter lives inside the
+    // first OR branch, not around it). An ENDED session with a past endsAt falls
+    // through to Past below and renders its label.
     prisma.booking.findMany({
-      where: { userId: me.id, status: { in: ['PENDING', 'CONFIRMED'] },
-        OR: [{ endsAt: { gte: now } }, { sessionStartedAt: { not: null }, sessionEndedAt: null }] },
-      include: { equipment: { select: { name: true, location: true } } }, orderBy: { startsAt: 'asc' },
+      where: { userId: me.id,
+        OR: [
+          { status: { in: ['PENDING', 'CONFIRMED'] }, endsAt: { gte: now } },
+          { sessionStartedAt: { not: null }, sessionEndedAt: null },
+        ] },
+      orderBy: { startsAt: 'asc' }, include: { equipment: { select: { name: true, location: true } } },
     }),
     // …and Past excludes that same active-session set (the second OR) so an open
     // session never double-renders across the two lists.

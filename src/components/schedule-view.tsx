@@ -43,8 +43,9 @@ function canCancelSlot(s: CalSlot, canManage: boolean): boolean {
     && (s.status === 'PENDING' || s.status === 'CONFIRMED')
 }
 
-// W12-C: session controls on the day view — own-or-manage, confirmed, not yet ended
-// (the canCancelSlot shape; loose — the server gates the window).
+// W12-C: session controls on the day view — own-or-manage, confirmed, not yet ended:
+// the canCancelSlot shape minus its future clause, plus !sessionEndedAt (loose —
+// the server gates the window).
 function canSessionSlot(s: CalSlot, canManage: boolean): boolean {
   return s.kind === 'booking' && (s.own || canManage) && s.status === 'CONFIRMED' && !s.sessionEndedAt
 }

@@ -41,21 +41,28 @@ function Row({ b, upcoming, onErr }: { b: Item; upcoming: boolean; onErr: (m: st
         )}
       </span>
       <span className="flex flex-wrap items-center justify-end gap-2">
-        {upcoming && ['CONFIRMED', 'PENDING'].includes(b.status) && (
+        {upcoming && ['CONFIRMED', 'PENDING'].includes(b.status) && new Date(b.endsAt) > new Date() && (
           <AddToCalendar bookingId={b.id} summary={b.equipmentName} startsAt={b.startsAt} endsAt={b.endsAt} purpose={b.purpose} location={b.location} />
         )}
         {b.status === 'CONFIRMED' && !b.sessionStartedAt && !b.sessionEndedAt
           && new Date(b.endsAt).getTime() > new Date().getTime() - SESSION_LATE_MS && (
-          // Loose visibility + strict server gate: a stale page may show the button a touch
-          // early/late; the action answers with the exact window message (never a stuck
-          // hidden button on a page loaded before the window opened).
+          // Loose visibility + strict server gate: a stale page may show the button a
+          // touch early/late, and fresh loads are start-side window-blind by design
+          // (the button shows on future bookings; the server answers with the exact
+          // window message — never a stuck hidden button on a page loaded before the
+          // window opened).
           <button type="button" disabled={pending}
             onClick={() => start(async () => { const r = await logOnAction(b.id); if (!r.ok) onErr(r.message ?? 'Failed') })}
             className={SESSION_BTN}>Log on</button>
         )}
         {b.sessionStartedAt && !b.sessionEndedAt && (
           <>
-            <button type="button" className={SESSION_BTN} onClick={() => setNoteOpen({ mode: 'save' })}>Note</button>
+            {/* Note/Save-note requires CONFIRMED server-side; a cancelled-while-active
+                row offers exactly one affordance — Log off, which still carries the
+                note via the modal (logOffAction is status-free, deliberately). */}
+            {b.status === 'CONFIRMED' && (
+              <button type="button" className={SESSION_BTN} onClick={() => setNoteOpen({ mode: 'save' })}>Note</button>
+            )}
             <button type="button" disabled={pending} className={SESSION_BTN} onClick={() => setNoteOpen({ mode: 'end' })}>Log off</button>
           </>
         )}
@@ -67,7 +74,9 @@ function Row({ b, upcoming, onErr }: { b: Item; upcoming: boolean; onErr: (m: st
           </>
         )}
       </span>
-      {noteOpen && <SessionNoteModal bookingId={b.id} mode={noteOpen.mode} initial={b.sessionNote} onDone={() => setNoteOpen(null)} onErr={(m) => { setNoteOpen(null); onErr(m) }} />}
+      {/* Modal stays open on failure (slot-details' contract): the error surfaces via
+          the page-level msg and the typed note is preserved. */}
+      {noteOpen && <SessionNoteModal bookingId={b.id} mode={noteOpen.mode} initial={b.sessionNote} onDone={() => setNoteOpen(null)} onErr={onErr} />}
     </li>
   )
 }
@@ -97,9 +106,11 @@ function SessionNoteModal({ bookingId, mode, initial, onDone, onErr }: {
       </label>
       <div className="mt-4 flex justify-end gap-2">
         <button type="button" onClick={onDone}
-          className="rounded-md border border-border px-3 py-1.5 text-sm text-default hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">Cancel</button>
+          className="min-h-11 rounded-md border border-border px-3 py-1.5 text-sm text-default hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">Cancel</button>
+        {/* min-h-11 (44px touch bar) matches slot-details' session buttons — "Save &
+            log off" is irreversible, so its target meets the touch minimum. */}
         <button type="button" disabled={pending} onClick={() => save(mode === 'end')}
-          className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-on hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] disabled:opacity-50">
+          className="min-h-11 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-on hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] disabled:opacity-50">
           {mode === 'end' ? 'Save & log off' : 'Save note'}
         </button>
       </div>
