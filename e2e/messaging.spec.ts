@@ -667,6 +667,22 @@ test('15: paste an image into the composer, send, then view it full-size in the 
   const page = await admin(browser)
   await createChannel(page, 'lab')
 
+  // Hold the message POST while the temp-row assertions below run — the temp
+  // only lives for the POST flight (tens of ms locally), which a poll can
+  // miss; holding makes the chip contract deterministic (test 16's idiom).
+  // Installed and settled BEFORE the paste: enabling route interception severs
+  // the page's SSE stream, and the automatic EventSource retry emits
+  // 'reconnect', whose pane handler refetches and REPLACES the message list —
+  // any optimistic temp alive at that moment is dropped. The settle wait lets
+  // that refetch land before a temp exists.
+  let release!: () => void
+  const held = new Promise<void>((r) => { release = r })
+  await page.route('**/api/chat/messages', async (route) => {
+    if (route.request().method() === 'POST') { await held; }
+    await route.continue()
+  })
+  await page.waitForTimeout(3500) // > EventSource's default 3 s retry
+
   // Paste lands in the shared validated intake: a pending chip with the filename.
   await page.getByPlaceholder('Write a message…').click()
   await dispatchPaste(page, 'textarea', { name: 'pasted-figure.png', type: 'image/png', body: PNG_BODY })
@@ -675,6 +691,13 @@ test('15: paste an image into the composer, send, then view it full-size in the 
   // Send and let the optimistic temp settle into the real message row before
   // clicking (the remount leg below exercises the racy window deliberately).
   await send(page, 'figure from the clipboard')
+  // The optimistic temp renders a CHIP (no premature <img> → no CDN-404 race).
+  await expect(page.locator('[data-msg-id^="tmp-"]').getByText('pasted-figure.png')).toBeVisible()
+  await expect(page.locator('[data-msg-id^="tmp-"]').getByRole('button', { name: 'View image: pasted-figure.png' })).toHaveCount(0)
+  release()
+  // No unroute here: it can tear interception down between release() and the
+  // handler's route.continue(), stranding the held fetch (the route dies with
+  // the context at close, as in test 16).
   await expect(page.locator('[data-msg-id]:not([data-msg-id^="tmp-"])', { hasText: 'figure from the clipboard' })).toBeVisible()
   const viewBtn = page.getByRole('button', { name: 'View image: pasted-figure.png' })
   await expect(viewBtn).toBeVisible()
@@ -696,9 +719,11 @@ test('15: paste an image into the composer, send, then view it full-size in the 
 // Wave-7 regression: the viewer lives in an EXTERNAL store (image-viewer-store)
 // precisely because the timeline row REMOUNTS when the optimistic temp
 // (data-msg-id="tmp-…") is replaced by the server message — a per-row lightbox
-// closed itself the instant the real row landed. Hold the POST response until
-// after the dialog opens to make that window deterministic.
-test('16: the lightbox survives the optimistic-temp row being replaced mid-view', async ({ browser }) => {
+// closed itself the instant the real row landed. Wave-13 tightened the temp
+// contract: temp rows render image attachments as CHIPS (no premature <img>
+// that a CDN could error-cache), so the viewer is opened on the REAL row. The
+// held POST still makes the temp window deterministic for the chip assertions.
+test('16: the lightbox survives the temp→real swap — temp renders chips, the viewer opens on the real row', async ({ browser }) => {
   test.setTimeout(90_000)
   const page = await admin(browser)
   await createChannel(page, 'lab')
@@ -709,25 +734,33 @@ test('16: the lightbox survives the optimistic-temp row being replaced mid-view'
     if (route.request().method() === 'POST') { await held; }
     await route.continue()
   })
+  // Same settle as test 15: enabling interception severs the SSE stream and the
+  // retry's 'reconnect' refetch REPLACES the pane list (dropping any live temp)
+  // — let it land before the temp exists.
+  await page.waitForTimeout(3500)
 
   await page.getByPlaceholder('Write a message…').click()
   await dispatchPaste(page, 'textarea', { name: 'temp-figure.png', type: 'image/png', body: PNG_BODY })
   await expect(page.getByText('temp-figure.png')).toBeVisible()
 
-  // Send: the temp row (with its image) renders while the POST is held.
+  // Send: the temp row renders while the POST is held.
   await send(page, 'race window open')
-  const tempBtn = page.getByRole('button', { name: 'View image: temp-figure.png' })
-  await expect(tempBtn).toBeVisible()
+  // Temp row: chips only (no premature /uploads request), exactly one temp row.
+  await expect(page.locator('[data-msg-id^="tmp-"]').getByText('temp-figure.png')).toBeVisible()
   await expect(page.locator('[data-msg-id^="tmp-"]')).toHaveCount(1)
 
-  // Open the viewer ON the temp row, then let the real message replace it.
-  await tempBtn.click()
-  const dialog = page.getByRole('dialog', { name: 'temp-figure.png' })
-  await expect(dialog).toBeVisible()
+  // Let the held POST commit and the real row replace the temp, then open the
+  // viewer ON the real row's button (temps have none under the chip contract).
   release()
   await expect(page.locator('[data-msg-id]:not([data-msg-id^="tmp-"])', { hasText: 'race window open' })).toBeVisible()
+  const viewBtn = page.getByRole('button', { name: 'View image: temp-figure.png' })
+  await expect(viewBtn).toBeVisible()
+  await viewBtn.click()
+  const dialog = page.getByRole('dialog', { name: 'temp-figure.png' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('img', { name: 'temp-figure.png' })).toBeVisible()
 
-  // The dialog is STILL open — the store outlived the row remount.
+  // The dialog stays open — the external store outlives any post-swap churn.
   await expect(dialog).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(dialog).toHaveCount(0)
