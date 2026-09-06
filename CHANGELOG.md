@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-09-06
+
 ### Added
 - Equipment records export. Each instrument's page now carries an "Export
   records" button for admins and that instrument's managers, downloading a
