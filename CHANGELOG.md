@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Equipment records export. Each instrument's page now carries an "Export
+  records" button for admins and that instrument's managers, downloading a
+  three-sheet Excel workbook of the instrument's full history — every booking
+  (all statuses) with log-on/log-off times and session notes, the training
+  history, and who is certified, with approver and trainer names resolved and
+  dates rendered in the lab's timezone.
+
 ## [0.26.0] - 2026-09-05
 
 ### Added

@@ -70,7 +70,7 @@ export default async function EquipmentPage({ params, searchParams }: {
       <p className="text-sm font-medium text-subtle">02 — Booking</p>
       <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold text-default">{eq.name}</h1>
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
           {/* Week stepping is the md+ affordance; below it the schedule's own day
               bar subsumes it (and mints ?week= itself when it crosses a boundary). */}
           <div className="hidden items-center gap-2 md:flex">
@@ -79,6 +79,9 @@ export default async function EquipmentPage({ params, searchParams }: {
             <Link href={`?week=${next}`} className="rounded-md border border-border px-2 py-1 text-default transition-colors hover:bg-hover">Next →</Link>
           </div>
           {canManage && <MaintenanceDialogButton equipmentId={equipmentId} />}
+          {canManage && (
+            <a href={`/api/equipment/${equipmentId}/export`} className="rounded-md border border-border px-2 py-1 text-default transition-colors hover:bg-hover">Export records</a>
+          )}
           <NewBookingButton equipmentId={equipmentId} timezone={org.timezone} allowRecurring={eq.allowRecurring}
             equipmentName={eq.name} equipmentLocation={eq.location} retired={retired} />
         </div>
