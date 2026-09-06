@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Chat images sent through a Cloudflare-tunneled LabHub now appear reliably.
+  Sending a pasted image used to render its preview a split second before the
+  server committed the attachment record; the (correct) 404 for that instant
+  was error-cached by the CDN for hours, leaving the sent image broken behind
+  the tunnel ("sent, but not visible"). Upload denials now forbid shared
+  caching, and the optimistic message shows the attachment as a chip until the
+  send is confirmed — the image renders once it truly exists.
+
 ## [0.27.0] - 2026-09-06
 
 ### Added

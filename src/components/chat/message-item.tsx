@@ -327,7 +327,7 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
           )}
 
           {!msg.deleted && !editing && msg.attachments.map((a) => (
-            a.mime.startsWith('image/')
+            a.mime.startsWith('image/') && !isTemp
               ? (
                 // Wave-7: the thumbnail raises the global full-size viewer
                 // (image-viewer-store) — the timeline cap (max-h-64) is for
@@ -341,13 +341,26 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={a.path} alt={a.name} className="max-h-64 rounded-lg border border-border" />
                 </button>
-              ) : (
-                <a key={a.id} href={a.path} target="_blank" rel="noreferrer" download={a.name}
-                  className="mt-1 flex w-fit items-center gap-2 rounded-md border border-border px-2 py-1 text-xs text-muted hover:bg-hover">
-                  <span>📄</span><span className="max-w-xs truncate">{a.name}</span>
-                  <span className="text-subtle">{Math.max(1, Math.round(a.size / 1024))} KB</span>
-                </a>
               )
+              : isTemp && a.mime.startsWith('image/')
+                ? (
+                  // Optimistic temp: the ChatAttachment row does not exist server-side
+                  // yet, so the membership-gated serving route 404s this URL — an <img>
+                  // (or a link click) here fires a premature /uploads request that a CDN
+                  // can error-cache for hours. Chips only until the 201 replaces the
+                  // temp with the real row (which renders the real image).
+                  <span key={a.id} className="mt-1 flex w-fit items-center gap-2 rounded-md border border-border px-2 py-1 text-xs text-muted">
+                    <span aria-hidden>🖼️</span><span className="max-w-xs truncate">{a.name}</span>
+                    <span className="text-subtle">{Math.max(1, Math.round(a.size / 1024))} KB</span>
+                  </span>
+                )
+                : (
+                  <a key={a.id} href={a.path} target="_blank" rel="noreferrer" download={a.name}
+                    className="mt-1 flex w-fit items-center gap-2 rounded-md border border-border px-2 py-1 text-xs text-muted hover:bg-hover">
+                    <span>📄</span><span className="max-w-xs truncate">{a.name}</span>
+                    <span className="text-subtle">{Math.max(1, Math.round(a.size / 1024))} KB</span>
+                  </a>
+                )
           ))}
 
           {!msg.deleted && msg.reactions.length > 0 && (

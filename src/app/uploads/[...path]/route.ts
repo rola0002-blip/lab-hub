@@ -3,6 +3,14 @@ import { getSessionUser } from '@/lib/session'
 import { isMember } from '@/features/chat/conversation-service'
 import { readUpload, contentDisposition } from '@/lib/uploads'
 
+// Every denial must carry no-store: CDNs (Cloudflare) error-cache
+// extension-mapped URLs (.png → 4 h) when the response forbids nothing, and
+// an optimistic-send race legitimately 404s a chat upload seconds before its
+// ChatAttachment row commits — a cacheable 404 then masks the image for every
+// tunnel client until the error entry expires (the wave-13 DM bug).
+const deny = (body: string, status: number) =>
+  new Response(body, { status, headers: { 'Cache-Control': 'private, no-store' } })
+
 export async function GET(_req: Request, { params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params
 
@@ -18,7 +26,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
   // can resolve into chat/ while evading the session+membership check.
   const sanitize = (seg: string) => seg.replace(/[^a-zA-Z0-9._-]/g, '')
   if (path.some((seg) => seg === '' || seg === '.' || seg === '..' || sanitize(seg) !== seg)) {
-    return new Response('Not found', { status: 404 })
+    return deny('Not found', 404)
   }
 
   const isChat = path[0].toLowerCase() === 'chat'
@@ -35,14 +43,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
   // sign-in and equipment pages render them without a session.
   if (isChat) {
     const user = await getSessionUser()
-    if (!user) return new Response('Unauthorized', { status: 401 })
+    if (!user) return deny('Unauthorized', 401)
     const publicPath = '/uploads/' + path.join('/')
     const attachment = await prisma.chatAttachment.findFirst({
       where: { path: publicPath },
       select: { message: { select: { conversationId: true } } },
     })
-    if (!attachment) return new Response('Not found', { status: 404 })
-    if (!(await isMember(user.id, attachment.message.conversationId))) return new Response('Forbidden', { status: 403 })
+    if (!attachment) return deny('Not found', 404)
+    if (!(await isMember(user.id, attachment.message.conversationId))) return deny('Forbidden', 403)
   } else if (isAvatar || isIssue || isDocument || isFeedback || isProjectUpdate) {
     // Avatars, issue attachments, shared documents, feedback screenshots AND
     // project-update attachments are private but workspace-visible: any
@@ -52,11 +60,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
     // this arm learns it — feedback screenshots can show lab data, so the kind
     // must never fall through (spec §7.1).
     const user = await getSessionUser()
-    if (!user) return new Response('Unauthorized', { status: 401 })
+    if (!user) return deny('Unauthorized', 401)
   }
 
   const file = await readUpload(path)
-  if (!file) return new Response('Not found', { status: 404 })
+  if (!file) return deny('Not found', 404)
   const headers: Record<string, string> = {
     'Content-Type': file.mime,
     // Chat files, avatars, documents, feedback screenshots and project-update
@@ -77,7 +85,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
     const name = isDocument
       ? (await prisma.document.findFirst({ where: { path: publicPath }, select: { name: true } }))?.name
       : (await prisma.projectUpdateAttachment.findFirst({ where: { path: publicPath }, select: { name: true } }))?.name
-    if (!name) return new Response('Not found', { status: 404 })
+    if (!name) return deny('Not found', 404)
     // pdf + images view inline in a new tab; office files download. Either way the
     // original name survives via filename* (RFC 5987).
     const inline = file.mime === 'application/pdf' || file.mime.startsWith('image/')

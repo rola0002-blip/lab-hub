@@ -73,4 +73,24 @@ describe('uploads route — internet-facing nosniff', () => {
     expect(res.status).toBe(200) // the sign-in page renders it without a session
     expect(res.headers.get('Cache-Control')).toBe('public, max-age=86400')
   })
+
+  it('denials are never cacheable — an optimistic-send race must not poison a CDN (wave-13 DM bug)', async () => {
+    const m = await makeUser({ role: 'member' })
+    mockUser.current = { ...m, role: 'member' }
+    // A chat upload whose message/attachment row does not exist yet (the
+    // optimistic window): authed request, correct 404 — and the 404 itself
+    // must forbid shared/proxy retention.
+    const orphan = await saveUpload(new File([new Uint8Array(64)], 'race.png', { type: 'image/png' }), 'chat')
+    const res = await serveReq(orphan)
+    expect(res.status).toBe(404)
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store')
+    // The other denial arms carry it too.
+    mockUser.current = null
+    const unauth = await serveReq(orphan)
+    expect(unauth.status).toBe(401)
+    expect(unauth.headers.get('Cache-Control')).toBe('private, no-store')
+    const bogus = await serveReq('/uploads/chat/nope.png')
+    expect(bogus.status).toBe(401)
+    expect(bogus.headers.get('Cache-Control')).toBe('private, no-store')
+  })
 })
