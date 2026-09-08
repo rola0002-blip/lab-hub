@@ -10,7 +10,11 @@
 // unset (assignee stays empty). It is only a DEFAULT — the picker stays editable.
 // The store carries the intent, not the id, so the resolution to the actual
 // current-user id happens where that id is known (the globally-mounted modal).
-type Prefill = { title?: string; description?: string; projectId?: string | null; originMessageId?: string | null; assignToSelf?: boolean }
+// defaultAssigneeId (W14-B) is a concrete user id resolved at the RAISE SITE (the
+// project page seeds the effective lead's id — the store carries ids, never
+// lookups); it wins over assignToSelf, and null/absent falls through to the
+// legacy rule.
+type Prefill = { title?: string; description?: string; projectId?: string | null; originMessageId?: string | null; assignToSelf?: boolean; defaultAssigneeId?: string | null }
 type State = { open: boolean; prefill: Prefill }
 let state: State = { open: false, prefill: {} }
 const listeners = new Set<() => void>()
@@ -21,9 +25,12 @@ export function closeIssueComposer() { state = { open: false, prefill: {} }; emi
 export function subscribeIssueComposer(cb: () => void) { listeners.add(cb); return () => listeners.delete(cb) }
 export function getIssueComposer(): State { return state }
 
-// Pure resolver for the composer's initial assignee: quick-capture (assignToSelf)
-// defaults to the current user; every other open path starts unassigned. Extracted
-// so the rule is unit-testable without rendering the modal.
+// Pure resolver for the composer's initial assignee: an explicit default id (W14-B:
+// the project page seeds the effective lead's id) wins; quick-capture (assignToSelf)
+// defaults to the current user; every other open path starts unassigned. It is only a
+// DEFAULT — the picker stays editable. Extracted so the rule is unit-testable
+// without rendering the modal.
 export function resolveInitialAssignee(prefill: Prefill, currentUserId: string): string | null {
+  if (prefill.defaultAssigneeId) return prefill.defaultAssigneeId
   return prefill.assignToSelf ? currentUserId : null
 }

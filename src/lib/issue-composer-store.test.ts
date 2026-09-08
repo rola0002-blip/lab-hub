@@ -32,7 +32,7 @@ describe('issue composer store', () => {
   })
 })
 
-describe('resolveInitialAssignee (quick-capture default)', () => {
+describe('resolveInitialAssignee (composer assignee defaults)', () => {
   it('assignToSelf → the current user id', () => {
     expect(resolveInitialAssignee({ assignToSelf: true }, 'user-1')).toBe('user-1')
   })
@@ -43,5 +43,13 @@ describe('resolveInitialAssignee (quick-capture default)', () => {
     expect(resolveInitialAssignee({}, 'user-1')).toBeNull()
     expect(resolveInitialAssignee({ projectId: 'p1' }, 'user-1')).toBeNull()
     expect(resolveInitialAssignee({ assignToSelf: false }, 'user-1')).toBeNull()
+  })
+  it('defaultAssigneeId (project-page raise) wins, even over assignToSelf', () => {
+    expect(resolveInitialAssignee({ projectId: 'p1', defaultAssigneeId: 'lead-1' }, 'user-1')).toBe('lead-1')
+    expect(resolveInitialAssignee({ defaultAssigneeId: 'lead-1', assignToSelf: true }, 'user-1')).toBe('lead-1')
+  })
+  it('null defaultAssigneeId (leadless project) falls through to the legacy rule', () => {
+    expect(resolveInitialAssignee({ projectId: 'p1', defaultAssigneeId: null }, 'user-1')).toBeNull()
+    expect(resolveInitialAssignee({ defaultAssigneeId: null, assignToSelf: true }, 'user-1')).toBe('user-1')
   })
 })

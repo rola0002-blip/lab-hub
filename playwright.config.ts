@@ -4,6 +4,14 @@ import { defineConfig } from '@playwright/test'
 // so machines whose local postgres doesn't use the labhub:labhub credential can
 // point both the dev server and the helpers' Prisma client at the same test DB.
 const TEST_DB = process.env.TEST_DATABASE_URL ?? 'postgresql://labhub:labhub@localhost:5432/labhub_test'
+// Hard stop if the target is not a *_test database — a feedback wave once set
+// TEST_DATABASE_URL to the production DATABASE_URL and e2e wiped prod.
+{
+  const name = (() => { try { return new URL(TEST_DB).pathname.replace(/^\//, '') } catch { return TEST_DB } })()
+  if (!name.endsWith('_test')) {
+    throw new Error(`Refusing to run e2e against database "${name}" — point TEST_DATABASE_URL at a *_test database.`)
+  }
+}
 
 export default defineConfig({
   testDir: './e2e',

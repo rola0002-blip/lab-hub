@@ -96,6 +96,14 @@ never commit it); public docs: `docs/features.md`, `docs/desktop.md`,
 
 ## Rules that bite
 
+- NEVER set `TEST_DATABASE_URL` to the `.env` `DATABASE_URL` (or any non-`*_test`
+  database). On 2026-09-08 a feedback wave did exactly that and the e2e/integration
+  harness TRUNCATED production (`labhub` DB, Docker stack) — every session was
+  destroyed, logging the whole lab out; restored from `~/labhub/backups/`. Guards in
+  `vitest.integration.config.ts`, `tests/integration/setup.ts`, `playwright.config.ts`,
+  and `e2e/helpers.ts` now hard-refuse any target not ending in `_test` — never bypass
+  them. Prod DB lives in the `labhub-db-1` container at `localhost:5432`; nightly
+  backups at 03:00 local via `com.labhub.backup.plist` (`scripts/backup.sh`).
 - Never push to a remote without Roland's explicit instruction (the release flow tags
   locally and prints the push command).
 - Never commit: `.env*`, `CLAUDE.md`, `docs/superpowers/**`, `docs/handoffs/**`

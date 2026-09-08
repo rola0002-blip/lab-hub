@@ -85,11 +85,16 @@ desktop app.
   approval queues, recurring bookings, maintenance windows, iCal sync,
   training records at grant time, log-on/log-off session tracking with
   usage notes, and a one-click Excel export of every booking, session,
-  training record, and certification per instrument.
+  training record, and certification per instrument. Revoking a
+  certification or training record requires a reason and lands in the
+  audited training-history ledger; a training record recorded in error
+  takes the certification it underwrote with it (if still held), and the
+  export carries the revocation.
 - **Team chat** — channels, DMs, threads, @mentions, reactions, attachments,
   full-text search, realtime over SSE, web push, Slack import.
 - **Projects** — issue tracker (`LAB-n`), keyboard-accessible board,
-  milestones, labels, weekly update prompts, LabHub Bot digests.
+  milestones, labels, weekly update prompts, LabHub Bot digests. A new
+  issue raised from a project page is pre-assigned to the project's lead.
 - **Files** — shared document library with 100 MB uploads and search.
 - **RA acknowledgments** — members and guests record reading a risk
   assessment from Files' "RA" folder; admins review records and export CSV.

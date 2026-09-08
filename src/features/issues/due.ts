@@ -16,11 +16,17 @@ import { isDoneLike } from './status'
 export type DueBucket = 'overdue' | 'today' | 'upcoming'
 export type DueFilter = 'overdue' | 'week'
 
+// Org-tz yyyy-MM-dd for an ARBITRARY instant (orgToday is the `now` special case —
+// W14-A's revocation ledger renders revokedAt this way).
+export function orgDate(d: Date, tz: string): string {
+  return format(new TZDate(d, tz), 'yyyy-MM-dd')
+}
+
 // yyyy-MM-dd of `now` in the org timezone — the reference "today". The pages
 // compute it once on the server and thread it into the rows/cards as a prop so SSR
 // and client hydration bucket against the SAME day (no midnight-straddle mismatch).
 export function orgToday(now: Date, tz: string): string {
-  return format(new TZDate(now, tz), 'yyyy-MM-dd')
+  return orgDate(now, tz)
 }
 
 // Day-of-week (0=Sunday) of `now` in the org zone — the prompt job's weekday gate.

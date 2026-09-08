@@ -2,7 +2,7 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { requireUser } from '@/lib/session'
-import { grantCertification, revokeCertification } from '@/features/certifications/service'
+import { grantCertification, revokeCertification, revokeTrainingRecord } from '@/features/certifications/service'
 import { PolicyError } from '@/features/certifications/policy'
 
 // W12-B: a Server Action is an RPC endpoint — zod-guard the wire args so a forged
@@ -16,6 +16,13 @@ const grantSchema = z.object({
   trainedOn: z.string().date('Training date must be a valid date.'),
   note: z.string().max(500, 'Notes are limited to 500 characters.').default(''),
 })
+
+// W14-A: revocation requires a reason — the shared field guard for both revoke
+// actions (the grantSchema wire-guard idiom; also closes the gap where the old
+// revokeCertAction had no zod guard at all).
+const revokeReason = z.string().trim().min(1, 'Provide a revocation reason.').max(500, 'Reasons are limited to 500 characters.')
+const revokeCertSchema = z.object({ userId: z.string().min(1), equipmentId: z.string().min(1), reason: revokeReason })
+const revokeRecordSchema = z.object({ recordId: z.string().min(1), reason: revokeReason })
 
 export async function grantCertAction(
   userId: string, equipmentId: string, trainedById: string, trainedOn: string, note: string,
@@ -36,10 +43,26 @@ export async function grantCertAction(
   return { ok: true }
 }
 
-export async function revokeCertAction(userId: string, equipmentId: string): Promise<{ ok: boolean; message?: string }> {
+export async function revokeCertAction(userId: string, equipmentId: string, reason: string): Promise<{ ok: boolean; message?: string }> {
+  const parsed = revokeCertSchema.safeParse({ userId, equipmentId, reason })
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? 'Invalid revocation.' }
   const me = await requireUser()
   try {
-    await revokeCertification({ userId, equipmentId, byId: me.id })
+    await revokeCertification({ userId: parsed.data.userId, equipmentId: parsed.data.equipmentId, byId: me.id, reason: parsed.data.reason })
+  } catch (e) {
+    if (e instanceof PolicyError) return { ok: false, message: e.message }
+    return { ok: false, message: 'Could not save — check your connection and try again.' }
+  }
+  revalidatePath('/certifications')
+  return { ok: true }
+}
+
+export async function revokeTrainingRecordAction(recordId: string, reason: string): Promise<{ ok: boolean; message?: string }> {
+  const parsed = revokeRecordSchema.safeParse({ recordId, reason })
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? 'Invalid revocation.' }
+  const me = await requireUser()
+  try {
+    await revokeTrainingRecord({ recordId: parsed.data.recordId, byId: me.id, reason: parsed.data.reason })
   } catch (e) {
     if (e instanceof PolicyError) return { ok: false, message: e.message }
     return { ok: false, message: 'Could not save — check your connection and try again.' }

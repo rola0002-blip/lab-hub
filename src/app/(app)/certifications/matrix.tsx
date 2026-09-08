@@ -20,9 +20,11 @@ type Grant = { user: { id: string; name: string }; equipment: { id: string; name
 
 export default function Matrix({ users, equipment, certs, editable, today, trainers, me, lastTrained }: Props) {
   const [pending, start] = useTransition()
-  const [msg, setMsg] = useState<string | null>(null)
   const [grant, setGrant] = useState<Grant | null>(null)
   const [grantError, setGrantError] = useState<string | null>(null)
+  const [revoke, setRevoke] = useState<{ user: { id: string; name: string }; equipment: { id: string; name: string } } | null>(null)
+  const [revokeReason, setRevokeReason] = useState('')
+  const [revokeError, setRevokeError] = useState<string | null>(null)
   const has = (u: string, e: string) => certs.some((c) => c.userId === u && c.equipmentId === e)
 
   if (equipment.length === 0) {
@@ -37,7 +39,6 @@ export default function Matrix({ users, equipment, certs, editable, today, train
           `top-0` never engages. Safe here because this subtree renders no <Menu>: menu.tsx
           treats every clipping ancestor as a hard popover bound (files-client.tsx:176-182). */}
       <div className="mt-6 max-h-[80dvh] overflow-auto rounded-xl border border-border bg-surface shadow-xs">
-        {msg && <p className="p-2 text-sm text-[var(--text-danger)]">{msg}</p>}
         <table className="min-w-full border-collapse text-sm">
           <thead>
             <tr>
@@ -62,16 +63,15 @@ export default function Matrix({ users, equipment, certs, editable, today, train
                           dialog but does NOT flip the box — only the revalidated props do,
                           once grantCertAction runs and revalidatePath re-renders. That is
                           not optimistic, so e2e dispatches a plain click and polls
-                          toBeChecked() until the server round-trip lands. */}
+                          toBeChecked() until the server round-trip lands.
+                          Unchecking (W14-A) opens the Revoke dialog instead of acting —
+                          the box stays checked until the action round-trip, same posture. */}
                       <input type="checkbox" aria-label={`${u.name} — ${e.name}`}
                         title={lastTrained[`${u.id}:${e.id}`] ? `Last trained ${lastTrained[`${u.id}:${e.id}`]}` : undefined}
                         checked={has(u.id, e.id)} disabled={pending || !editable.includes(e.id)}
                         onChange={(ev) => {
                           if (ev.target.checked) { setGrantError(null); setGrant({ user: u, equipment: e, date: today, trainerId: me.id, note: '' }) }
-                          else start(async () => {
-                            const r = await revokeCertAction(u.id, e.id)
-                            setMsg(r.ok ? null : (r.message ?? 'Failed'))
-                          })
+                          else { setRevokeError(null); setRevokeReason(''); setRevoke({ user: u, equipment: e }) }
                         }} />
                     </label>
                   </td>
@@ -110,6 +110,26 @@ export default function Matrix({ users, equipment, certs, editable, today, train
                 if (r.ok) setGrant(null); else setGrantError(r.message ?? 'Failed')
               })}
               className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-on hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] disabled:opacity-50">Save</button>
+          </div>
+        </Modal>
+      )}
+      {revoke && (
+        <Modal title={`Revoke certification — ${revoke.user.name} on ${revoke.equipment.name}`} onClose={() => setRevoke(null)}>
+          <p className="mt-2 text-sm text-muted">The certification is withdrawn (training records stay); the revocation is recorded in the history below.</p>
+          <label className="mt-3 block text-sm text-default">Reason <span className="text-subtle">(required)</span>
+            <textarea rows={3} maxLength={500} value={revokeReason} onChange={(e) => setRevokeReason(e.target.value)}
+              className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-base text-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
+          </label>
+          {revokeError && <p role="alert" className="mt-2 text-sm text-[var(--text-danger)]">{revokeError}</p>}
+          <div className="mt-4 flex justify-end gap-2">
+            <button type="button" onClick={() => setRevoke(null)}
+              className="rounded-md border border-border px-3 py-1.5 text-sm text-default hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">Cancel</button>
+            <button type="button" disabled={pending || !revokeReason.trim()}
+              onClick={() => start(async () => {
+                const r = await revokeCertAction(revoke.user.id, revoke.equipment.id, revokeReason)
+                if (r.ok) setRevoke(null); else setRevokeError(r.message ?? 'Failed')
+              })}
+              className="rounded-md bg-[var(--color-danger)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] disabled:opacity-50">Revoke</button>
           </div>
         </Modal>
       )}

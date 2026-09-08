@@ -37,7 +37,8 @@ function Composer({ users, projects, labels, currentUserId }: { users: Opt[]; pr
   const [status, setStatus] = useState<IssueStatus>('TODO')
   const [priority, setPriority] = useState<IssuePriority>('NONE')
   // Quick-capture (c, ⌘K, create-from-chat) defaults the assignee to the current
-  // user; the "New issue" buttons leave it unset. Editable in every case.
+  // user; the project-page raise seeds the project's effective lead (W14-B); other
+  // "New issue" buttons leave it unset. Editable in every case.
   const [assigneeId, setAssigneeId] = useState<string | null>(resolveInitialAssignee(prefill, currentUserId))
   const [projectId, setProjectId] = useState<string | null>(prefill.projectId ?? null)
   const [dueDate, setDueDate] = useState('')

@@ -2,6 +2,16 @@ import { defineConfig } from 'vitest/config'
 import path from 'node:path'
 
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgresql://labhub:labhub@localhost:5432/labhub_test'
+// Hard stop if the resolved target is not a *_test database — a feedback wave
+// once set TEST_DATABASE_URL to the production DATABASE_URL and this harness
+// wiped prod (see AGENTS.md "Rules that bite").
+{
+  const db = process.env.DATABASE_URL!
+  const name = (() => { try { return new URL(db).pathname.replace(/^\//, '') } catch { return db } })()
+  if (!name.endsWith('_test')) {
+    throw new Error(`Refusing to run integration tests against database "${name}" — point TEST_DATABASE_URL at a *_test database.`)
+  }
+}
 process.env.DISABLE_JOBS = '1'
 process.env.BETTER_AUTH_SECRET = process.env.BETTER_AUTH_SECRET ?? 'integration-test-secret-0123456789abcdef'
 
