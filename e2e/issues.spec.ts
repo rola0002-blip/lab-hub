@@ -1,5 +1,6 @@
+import { randomUUID } from 'node:crypto'
 import { test, expect } from '@playwright/test'
-import { wipe, runWizard, signIn, ADMIN, createIssueViaUI, keyboardMoveCardRight, db } from './helpers'
+import { wipe, runWizard, signIn, ADMIN, createIssueViaUI, keyboardMoveCardRight, db, waitForHydration } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 test.beforeEach(async () => { await wipe() })
@@ -237,6 +238,47 @@ test('quick-capture defaults the assignee to the current user; New issue button 
   await page.getByRole('button', { name: 'New issue' }).first().click()
   await expect(dialog).toBeVisible()
   await expect(dialog.getByRole('button', { name: 'Assignee' })).toContainText('Unassigned')
+})
+
+test('project page defaults the assignee to the project lead; leadless stays unassigned', async ({ page }) => {
+  test.setTimeout(90_000)
+  await runWizard(page)
+  await signIn(page, ADMIN.email, ADMIN.password)
+
+  // `User.id` carries no @default (schema.prisma), so a direct insert mints one.
+  const lead = await db.user.create({ data: { id: randomUUID(), name: 'W14 Lead', email: 'w14-lead@lab.test', emailVerified: true, role: 'member' } })
+
+  // A led project, created via the UI, then led via db (the sp8 leadId idiom).
+  await page.goto('/projects')
+  await page.getByRole('button', { name: 'New project' }).click()
+  await page.getByLabel('Name').fill('W14 Led Project')
+  await page.getByRole('button', { name: 'Create project' }).click()
+  await page.waitForURL(/\/projects\/[^/]+$/)
+  const id = new URL(page.url()).pathname.split('/').pop()!
+  await db.project.update({ where: { id }, data: { leadId: lead.id } })
+  await page.goto(`/projects/${id}`)
+  await waitForHydration(page)
+  await page.getByRole('button', { name: 'New issue' }).click()
+  const dialog = page.getByRole('dialog', { name: 'New issue' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Assignee' })).toContainText('W14 Lead')
+  // The project came pre-filled with the raise…
+  await expect(dialog.getByRole('button', { name: 'Project' })).toContainText('W14 Led Project')
+  // …and switching project does NOT re-default the assignee (initial state only).
+  await dialog.getByRole('button', { name: 'Project' }).click()
+  await dialog.getByRole('menuitem', { name: 'No project' }).click()
+  await expect(dialog.getByRole('button', { name: 'Assignee' })).toContainText('W14 Lead')
+  await page.keyboard.press('Escape') // closes the composer itself (the quick-capture precedent)
+  await expect(dialog).toHaveCount(0)
+
+  // A leadless project's raise stays Unassigned (null falls through).
+  await page.goto('/projects')
+  await page.getByRole('button', { name: 'New project' }).click()
+  await page.getByLabel('Name').fill('W14 Bare Project')
+  await page.getByRole('button', { name: 'Create project' }).click()
+  await page.waitForURL(/\/projects\/[^/]+$/)
+  await page.getByRole('button', { name: 'New issue' }).click()
+  await expect(page.getByRole('dialog', { name: 'New issue' }).getByRole('button', { name: 'Assignee' })).toContainText('Unassigned')
 })
 
 test('composer defaults new issues to Todo; Backlog stays selectable', async ({ page }) => {

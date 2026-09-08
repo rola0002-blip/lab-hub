@@ -160,6 +160,34 @@ test('certification gate blocks, then unlocks after granting', async ({ page }) 
     data: { equipmentId: eq.id, startsAt: starts, endsAt: new Date(+starts + 3_600_000), purpose: 'x' },
   })
   expect(ok.status()).toBe(201)
+
+  // W14-A: revocation is reasoned + audited. Unchecking opens the Revoke modal (the
+  // CONTROLLED box stays checked until the action round-trip), an empty reason keeps
+  // Revoke disabled, and after revoking: the box unchecks, booking blocks again, and
+  // the unified ledger records the revocation with its reason.
+  await page.locator('table input[type=checkbox]').first().click()
+  const revokeDialog = page.getByRole('dialog', { name: /Revoke certification/ })
+  await expect(revokeDialog).toBeVisible()
+  await expect(page.locator('table input[type=checkbox]').first()).toBeChecked() // still controlled
+  await expect(revokeDialog.getByRole('button', { name: 'Revoke' })).toBeDisabled()
+  await revokeDialog.getByLabel('Reason').fill('failed the safety refresher')
+  await revokeDialog.getByRole('button', { name: 'Revoke' }).click()
+  await expect(page.locator('table input[type=checkbox]').first()).not.toBeChecked()
+  const blockedAgain = await page.request.post('/api/bookings', {
+    data: { equipmentId: eq.id, startsAt: starts, endsAt: new Date(+starts + 3_600_000), purpose: 'x' },
+  })
+  expect(blockedAgain.status()).toBe(422)
+  await expect(history.getByText('Certification revoked — failed the safety refresher')).toBeVisible()
+
+  // The training record itself is still active (cert-only revoke) — its row carries
+  // a Revoke button; annulling it records the reason against the record.
+  await history.getByRole('button', { name: 'Revoke' }).first().click()
+  const recordDialog = page.getByRole('dialog', { name: /Revoke training record/ })
+  await expect(recordDialog).toBeVisible()
+  await recordDialog.getByLabel('Reason').fill('wrong session recorded')
+  await recordDialog.getByRole('button', { name: 'Revoke' }).click()
+  await expect(history.getByText(/Reason: wrong session recorded/)).toBeVisible()
+  await expect(history.getByText('Certification revoked — failed the safety refresher')).toBeVisible() // still exactly one cert-revocation entry
 })
 
 test('catalogue segments by certification and names the managers', async ({ page }) => {
