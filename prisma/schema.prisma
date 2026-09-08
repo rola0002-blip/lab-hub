@@ -62,6 +62,9 @@ model User {
   raAcknowledgments RaAcknowledgment[]
   trainings          TrainingRecord[] @relation("TrainingUser")
   trainingsAsTrainer TrainingRecord[] @relation("TrainingTrainer")
+  trainingRecordsRevoked TrainingRecord[]          @relation("TrainingRevokedBy")
+  certRevocationsFor     CertificationRevocation[] @relation("CertRevocationUser")
+  certRevocationsBy      CertificationRevocation[] @relation("CertRevocationRevoker")
 
   @@map("user")
 }
@@ -169,6 +172,7 @@ model Equipment {
 
   bookings       Booking[]
   certifications Certification[]
+  certRevocations CertificationRevocation[]
   trainings TrainingRecord[]
   managers       EquipmentManager[]
   maintenance    MaintenanceWindow[]
@@ -738,17 +742,38 @@ model RaAcknowledgment {
 // an org-tz yyyy-MM-dd string (the Milestone.date convention). People RESTRICT (the
 // RaAcknowledgment posture), equipment CASCADEs (the Certification posture).
 model TrainingRecord {
-  id          String    @id @default(cuid())
-  userId      String
-  user        User      @relation("TrainingUser", fields: [userId], references: [id], onDelete: Restrict)
-  equipmentId String
-  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
-  trainedById String
-  trainedBy   User      @relation("TrainingTrainer", fields: [trainedById], references: [id], onDelete: Restrict)
-  trainedOn   String // org-tz yyyy-MM-dd
-  note        String    @default("") // ≤500, enforced in the action
-  createdAt   DateTime  @default(now())
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation("TrainingUser", fields: [userId], references: [id], onDelete: Restrict)
+  equipmentId  String
+  equipment    Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  trainedById  String
+  trainedBy    User      @relation("TrainingTrainer", fields: [trainedById], references: [id], onDelete: Restrict)
+  trainedOn    String // org-tz yyyy-MM-dd
+  note         String    @default("") // ≤500, enforced in the action
+  revokedAt    DateTime?
+  revokedById  String?
+  revokedBy    User?     @relation("TrainingRevokedBy", fields: [revokedById], references: [id], onDelete: Restrict)
+  revokeReason String?
+  createdAt    DateTime  @default(now())
 
   @@index([userId, equipmentId])
   @@index([equipmentId])
+}
+
+// v0.28 W14-A: append-only audit ledger for certification revocations. A row is
+// written ONLY when a Certification row is actually deleted; revoke → re-grant →
+// revoke appends (no unique). revokedTrainingRecordId is a plain string, never an
+// FK — an audit record must never be blocked or cascaded away by its referent.
+model CertificationRevocation {
+  id                      String    @id @default(cuid())
+  userId                  String
+  user                    User      @relation("CertRevocationUser", fields: [userId], references: [id], onDelete: Restrict)
+  equipmentId             String
+  equipment               Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  revokedById             String
+  revokedBy               User      @relation("CertRevocationRevoker", fields: [revokedById], references: [id], onDelete: Restrict)
+  reason                  String
+  revokedAt               DateTime  @default(now())
+  revokedTrainingRecordId String?
 }
