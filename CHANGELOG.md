@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Revoking a certification now asks for a reason and keeps an audit trail: the
+  certification matrix uncheck opens a confirm dialog, and the Training history
+  table becomes a unified ledger showing training records (active and revoked,
+  with who annulled, when, and why) alongside certification revocations.
+  Equipment managers can also revoke a training record outright — if the person
+  is still certified, the certification is revoked with the same reason
+  (recorded in error → both go). The equipment records export gains Revoked and
+  Reason columns on its Training records sheet, and "Last trained" tooltips
+  ignore annulled records.
+- Creating an issue from a project page now defaults the assignee to the
+  project's lead (Unassigned when the project has no effective lead; switching
+  projects in the composer never re-defaults).
+
 ## [0.27.1] - 2026-09-06
 
 ### Fixed
