@@ -22,7 +22,7 @@ async function orgTimezone(): Promise<string> {
 export type TrainingRow = {
   id: string; userId: string; equipmentId: string; userName: string; equipmentName: string
   trainerName: string; trainedOn: string; note: string; createdAt: string
-  revokedAt: string | null; revokeReason: string | null; revokedByName: string | null
+  revokedAt: string | null; revokedOn: string | null; revokeReason: string | null; revokedByName: string | null
 }
 
 export type RevocationRow = {
@@ -94,10 +94,12 @@ export async function revokeCertification(args: { userId: string; equipmentId: s
   })
 }
 
-// W14-A (D2 cascade): annulling a training record (recorded in error) also revokes
-// the certification it underwrote — but ONLY if the cert still exists; a cert already
-// separately revoked produces no second ledger row (the count=1 guard again).
-// Idempotent: revoking an already-annulled record is a no-op.
+// W14-A (D2 cascade): annulling a training record (recorded in error) withdraws
+// the pair's CURRENT certification — whichever record underwrote it (a Certification
+// is pair-level; no record↔cert linkage exists in the schema). Fail-closed by design:
+// re-grant from a surviving record if one is legitimate. The ledger row lands ONLY
+// when a cert row is actually deleted (count = 1); a cert already separately revoked
+// produces no second ledger row. Idempotent: revoking an already-annulled record is a no-op.
 export async function revokeTrainingRecord(args: { recordId: string; byId: string; reason: string }): Promise<void> {
   const reason = assertReason(args.reason)
   const record = await prisma.trainingRecord.findUnique({
@@ -126,6 +128,7 @@ export async function isCertified(userId: string, equipmentId: string): Promise<
 }
 
 export async function listTrainingRecords(): Promise<TrainingRow[]> {
+  const tz = await orgTimezone()
   const rows = await prisma.trainingRecord.findMany({
     include: {
       user: { select: { name: true } },
@@ -141,6 +144,7 @@ export async function listTrainingRecords(): Promise<TrainingRow[]> {
     userName: r.user.name, equipmentName: r.equipment.name, trainerName: r.trainedBy.name,
     trainedOn: r.trainedOn, note: r.note, createdAt: r.createdAt.toISOString(),
     revokedAt: r.revokedAt?.toISOString() ?? null,
+    revokedOn: r.revokedAt ? orgDate(r.revokedAt, tz) : null,
     revokeReason: r.revokeReason,
     revokedByName: r.revokedBy?.name ?? null,
   }))

@@ -141,6 +141,21 @@ describe('revocation (W14-A)', () => {
     expect(rows[0].revokedByName).toBe(admin.name)
   })
 
+  it('record revoke after a separate cert revoke adds no second ledger row', async () => {
+    const admin = await makeUser({ role: 'admin' })
+    const u = await makeUser()
+    const eq = await makeEquipment()
+    await grantCertification({ userId: u.id, equipmentId: eq.id, grantedById: admin.id, trainedOn: '2024-01-05' })
+    await revokeCertification({ userId: u.id, equipmentId: eq.id, byId: admin.id, reason: 'off the instrument' })
+    const [rec] = await prisma.trainingRecord.findMany()
+    await revokeTrainingRecord({ recordId: rec.id, byId: admin.id, reason: 'recorded in error' })
+    expect(await prisma.certificationRevocation.count()).toBe(1)
+    const after = await prisma.trainingRecord.findUniqueOrThrow({ where: { id: rec.id } })
+    expect(after.revokeReason).toBe('recorded in error')
+    const rows = await listTrainingRecords()
+    expect(rows[0].revokedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
   it('listCertRevocations returns the joined DTO', async () => {
     const admin = await makeUser({ role: 'admin', name: 'Ada Admin' })
     const u = await makeUser({ name: 'Trainee' })
