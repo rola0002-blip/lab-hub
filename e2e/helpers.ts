@@ -9,6 +9,15 @@ import { COLOSSUS_BOT_ID, LAB_UPDATES_CHANNEL_ID } from '@/features/bot/ids'
 // `TEST_DATABASE_URL=… npx playwright test` points the runner's Prisma client at
 // the same database the dev server uses.
 const TEST_DB = process.env.TEST_DATABASE_URL ?? 'postgresql://labhub:labhub@localhost:5432/labhub_test'
+// Mirror of the playwright.config.ts guard: never let the wipe/seed client
+// connect to anything but a *_test database (a mis-set TEST_DATABASE_URL
+// wiped production once).
+{
+  const name = (() => { try { return new URL(TEST_DB).pathname.replace(/^\//, '') } catch { return TEST_DB } })()
+  if (!name.endsWith('_test')) {
+    throw new Error(`Refusing to point e2e helpers at database "${name}" — TEST_DATABASE_URL must target a *_test database.`)
+  }
+}
 
 // Prisma 7 requires a driver adapter for the runtime connection — the brief's
 // `new PrismaClient({ datasources: ... })` throws under Prisma 7. Mirror the
