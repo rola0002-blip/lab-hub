@@ -75,11 +75,16 @@ export function ProjectHeader({ project, role, users, folders, timezone, today, 
           {canEdit && (
             <>
               {/* Secondary next to the accent "New issue": posting an update is the
-                  weekly habit, filing an issue is the primary action here. */}
+                  weekly habit, filing an issue is the primary action here. W14-B:
+                  raised from the project page, the composer pre-fills THIS project and
+                  defaults the assignee to its EFFECTIVE lead (banned/system/guest
+                  leads degrade to "No lead" and must not promise an assignee the
+                  header itself calls leadless). The default never re-applies on
+                  in-composer project switches — initial state, like projectId. */}
               <button type="button" onClick={() => openProjectUpdateComposer({ projectId: project.id })} className="rounded-md border border-border px-3 py-1.5 text-sm text-default hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
                 Post update
               </button>
-              <button type="button" onClick={() => openIssueComposer({ projectId: project.id })} className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-on hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
+              <button type="button" onClick={() => openIssueComposer({ projectId: project.id, defaultAssigneeId: project.hasEffectiveLead && project.lead ? project.lead.id : null })} className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-on hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
                 <Plus size={15} aria-hidden />New issue
               </button>
             </>
