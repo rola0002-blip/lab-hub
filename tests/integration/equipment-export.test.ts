@@ -46,6 +46,10 @@ describe('equipment records export route', () => {
     await prisma.trainingRecord.create({ data: {
       userId: member.id, equipmentId: eq.id, trainedById: trainer.id, trainedOn: '2026-08-30', note: 'hands-on pump down',
     } })
+    await prisma.trainingRecord.create({ data: {
+      userId: member.id, equipmentId: eq.id, trainedById: trainer.id, trainedOn: '2026-09-01', note: 'superseded session',
+      revokedAt: new Date('2026-09-02T01:00:00Z'), revokedById: admin.id, revokeReason: 'recorded in error',
+    } })
     return { admin, member, trainer, eq }
   }
 
@@ -68,6 +72,14 @@ describe('equipment records export route', () => {
     expect(bookings.getRow(2).getCell(1).value).toBe('Tue 1 Sep, 10:00–13:00') // org-tz (UTC+8) formatted window: 02:00Z renders 10:00
     const training = wb.getWorksheet('Training records')!
     expect(training.getRow(2).getCell(4).value).toBe('Ted Trainer')
+    // W14-A: Revoked/Reason columns (cells 6/7). Locate rows by Date — the two seed
+    // records share a creation instant, so row order between them is not pinned.
+    const revokedRow = [2, 3].map((n) => training.getRow(n)).find((row) => row.getCell(1).value === '2026-09-01')!
+    const activeRow = [2, 3].map((n) => training.getRow(n)).find((row) => row.getCell(1).value === '2026-08-30')!
+    expect(revokedRow.getCell(6).value).toBe('2 Sep 2026, 9:00 AM') // org-tz (UTC+8): 01:00Z renders 9:00 AM
+    expect(revokedRow.getCell(7).value).toBe('recorded in error')
+    expect(activeRow.getCell(6).value).toBe('')
+    expect(activeRow.getCell(7).value).toBe('')
     const certs = wb.getWorksheet('Certifications')!
     expect(certs.getRow(2).getCell(1).value).toBe('Mira Member')
     expect(certs.getRow(2).getCell(3).value).toBe('Alice Admin') // grantedById resolved

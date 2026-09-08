@@ -103,6 +103,10 @@ export async function buildEquipmentRecordsXlsx(
     })),
   )
 
+  // W14-A: Revoked/Reason are blank for active rows — an annulled record stays
+  // visible with its reason (the unified-ledger posture). The Certifications sheet
+  // deliberately stays as-is: a revoked cert no longer exists, its revocation lives
+  // in this sheet's Revoked/Reason columns and the web ledger.
   const trainingSheet = wb.addWorksheet('Training records')
   trainingSheet.columns = [
     { header: 'Date', key: 'date', width: 14 },
@@ -110,6 +114,8 @@ export async function buildEquipmentRecordsXlsx(
     { header: 'Email', key: 'email', width: 28 },
     { header: 'Trainer', key: 'trainer', width: 22 },
     { header: 'Note', key: 'note', width: 34 },
+    { header: 'Revoked', key: 'revoked', width: 22 },
+    { header: 'Reason', key: 'reason', width: 34 },
     { header: 'Recorded at', key: 'recordedAt', width: 22 },
   ]
   trainingSheet.addRows(
@@ -119,6 +125,8 @@ export async function buildEquipmentRecordsXlsx(
       email: t.user.email,
       trainer: t.trainedBy.name,
       note: t.note,
+      revoked: t.revokedAt ? formatDateTime(t.revokedAt, timezone) : '',
+      reason: t.revokeReason ?? '',
       recordedAt: formatDateTime(t.createdAt, timezone),
     })),
   )
