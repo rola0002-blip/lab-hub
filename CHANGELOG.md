@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-09-08
+
 ### Added
 - Revoking a certification now asks for a reason and keeps an audit trail: the
   certification matrix uncheck opens a confirm dialog, and the Training history
