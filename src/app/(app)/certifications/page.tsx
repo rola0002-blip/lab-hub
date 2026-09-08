@@ -2,9 +2,9 @@ import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/db'
 import { requireUser } from '@/lib/session'
 import { orgToday } from '@/features/issues/due'
-import { listTrainingRecords, listCertRevocations, type TrainingRow, type RevocationRow } from '@/features/certifications/service'
+import { listTrainingRecords, listCertRevocations } from '@/features/certifications/service'
 import Matrix from './matrix'
-import History from './history'
+import History, { type LedgerRow } from './history'
 
 export default async function CertificationsPage() {
   const me = await requireUser()
@@ -34,13 +34,14 @@ export default async function CertificationsPage() {
   }
   // W14-A: the unified ledger — training records + certification revocations, newest
   // first by each row's org-tz day (both yyyy-MM-dd, so the lexicographic compare is
-  // exact — the lastTrained convention).
-  type LedgerRow = (TrainingRow & { kind: 'training' }) | (RevocationRow & { kind: 'revocation' })
+  // exact — the lastTrained convention), with the row's timestamp as the same-day
+  // tie-break so a 15:00 revocation lists above a 09:00 training recorded that day.
   const day = (r: LedgerRow) => (r.kind === 'training' ? r.trainedOn : r.revokedOn)
+  const ts = (r: LedgerRow) => (r.kind === 'training' ? r.createdAt : r.revokedAt)
   const rows: LedgerRow[] = [
     ...records.map((r) => ({ ...r, kind: 'training' as const })),
     ...revocations.map((r) => ({ ...r, kind: 'revocation' as const })),
-  ].sort((a, b) => (day(a) < day(b) ? 1 : day(a) > day(b) ? -1 : 0))
+  ].sort((a, b) => (day(a) > day(b) ? -1 : day(a) < day(b) ? 1 : ts(a) < ts(b) ? 1 : -1))
   return (
     <div>
       <p className="text-sm font-medium text-subtle">02 — Certifications</p>

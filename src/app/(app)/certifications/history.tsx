@@ -38,7 +38,7 @@ export default function History({ rows, editable }: { rows: LedgerRow[]; editabl
                 <td className="p-2 text-default">{r.equipmentName}</td>
                 <td className="p-2 text-default">{r.trainerName}</td>
                 <td className="p-2 text-muted">{r.note}
-                  {r.revokedAt && r.revokeReason && <span className="block text-xs">Reason: {r.revokeReason}</span>}
+                  {r.revokedAt && <span className="block text-xs">Revoked {r.revokedOn} by {r.revokedByName}{r.revokeReason ? ` — Reason: ${r.revokeReason}` : ''}</span>}
                 </td>
                 <td className="p-2 text-right">
                   {!r.revokedAt && editable.includes(r.equipmentId) && (
