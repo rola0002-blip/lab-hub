@@ -1,7 +1,40 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getSessionUser } from '@/lib/session'
-import { createBooking, createRecurringBooking } from '@/features/booking/service'
+import { createBooking, createRecurringBooking, listBookings } from '@/features/booking/service'
 import { bookingBody } from '@/features/booking/schema'
+
+const query = z.object({
+  equipmentId: z.string().min(1).optional(),
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+  mine: z.enum(['1', 'true', '0', 'false']).optional(),
+})
+
+export async function GET(req: Request) {
+  const user = await getSessionUser()
+  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const p = new URL(req.url).searchParams
+  const parsed = query.safeParse({
+    equipmentId: p.get('equipmentId') ?? undefined,
+    from: p.get('from') ?? undefined,
+    to: p.get('to') ?? undefined,
+    mine: p.get('mine') ?? undefined,
+  })
+  if (!parsed.success) return NextResponse.json({ error: 'bad_request' }, { status: 400 })
+  const d = parsed.data
+  const from = d.from ?? new Date()
+  const to = d.to ?? new Date(from.getTime() + 7 * 24 * 3_600_000)
+  if (from.getTime() >= to.getTime()) return NextResponse.json({ error: 'bad_request' }, { status: 400 })
+  const bookings = await listBookings({
+    equipmentId: d.equipmentId,
+    userId: d.mine === '1' || d.mine === 'true' ? user.id : undefined,
+    from, to,
+  })
+  return NextResponse.json({
+    bookings: bookings.map((b) => ({ ...b, startsAt: b.startsAt.toISOString(), endsAt: b.endsAt.toISOString() })),
+  })
+}
 
 export async function POST(req: Request) {
   const user = await getSessionUser()

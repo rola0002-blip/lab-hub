@@ -18,6 +18,28 @@ export const equipmentSchema = z.object({
 })
 export type EquipmentPolicyInput = z.infer<typeof equipmentSchema>
 
+export type ActiveEquipmentItem = {
+  id: string; name: string; status: Equipment['status']; approvalPolicy: Equipment['approvalPolicy']
+  certificationRequired: boolean; allowRecurring: boolean
+  maxDurationMinutes: number; advanceBookingDays: number; managerIds: string[]
+}
+
+// The booking-catalogue read: ACTIVE instruments only, with the policy knobs a
+// caller needs before composing a booking and the manager ids for approval
+// routing. RETIRED instruments are invisible — they cannot be booked.
+export async function listActiveEquipment(): Promise<ActiveEquipmentItem[]> {
+  const rows = await prisma.equipment.findMany({
+    where: { status: 'ACTIVE' },
+    select: {
+      id: true, name: true, status: true, approvalPolicy: true, certificationRequired: true,
+      allowRecurring: true, maxDurationMinutes: true, advanceBookingDays: true,
+      managers: { select: { userId: true } },
+    },
+    orderBy: { name: 'asc' },
+  })
+  return rows.map(({ managers, ...eq }) => ({ ...eq, managerIds: managers.map((m) => m.userId) }))
+}
+
 export async function createEquipment(data: EquipmentPolicyInput): Promise<Equipment> {
   return prisma.equipment.create({ data: equipmentSchema.parse(data) })
 }

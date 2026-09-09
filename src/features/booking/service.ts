@@ -1,5 +1,6 @@
 import 'server-only'
 import { Prisma } from '@prisma/client'
+import type { BookingStatus } from '@prisma/client'
 import { env } from '@/lib/env'
 import { prisma } from '@/lib/db'
 import { notify } from '@/lib/notify'
@@ -11,6 +12,33 @@ import * as bot from '@/features/bot'
 import { evaluateBooking, type Verdict, type Role, type PolicyInput } from './policy'
 import { expandWeekly } from './recurrence'
 import { canStartSession, canEndSession } from './session'
+
+export type BookingListItem = {
+  id: string; equipmentId: string; startsAt: Date; endsAt: Date
+  status: BookingStatus; purpose: string; userId: string; userName: string
+}
+
+// The lab-wide schedule read: bookings whose [startsAt,endsAt) intersects
+// [from,to) — startsAt < to && endsAt > from. All four human-decided statuses
+// are returned (EXPIRED is a sweep artifact, not schedule data); pass userId to
+// scope to one caller ("mine").
+export async function listBookings(filter: { equipmentId?: string; userId?: string; from: Date; to: Date }): Promise<BookingListItem[]> {
+  const rows = await prisma.booking.findMany({
+    where: {
+      status: { in: ['PENDING', 'CONFIRMED', 'REJECTED', 'CANCELLED'] },
+      ...(filter.equipmentId ? { equipmentId: filter.equipmentId } : {}),
+      ...(filter.userId ? { userId: filter.userId } : {}),
+      startsAt: { lt: filter.to },
+      endsAt: { gt: filter.from },
+    },
+    select: {
+      id: true, equipmentId: true, startsAt: true, endsAt: true, status: true, purpose: true,
+      userId: true, user: { select: { name: true } },
+    },
+    orderBy: { startsAt: 'asc' },
+  })
+  return rows.map(({ user, ...b }) => ({ ...b, userName: user.name }))
+}
 
 export type CreateBookingInput = { userId: string; equipmentId: string; startsAt: Date; endsAt: Date; purpose: string }
 export type CreateBookingResult =
