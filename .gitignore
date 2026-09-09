@@ -2,6 +2,9 @@
 
 # dependencies
 /node_modules
+# labhub-mcp (services/mcp installs its own)
+services/mcp/node_modules
+services/mcp/dist
 /.pnp
 .pnp.*
 .yarn/*
