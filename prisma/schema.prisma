@@ -777,3 +777,17 @@ model CertificationRevocation {
   revokedAt               DateTime  @default(now())
   revokedTrainingRecordId String?
 }
+
+// v0.30: service API keys (the service-api-key + labhub-mcp design, 2026-09-09).
+// Bearer `labhub_<base64url>` credentials for headless callers; every valid key
+// resolves to the LabHub Bot at runtime (COLOSSUS_BOT_ID — deliberately no
+// relation, no per-key user mapping in v1). tokenHash is sha256-hex of the full
+// token: no plaintext at rest, deterministic lookup.
+model ServiceKey {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  tokenHash   String    @unique
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+}

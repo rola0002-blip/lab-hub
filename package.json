@@ -13,6 +13,7 @@
     "test:e2e": "playwright test",
     "contrast": "node scripts/check-contrast.mjs",
     "import:slack": "tsx scripts/import-slack.ts",
+    "mint-service-key": "node scripts/mint-service-key.mjs",
     "coverage:unit": "vitest run --coverage.enabled --reporter=blob --outputFile=.vitest/blob/unit.json",
     "coverage:int": "vitest run --config vitest.integration.config.ts --coverage.enabled --reporter=blob --outputFile=.vitest/blob/int.json",
     "coverage": "rm -rf .vitest/blob && npm run coverage:unit && npm run coverage:int && vitest run --merge-reports=.vitest/blob --coverage --coverage.thresholds.lines=85 --coverage.thresholds.functions=85 --coverage.thresholds.branches=80",
