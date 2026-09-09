@@ -17,6 +17,7 @@ export type CalSlot = {
   id: string; kind: 'booking' | 'maintenance'
   startsAt: string; endsAt: string; label: string; status?: string; own?: boolean
   sessionStartedAt?: string | null; sessionEndedAt?: string | null; sessionNote?: string | null
+  purpose?: string
 }
 
 type Props = {
@@ -215,10 +216,10 @@ export default function ScheduleView({ equipmentId, timezone, weekStartISO, slot
                 // under reduced motion.
                 return (
                   <button key={`${s.id}-${day}`} type="button" onClick={() => setDetails(s)}
-                    aria-label={`${s.label}, ${formatRange(new Date(s.startsAt), new Date(s.endsAt), timezone)}${s.status === 'PENDING' ? ', pending' : ''}`}
+                    aria-label={`${s.label}${s.purpose ? ` · ${s.purpose}` : ''}, ${formatRange(new Date(s.startsAt), new Date(s.endsAt), timezone)}${s.status === 'PENDING' ? ', pending' : ''}`}
                     className={`absolute inset-x-0.5 overflow-hidden rounded-md px-1 text-left text-[11px] transition-opacity hover:opacity-85 active:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] ${style}`}
                     style={{ top: r.top, height: r.height }}>
-                    {s.label}{s.status === 'PENDING' ? ' (pending)' : ''}
+                    {s.label}{s.purpose ? ` · ${s.purpose}` : ''}{s.status === 'PENDING' ? ' (pending)' : ''}
                   </button>
                 )
               })}
