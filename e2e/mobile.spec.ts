@@ -346,13 +346,16 @@ test('tapping a booking shows details and cancels it', async ({ browser }) => {
 
   // The block is a real button now (it was `pointer-events-none` décor), and its
   // accessible name leads with the booker — ADMIN.name is 'Roland'.
-  const block = main(page).getByRole('button', { name: /Roland/ })
+  const block = main(page).getByRole('button', { name: /Roland · e2e block tap/ })
   await expect(block).toHaveCount(1)
   await block.click()
 
   const details = page.getByRole('dialog', { name: 'Booking details' })
   await expect(details).toBeVisible()
   await expect(details.getByText('10:00–11:00')).toBeVisible()
+  // Wave 15: the booking's purpose rides the block (aria-label) and gets its
+  // own quoted line in the modal — the approvals-queue idiom.
+  await expect(details.getByText('“e2e block tap”')).toBeVisible()
   // Status is the WORD inside the Badge — never colour alone (§6).
   await expect(details.getByText('confirmed')).toBeVisible()
 

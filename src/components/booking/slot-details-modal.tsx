@@ -97,6 +97,7 @@ export default function SlotDetailsModal({ slot, timezone, canCancel, canSession
       <div className="space-y-3">
         <p className="text-sm font-medium text-default">{slot.label}</p>
         <p className="text-sm text-muted">{formatRange(new Date(slot.startsAt), new Date(slot.endsAt), timezone)}</p>
+        {slot.purpose && <p className="text-sm text-muted">“{slot.purpose}”</p>}
         {/* `CalSlot.status` is a bare string and maintenance carries none, so the
             guard and the cast are both load-bearing (bookings-client.tsx:33's
             idiom). The chip renders the WORD, so status is never colour alone. */}

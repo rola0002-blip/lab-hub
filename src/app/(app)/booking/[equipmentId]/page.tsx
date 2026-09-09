@@ -54,6 +54,7 @@ export default async function EquipmentPage({ params, searchParams }: {
       sessionStartedAt: b.sessionStartedAt?.toISOString() ?? null,
       sessionEndedAt: b.sessionEndedAt?.toISOString() ?? null,
       sessionNote: b.sessionNote ?? '',
+      purpose: b.purpose,
     })),
     ...maintenance.map((m) => ({
       id: m.id, kind: 'maintenance' as const, startsAt: m.startsAt.toISOString(), endsAt: m.endsAt.toISOString(), label: `Maintenance: ${m.reason}`,
