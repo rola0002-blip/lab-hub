@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-09-09
+
 ### Added
 - Booking purposes now appear on the equipment calendar — inline on each
   block (`Name · purpose`, clipped like a long name), and as a quoted line in
