@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-09-09
+
 ### Added
 - Service API keys: headless `Authorization: Bearer labhub_…` auth that acts
   as the LabHub Bot, minted/revoked via `npm run mint-service-key`
