@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Service API keys: headless `Authorization: Bearer labhub_…` auth that acts
+  as the LabHub Bot, minted/revoked via `npm run mint-service-key`
+  (`scripts/mint-service-key.mjs`). Keys are stored sha256-hashed, can be
+  revoked, and stamp `lastUsedAt`.
+- Operations REST endpoints for integrations: `GET /api/equipment`,
+  `GET /api/bookings` (overlap window, `mine=`, `status=` filter; defaults to
+  live PENDING/CONFIRMED like the schedule view), `GET/POST /api/projects`,
+  and `PATCH /api/issues/[id]`.
+- `services/mcp` — a stdio MCP server (`labhub-mcp`) exposing 20 tools
+  (chat/auto-reply, DMs, projects, issues, equipment availability, bookings,
+  document search) over the REST API for AI agents.
+
 ## [0.29.0] - 2026-09-09
 
 ### Added

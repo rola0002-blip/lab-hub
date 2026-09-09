@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSessionUser } from '@/lib/session'
+import type { BookingStatus } from '@prisma/client'
 import { createBooking, createRecurringBooking, listBookings } from '@/features/booking/service'
 import { bookingBody } from '@/features/booking/schema'
 
@@ -9,12 +10,23 @@ const query = z.object({
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
   mine: z.enum(['1', 'true', '0', 'false']).optional(),
+  status: z.string().optional(),
 })
+
+const parseStatuses = (raw: string | undefined): BookingStatus[] | null | undefined => {
+  if (!raw) return undefined
+  const allowed = ['PENDING', 'CONFIRMED', 'REJECTED', 'CANCELLED', 'EXPIRED']
+  const parts = raw.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
+  if (parts.length === 0 || parts.some((s) => !allowed.includes(s))) return null
+  return parts as BookingStatus[]
+}
 
 export async function GET(req: Request) {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const p = new URL(req.url).searchParams
+  const statuses = parseStatuses(p.get('status') ?? undefined)
+  if (statuses === null) return NextResponse.json({ error: 'bad_request' }, { status: 400 })
   const parsed = query.safeParse({
     equipmentId: p.get('equipmentId') ?? undefined,
     from: p.get('from') ?? undefined,
@@ -30,6 +42,7 @@ export async function GET(req: Request) {
     equipmentId: d.equipmentId,
     userId: d.mine === '1' || d.mine === 'true' ? user.id : undefined,
     from, to,
+    statuses,
   })
   return NextResponse.json({
     bookings: bookings.map((b) => ({ ...b, startsAt: b.startsAt.toISOString(), endsAt: b.endsAt.toISOString() })),

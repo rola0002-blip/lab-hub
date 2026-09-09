@@ -43,14 +43,14 @@ const lastCall = (): { url: string; init: RequestInit } => {
 
 describe('request building', () => {
   it('sends the bearer key and hits the configured base url', async () => {
-    fetchMock.mockResolvedValue(okResponse({ user: { id: 'colossus-bot' } }))
+    fetchMock.mockResolvedValue(okResponse({ users: [{ id: 'colossus-bot', name: 'LabHub Bot', isSystem: true }, { id: 'u1', name: 'Human', isSystem: false }] }))
     const result = await call('whoami')
     expect(result.isError).toBeUndefined()
     const { url, init } = lastCall()
-    expect(url).toBe('http://localhost:3000/api/me')
+    expect(url).toBe('http://localhost:3000/api/chat/users')
     expect(init.method).toBe('GET')
     expect((init.headers as Record<string, string>).authorization).toBe('Bearer test-key')
-    expect(payload(result)).toEqual({ user: { id: 'colossus-bot' } })
+    expect(payload(result)).toEqual({ id: 'colossus-bot', name: 'LabHub Bot', isSystem: true })
   })
 
   it('honours LABHUB_URL and trims a trailing slash', async () => {

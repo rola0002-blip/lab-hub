@@ -75,6 +75,26 @@ describe('GET /api/bookings', () => {
     expect(bookings[0].startsAt).toEqual(inWindowStart.toISOString())
   })
 
+  it('excludes CANCELLED/REJECTED by default; status= overrides; invalid status 400s', async () => {
+    const u = await makeUser({ role: 'member' }); mockUser.current = { ...u, role: u.role }
+    const mk = async (status: string) => {
+      const eq = await makeEquipment()
+      return prisma.booking.create({ data: { userId: u.id, equipmentId: eq.id, purpose: 'p', status: status as never, startsAt: hoursFromNow(10), endsAt: hoursFromNow(12) } })
+    }
+    await mk('CONFIRMED')
+    await mk('CANCELLED')
+    await mk('REJECTED')
+
+    const def = await (await bookingsGET(new Request('http://t/api/bookings'))).json()
+    expect(def.bookings).toHaveLength(1)
+    expect(def.bookings[0].status).toBe('CONFIRMED')
+
+    const withCancelled = await (await bookingsGET(new Request('http://t/api/bookings?status=CONFIRMED,CANCELLED'))).json()
+    expect(withCancelled.bookings).toHaveLength(2)
+
+    expect((await bookingsGET(new Request('http://t/api/bookings?status=BOGUS'))).status).toBe(400)
+  })
+
   it('overlap is half-open: a booking ending at `from` or starting at `to` is excluded', async () => {
     const u = await makeUser({ role: 'member' }); mockUser.current = { ...u, role: u.role }
     // Shared Date objects: the boundaries must land on the SAME instant in the

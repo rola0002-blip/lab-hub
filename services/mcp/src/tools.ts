@@ -72,7 +72,13 @@ export function registerTools(server: McpServer): void {
       description:
         'Return the identity the LABHUB_API_KEY resolves to (the LabHub Bot). Use to verify the service key is valid.',
     },
-    async () => run(() => get('/api/me')),
+    async () =>
+      run(async () => {
+        const r = await get('/api/chat/users')
+        const me = (r.users ?? []).find((u: { isSystem?: boolean }) => u.isSystem)
+        if (!me) throw Object.assign(new Error('no system identity found'), { status: 500, body: r })
+        return me
+      }),
   )
 
   server.registerTool(

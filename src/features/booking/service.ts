@@ -22,10 +22,10 @@ export type BookingListItem = {
 // [from,to) — startsAt < to && endsAt > from. All four human-decided statuses
 // are returned (EXPIRED is a sweep artifact, not schedule data); pass userId to
 // scope to one caller ("mine").
-export async function listBookings(filter: { equipmentId?: string; userId?: string; from: Date; to: Date }): Promise<BookingListItem[]> {
+export async function listBookings(filter: { equipmentId?: string; userId?: string; from: Date; to: Date; statuses?: BookingStatus[] }): Promise<BookingListItem[]> {
   const rows = await prisma.booking.findMany({
     where: {
-      status: { in: ['PENDING', 'CONFIRMED', 'REJECTED', 'CANCELLED'] },
+      status: { in: filter.statuses ?? ['PENDING', 'CONFIRMED'] },
       ...(filter.equipmentId ? { equipmentId: filter.equipmentId } : {}),
       ...(filter.userId ? { userId: filter.userId } : {}),
       startsAt: { lt: filter.to },
