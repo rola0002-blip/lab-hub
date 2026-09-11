@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Equipment-manager assignment: the admin equipment form's native
+  multi-select never registered mouse clicks under the app's webfont
+  (verified in both Chromium and WebKit — keyboard was the only path
+  in). It is now an accessible checkbox list that submits through the
+  same `managers` field; checking, saving, and clearing managers all
+  round-trip (e2e-pinned).
+### Changed
+- Issue rows (`/issues`, `/issues/me`, project detail) show the issue's
+  project as a small eyebrow line under the `LAB-…` identifier + title,
+  at every width — previously the project was invisible on phones and a
+  far-right desktop-only column (now removed). Long project names
+  truncate; project-less issues render no second line.
+
 ## [0.30.0] - 2026-09-09
 
 ### Added
