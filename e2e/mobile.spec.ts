@@ -606,8 +606,8 @@ test('dnd grips carry touch-action:none and meet the 24px target bar', async ({ 
 // /certifications can carry a wide table and still pass.
 
 // Long enough that the untruncated string cannot fit a 375px row: the issue title
-// must truncate inside the row's `min-w-0`, and the project name must be ABSENT
-// below md rather than merely clipped.
+// must truncate inside the row's `min-w-0`, and the project name is now VISIBLE
+// below md as a clipped eyebrow under the title line (previously absent).
 const LONG_PROJECT = 'Wafer-scale hBN uniformity programme'
 const LONG_ISSUE = 'Chamber base pressure drifts above 5e-6 mbar after the turbo service, blocking every growth run'
 
@@ -653,7 +653,7 @@ test('no horizontal overflow on core routes at 375px', async ({ browser }) => {
   }
 })
 
-test('issues list collapses to two lines below md', async ({ browser }) => {
+test('issue rows carry the project eyebrow below md', async ({ browser }) => {
   test.setTimeout(120_000)
   const phone = await phonePage(browser)
   await runWizard(phone)
@@ -665,17 +665,18 @@ test('issues list collapses to two lines below md', async ({ browser }) => {
   await phone.goto('/issues')
   const row = main(phone).locator('[role=listitem]')
   await expect(row).toHaveCount(1)
-  // Line 1 survives; the three md+ cells (labels, project, due) are display:none, so
-  // the project name is absent rather than clipped — this is the collapse, not a
-  // truncation. The title link is still on screen.
+  // Line 1 survives; the md+ cells (labels, due) are display:none below md, but the
+  // project name now renders as the in-link eyebrow — visible yet clipped by its own
+  // `truncate`, not collapsed away. The title link is still on screen.
   await expect(row.getByRole('link', { name: /LAB-\d+/ })).toBeVisible()
-  await expect(row.getByText(LONG_PROJECT)).toBeHidden()
+  await expect(row.getByText(LONG_PROJECT)).toBeVisible()
   // …and the assignee, the one control the second line carries, stays reachable.
   await expect(row.getByRole('button', { name: 'Unassigned' })).toBeVisible()
 
-  // The same row at desktop width is the historical 8-track grid: the project cell
-  // is back. A second context (not a resize) so the SSR'd `md:` branch is what the
-  // server rendered, exactly as a desktop user gets it.
+  // The same row at desktop width: the project is no longer a grid cell but the
+  // in-link eyebrow, still server-rendered at md+. A second context (not a resize)
+  // so the SSR'd `md:` branch is what the server rendered, exactly as a desktop
+  // user gets it.
   const desk = await desktopPage(browser)
   await signIn(desk, ADMIN.email, ADMIN.password)
   await desk.goto('/issues')
