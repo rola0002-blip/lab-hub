@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-09-11
+
 ### Fixed
 - Equipment-manager assignment: the admin equipment form's native
   multi-select never registered mouse clicks under the app's webfont
