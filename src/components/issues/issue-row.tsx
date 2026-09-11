@@ -18,7 +18,7 @@ export function IssueRow({ issue, role, users, timezone, today, tabIndex, onFocu
 }) {
   const [, start] = useTransition()
   const canEdit = role !== 'guest'
-  // Two lines below md (the project eyebrow lives INSIDE the Link cell, not the row), the unchanged 7-track grid at md+. The row itself stays the
+  // Two lines below md (the project eyebrow lives INSIDE the Link cell, not the row), the 7-track grid at md+. The row itself stays the
   // focus target (role=listitem + tabIndex): issue-list-view.tsx:47 focuses
   // `[role=listitem]` by index, so wrapping the row in anything would break roving focus.
   return (
