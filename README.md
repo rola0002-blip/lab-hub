@@ -83,7 +83,7 @@ desktop app.
 
 - **Equipment booking** — per-instrument policies, certification gating,
   approval queues, recurring bookings, booking purposes shown on the calendar,
-  maintenance windows, iCal sync,
+  maintenance windows, iCal sync, named per-instrument managers,
   training records at grant time, log-on/log-off session tracking with
   usage notes, and a one-click Excel export of every booking, session,
   training record, and certification per instrument. Revoking a
