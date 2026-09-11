@@ -1,5 +1,5 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
-import { wipe, seedSystem, runWizard, signIn, ADMIN, db } from './helpers'
+import { wipe, seedSystem, runWizard, signIn, ADMIN, db, waitForHydration } from './helpers'
 
 // Per-context client IP. better-auth rate-limits /sign-in/email + /sign-up/email at
 // 10/60 s keyed by client IP; on localhost every request otherwise shares one bucket
@@ -46,6 +46,35 @@ test('equipment approval dropdown shows plain-language labels and persists a cha
   await page.click('button:has-text("Save")')
   await page.waitForURL('**/admin/equipment')
   await expect(page.getByText('Raman')).toBeVisible()
+})
+
+test('equipment manager checkboxes persist a round-trip', async ({ browser }) => {
+  const page = await newPage(browser)
+  await signIn(page, ADMIN.email, ADMIN.password)
+  await page.goto('/admin/equipment/new')
+  await waitForHydration(page)
+  await page.fill('input[name=name]', 'TEM Grid Station')
+  // Resolve the manager's row label text instead of assuming an order: capture the
+  // first checkbox row's name, then target that same row by text on later visits.
+  const firstRow = page.locator('label:has(input[name=managers])').first()
+  const managerName = (await firstRow.innerText()).trim()
+  await firstRow.locator('input').check()
+  await page.click('button:has-text("Save")')
+  await page.waitForURL('**/admin/equipment')
+  const openEdit = async () => {
+    await page.locator('li', { hasText: 'TEM Grid Station' }).getByRole('link', { name: 'Edit' }).click()
+    await page.waitForURL(/\/admin\/equipment\/[^/]+$/)
+  }
+  // The saved manager survives the round-trip: the row renders checked on the edit page.
+  await openEdit()
+  const row = page.locator('label:has(input[name=managers])', { hasText: managerName })
+  await expect(row.locator('input')).toBeChecked()
+  // Unchecking every box submits zero `managers` entries — setManagers(id, []) clears all.
+  await row.locator('input').uncheck()
+  await page.click('button:has-text("Save")')
+  await page.waitForURL('**/admin/equipment')
+  await openEdit()
+  await expect(row.locator('input')).not.toBeChecked()
 })
 
 test('creating an issue posts to #lab-updates', async ({ browser }) => {
