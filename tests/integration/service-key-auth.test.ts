@@ -69,6 +69,13 @@ describe('service-key bearer auth (through getSessionUser on a real route)', () 
   it('no session cookie and no header stays 401 (the cookie path is unchanged)', async () => {
     expect((await call(null, { conversationId: LAB_UPDATES_CHANNEL_ID, body: 'x' })).status).toBe(401)
   })
+
+  it('a banned bot short-circuits every service key (Task 10)', async () => {
+    await prisma.serviceKey.create({ data: { name: 'test-key', tokenHash: HASH } })
+    await prisma.user.update({ where: { id: COLOSSUS_BOT_ID }, data: { banned: true } })
+    expect(await resolveServiceKeyUser(`Bearer ${TOKEN}`)).toBeNull()
+    expect((await call(`Bearer ${TOKEN}`, { conversationId: LAB_UPDATES_CHANNEL_ID, body: 'x' })).status).toBe(401)
+  })
 })
 
 describe('mint-service-key module (real DB)', () => {

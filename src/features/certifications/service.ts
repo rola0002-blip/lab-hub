@@ -55,6 +55,15 @@ export async function grantCertification(args: {
     if (!trainer || trainer.banned || trainer.isSystem || trainer.role === 'guest') {
       throw new PolicyError('invalid', 'Choose a valid trainer.')
     }
+    // The trainee must be a real, non-banned, non-system user. Guests ARE
+    // certifiable (pinned behavior) — only banned/system/missing ids are rejected.
+    const trainee = await tx.user.findUnique({
+      where: { id: args.userId },
+      select: { banned: true, isSystem: true },
+    })
+    if (!trainee || trainee.banned || trainee.isSystem) {
+      throw new PolicyError('invalid', 'Choose a valid trainee.')
+    }
     // Atomic novelty probe: createMany … ON CONFLICT DO NOTHING — r.count is the
     // INSERT's own command-tag count, so the race loser deterministically sees 0
     // and skips the record. (A double-Save or two managers granting concurrently

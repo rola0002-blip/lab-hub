@@ -181,6 +181,7 @@ export async function editMessage(args: { messageId: string; userId: string; bod
     prisma.user.findUnique({ where: { id: args.userId } }),
   ])
   if (!msg || msg.deletedAt || !user) return { ok: false, message: 'Message not found.' }
+  if (!(await isMember(args.userId, msg.conversationId))) return { ok: false, message: 'Members only.' }
   if (msg.userId !== args.userId) return { ok: false, message: 'You can only edit your own messages.' }
   const body = args.body.trim().slice(0, 4000)
   if (!body) return { ok: false, message: 'Message cannot be empty.' }
@@ -196,6 +197,7 @@ export async function deleteMessage(args: { messageId: string; userId: string })
     prisma.user.findUnique({ where: { id: args.userId } }),
   ])
   if (!msg || msg.deletedAt || !user) return { ok: false, message: 'Message not found.' }
+  if (!(await isMember(args.userId, msg.conversationId))) return { ok: false, message: 'Members only.' }
   if (msg.userId !== args.userId && user.role !== 'admin') return { ok: false, message: 'You can only delete your own messages.' }
   // The message row stays as a tombstone, but its attachments must be revoked:
   // drop the ChatAttachment rows and unlink the on-disk files. Otherwise the
