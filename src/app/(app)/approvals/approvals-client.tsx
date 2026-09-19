@@ -17,7 +17,13 @@ export type RecurringItem = { ruleId: string; count: number; first: ApprovalItem
 export default function ApprovalsClient({ items, recurring }: { items: ApprovalItem[]; recurring: RecurringItem[] }) {
   const [pending, start] = useTransition()
   const [rejecting, setRejecting] = useState<string | null>(null)
-  const [reason, setReason] = useState('')
+  // Reasons are per-row: one shared string let a reason drafted for request A ride
+  // along with request B's rejection, and any successful reject wiped every other
+  // row's draft. Keyed by booking id (singles) / rule id (recurring); entries for
+  // decided rows just fall out of the queue with the row itself.
+  const [reasons, setReasons] = useState<Record<string, string>>({})
+  const reasonFor = (id: string) => reasons[id] ?? ''
+  const setReasonFor = (id: string, v: string) => setReasons((prev) => ({ ...prev, [id]: v }))
 
   // Approvals have no inline retry affordance, so a failed decision surfaces a
   // blameless toast whose Retry re-runs the exact same action (reason captured in
@@ -30,7 +36,7 @@ export default function ApprovalsClient({ items, recurring }: { items: ApprovalI
   const reject = (id: string, why: string) => start(async () => {
     const r = await rejectAction(id, why)
     if (!r.ok) { toast(r.message ?? "We couldn't reject this request.", { action: { label: 'Retry', onClick: () => reject(id, why) } }); return }
-    setRejecting(null); setReason('')
+    setRejecting(null); setReasonFor(id, '')
   })
   const approveRule = (ruleId: string) => start(async () => {
     const x = await approveRuleAction(ruleId)
@@ -39,7 +45,7 @@ export default function ApprovalsClient({ items, recurring }: { items: ApprovalI
   const rejectRule = (ruleId: string, why: string) => start(async () => {
     const x = await rejectRuleAction(ruleId, why)
     if (!x.ok) { toast(x.message ?? "We couldn't reject the series.", { action: { label: 'Retry', onClick: () => rejectRule(ruleId, why) } }); return }
-    setRejecting(null); setReason('')
+    setRejecting(null); setReasonFor(ruleId, '')
   })
 
   if (items.length === 0 && recurring.length === 0) {
@@ -68,9 +74,9 @@ export default function ApprovalsClient({ items, recurring }: { items: ApprovalI
             <div className="mt-3 flex flex-wrap gap-2">
               {/* placeholder-only was the whole accessible name; `min-w-40` keeps the field
                   usable once the Confirm button wraps beside it on a narrow row. */}
-              <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (required)" aria-label="Rejection reason"
+              <input value={reasonFor(r.ruleId)} onChange={(e) => setReasonFor(r.ruleId, e.target.value)} placeholder="Reason (required)" aria-label="Rejection reason"
                 className="min-w-40 flex-1 rounded-md border border-border bg-surface px-3 py-1.5 text-sm" />
-              <button disabled={pending || !reason.trim()} onClick={() => rejectRule(r.ruleId, reason)}
+              <button disabled={pending || !reasonFor(r.ruleId).trim()} onClick={() => rejectRule(r.ruleId, reasonFor(r.ruleId))}
                 className="rounded-md bg-[var(--color-danger)] px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50">Confirm reject</button>
             </div>
           )}
@@ -96,9 +102,9 @@ export default function ApprovalsClient({ items, recurring }: { items: ApprovalI
           </div>
           {rejecting === i.id && (
             <div className="mt-3 flex flex-wrap gap-2">
-              <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (required, shown to requester)" aria-label="Rejection reason"
+              <input value={reasonFor(i.id)} onChange={(e) => setReasonFor(i.id, e.target.value)} placeholder="Reason (required, shown to requester)" aria-label="Rejection reason"
                 className="min-w-40 flex-1 rounded-md border border-border bg-surface px-3 py-1.5 text-sm" />
-              <button disabled={pending || !reason.trim()} onClick={() => reject(i.id, reason)}
+              <button disabled={pending || !reasonFor(i.id).trim()} onClick={() => reject(i.id, reasonFor(i.id))}
                 className="rounded-md bg-[var(--color-danger)] px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50">Confirm reject</button>
             </div>
           )}
