@@ -75,7 +75,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               in the root stacking context and still paint over the header. On phones
               the header stays in flow — #app-content's pt-[env(safe-area-inset-top)]
               sits ABOVE it, so a phone-side sticky would need its own env() terms. */}
-          <header className="flex h-12 items-center justify-between gap-2 border-b border-border bg-canvas px-3 md:sticky md:top-0 md:z-30 md:px-6">
+          <header className="flex h-[var(--app-header-h)] items-center justify-between gap-2 border-b border-border bg-canvas px-3 md:sticky md:top-0 md:z-30 md:px-6">
             <BackButton />
             <MobileNavToggle />
             <div role="search" aria-label="Search" data-region-root tabIndex={-1} className="min-w-0 flex-1 outline-none">

@@ -4,7 +4,7 @@
 // window.__TAURI__ global — ahead of user init scripts, so the global is
 // already present when this runs).
 //
-// App usage contract, verified against the web app source on 2026-08-21:
+// App usage contract, verified against the web app source on 2026-09-20:
 // - src/components/hooks/use-notification-state.ts gates on
 //   `'Notification' in window` before ever touching the API and reads
 //   `Notification.permission === 'granted'`
@@ -12,12 +12,20 @@
 //   service workers for web content, so the push opt-in stays hidden in the
 //   shell and these checks are the whole in-window surface today)
 // - src/lib/push-subscribe.ts owns the subscribe flow
-// - public/sw.js:3 calls registration.showNotification — service-worker
+// - public/sw.js:36 calls registration.showNotification — service-worker
 //   context, out of this window shim's reach by design
-// - the web app NEVER calls `new Notification(...)` or requestPermission;
-//   the constructor bridge below is the forward contract for future
-//   in-page notification calls. The app enforces its own mute/permission
-//   rules BEFORE notifying — the shell just renders what it is given.
+// - the popup arm (v0.32 Tasks 8-9) made the constructor bridge load-bearing:
+//   src/components/bell.tsx's alert funnel calls
+//   `new Notification(title, { body, tag, silent })` — the in-shell toast arm
+//   (silent carries the per-device sound toggle) and the browser popup arm
+//   (always silent; the WebAudio chime is the sound there). Both set
+//   `t.onclick` for click-to-navigate; the shim keeps ignoring it — the shell
+//   owns click routing (focus + switch, derived Rust-side from the calling
+//   webview). notification-wizard.tsx (Browser popups step, plus its preview
+//   `new Notification` demo) and popup-toggle.tsx call
+//   `Notification.requestPermission()`, which the shim's static 'granted'
+//   below satisfies. The app still enforces its own mute/permission rules
+//   BEFORE notifying — the shell just renders what it is given.
 // - options.silent (optional, default false) maps to the shell's ToastSound:
 //   absent/false -> OS default sound; true -> silent toast (downloads).
 //
@@ -28,7 +36,7 @@
   var core
   try {
     core = window.__TAURI__ && window.__TAURI__.core
-  } catch (e) {
+  } catch (_e) {
     return // no Tauri IPC reachable: leave Notification native
   }
   if (!core || typeof core.invoke !== 'function') return
@@ -43,11 +51,11 @@
     var body = ''
     try {
       body = options && options.body != null ? String(options.body) : ''
-    } catch (e) { /* non-object options keep an empty body */ }
+    } catch (_e) { /* non-object options keep an empty body */ }
     var silent = false
     try {
       silent = !!(options && options.silent)
-    } catch (e) { /* non-object options keep sound on */ }
+    } catch (_e) { /* non-object options keep sound on */ }
     try {
       window.__TAURI__.core
         .invoke('desktop_notify', {
@@ -58,7 +66,7 @@
         .catch(function (err) {
           console.warn('desktop_notify failed', err)
         })
-    } catch (e) {
+    } catch (_e) {
       console.warn('desktop_notify dispatch failed', e)
     }
     // Click handling belongs to the shell (focus + switch to the notifying
@@ -77,13 +85,13 @@
       configurable: false,
       enumerable: true,
     })
-  } catch (e) { /* unreachable on our own class; guard per policy */ }
+  } catch (_e) { /* unreachable on our own class; guard per policy */ }
 
   // Callback-compatible promise form; always resolves 'granted'.
   ShimNotification.requestPermission = function (callback) {
     try {
       if (typeof callback === 'function') callback('granted')
-    } catch (e) { /* a throwing user callback must not break the shim */ }
+    } catch (_e) { /* a throwing user callback must not break the shim */ }
     return Promise.resolve('granted')
   }
 
@@ -93,7 +101,7 @@
       writable: true,
       configurable: true,
     })
-  } catch (e) {
+  } catch (_e) {
     // Never break the page: worst case the native Notification remains.
   }
 })()

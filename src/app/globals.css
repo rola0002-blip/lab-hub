@@ -107,6 +107,14 @@
   }
 }
 
+/* ── 1b. APP LAYOUT TOKEN ─────────────────────────── */
+/* The (app) header's height ((app)/layout.tsx renders h-12 = 3rem at every
+    breakpoint — phones keep the header in flow, md+ pins it). Two consumers
+    must agree on it: the header itself (height: var(--app-header-h)) and
+    chat-shell's viewport calc, which subtracts it. One token so they cannot
+    drift; change the header's height HERE, never in a utility class. */
+:root { --app-header-h: 3rem; }
+
 /* ── 2. SEMANTIC TOKENS — LIGHT ───────────────────── */
 :root {
   --bg-canvas:var(--color-neutral-0); --bg-surface:var(--color-neutral-0);

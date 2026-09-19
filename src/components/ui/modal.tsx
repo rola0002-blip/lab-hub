@@ -8,8 +8,12 @@ export function Modal({ title, onClose, wide = false, children }: {
   title: string; onClose: () => void; wide?: boolean; children: React.ReactNode
 }) {
   const ref = useRef<HTMLDivElement>(null)
+  const headingRef = useRef<HTMLHeadingElement>(null)
   const labelId = useId()
-  useFocusTrap(ref, true)
+  // Initial focus is the dialog HEADING (tabIndex -1, passed below): opening a
+  // modal lands screen-reader users on the dialog's name instead of the Close
+  // button; the trap's own first-focusable fallback still covers a missing ref.
+  useFocusTrap(ref, true, headingRef)
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }
     document.addEventListener('keydown', onKey)
@@ -20,7 +24,7 @@ export function Modal({ title, onClose, wide = false, children }: {
       <div ref={ref} role="dialog" aria-modal="true" aria-labelledby={labelId}
         className={`max-h-[85vh] w-full ${wide ? 'max-w-2xl' : 'max-w-md'} overflow-y-auto rounded-xl bg-surface p-5 shadow-modal`}>
         <div className="mb-3 flex items-center justify-between">
-          <h2 id={labelId} className="text-lg font-semibold text-default">{title}</h2>
+          <h2 id={labelId} ref={headingRef} tabIndex={-1} className="text-lg font-semibold text-default">{title}</h2>
           <IconButton label="Close" onClick={onClose}><X size={16} /></IconButton>
         </div>
         {children}

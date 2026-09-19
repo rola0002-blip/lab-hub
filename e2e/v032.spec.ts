@@ -9,6 +9,8 @@ import { wipe, seedSystem, runWizard, signIn, waitForHydration, ADMIN, db } from
 // file delete (files-client) — asserting the dialog's aria, that focus lands
 // INSIDE it (on the safe dismiss arm), and that both arms work; plus an axe
 // pass with a dialog open (both themes, the a11y.spec idiom).
+// Task 12 additions: modal initial focus (heading), the toast single-live-region
+// shape, and the Past bookings server-side Load more.
 
 // Per-context client IP so better-auth's per-IP sign-in rate limit never trips
 // (mirrors the other serial suites); a distinct 10.60.x band avoids collisions.
@@ -153,5 +155,80 @@ test('axe: a surface with the ConfirmDialog open stays clean in both themes', as
   await page.keyboard.press('Enter')
   await expect(confirmDialog(page, 'Cancel this booking?')).toBeVisible()
   await auditBothThemes(page, 'confirm-dialog-open')
+  await page.context().close()
+})
+
+// Task 12 — a Modal with no autoFocus field opens on its HEADING (tabIndex -1,
+// the trap's new preferred element): screen readers announce the dialog's name,
+// and the Close button is no longer the opening focus. Composer modals that
+// autoFocus an input keep that field (the trap yields to in-dialog focus).
+test('modal: initial focus lands on the dialog heading', async ({ browser }) => {
+  const page = await newPage(browser)
+  await signIn(page, ADMIN.email, ADMIN.password)
+  await page.goto('/dashboard')
+  await waitForHydration(page)
+  await page.getByRole('button', { name: 'Give feedback' }).click()
+  const dlg = page.getByRole('dialog', { name: 'Give feedback' })
+  await expect(dlg).toBeVisible()
+  await expect(dlg.getByRole('heading', { name: 'Give feedback' })).toBeFocused()
+  // Closed per pick (its own Close control), never a global Escape.
+  await dlg.getByRole('button', { name: 'Close' }).click()
+  await expect(dlg).toHaveCount(0)
+  await page.context().close()
+})
+
+// Task 12 — toasts announce through exactly ONE polite live region: the host
+// container. A per-toast role="status" nested a second live region inside it
+// (double announcements in some screen readers), so the toast node itself must
+// carry no role. Triggered via the create-issue composer's empty-title guard,
+// which also proves the autoFocus title field kept its focus through the trap.
+test('toast: single polite live region, no nested role=status', async ({ browser }) => {
+  const page = await newPage(browser)
+  await signIn(page, ADMIN.email, ADMIN.password)
+  await page.goto('/issues')
+  await waitForHydration(page)
+  await page.getByRole('button', { name: 'New issue' }).first().click()
+  const dlg = page.getByRole('dialog', { name: 'New issue' })
+  await expect(dlg).toBeVisible()
+  await expect(dlg.getByRole('textbox', { name: 'Issue title' })).toBeFocused()
+  await dlg.getByRole('button', { name: 'Create issue', exact: true }).click()
+  const msg = page.getByText('Enter a title.', { exact: true })
+  await expect(msg).toBeVisible()
+  // The nearest aria-live ancestor is the host container — polite, and there is
+  // NO second live region above it (nested regions would re-announce the text).
+  await expect(msg.locator('xpath=ancestor::*[@aria-live="polite"][1]')).toHaveAttribute('aria-live', 'polite')
+  await expect(msg.locator('xpath=ancestor::*[@aria-live="polite"][2]')).toHaveCount(0)
+  // And the toast node itself is not a status region.
+  await expect(page.getByRole('status').filter({ hasText: 'Enter a title.' })).toHaveCount(0)
+  await page.context().close()
+})
+
+// Task 12 — the Past list paginates server-side via ?past=<n> (default 30,
+// step +30, cap 365; no client state). 31 seeded past bookings render the
+// first 30 plus a Load more link; following it re-fetches with take 60, shows
+// all 31, and the link disappears (a short page IS the end of the list).
+test('bookings: past list Load more steps ?past', async ({ browser }) => {
+  const page = await newPage(browser)
+  await signIn(page, ADMIN.email, ADMIN.password)
+  const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  // Serial spec, one shared DB: Task 11's cancelled ConfirmoScope still sits in
+  // Past and would take one of the 30 slots — clear the table so the counts
+  // below are exactly the seeds'.
+  await db.booking.deleteMany({})
+  const eq = await db.equipment.create({ data: { name: 'PastScope', approvalPolicy: 'NONE' } })
+  await db.booking.createMany({ data: Array.from({ length: 31 }, (_, i) => ({
+    userId: me.id, equipmentId: eq.id, status: 'CONFIRMED', purpose: `past ${i}`,
+    startsAt: new Date(Date.now() - (i + 2) * 3_600_000), endsAt: new Date(Date.now() - (i + 2) * 3_600_000 + 1_800_000),
+  })) })
+  await page.goto('/bookings')
+  await waitForHydration(page)
+  const rows = page.getByRole('listitem').filter({ hasText: 'PastScope' })
+  await expect(rows).toHaveCount(30)
+  const more = page.getByRole('link', { name: 'Load more' })
+  await expect(more).toHaveAttribute('href', '/bookings?past=60')
+  await more.click()
+  await page.waitForURL('**/bookings?past=60')
+  await expect(rows).toHaveCount(31)
+  await expect(more).toHaveCount(0)
   await page.context().close()
 })

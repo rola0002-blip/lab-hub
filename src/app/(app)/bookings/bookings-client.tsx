@@ -126,7 +126,7 @@ function SessionNoteModal({ bookingId, mode, initial, onDone, onErr }: {
   )
 }
 
-export default function BookingsClient({ upcoming, past }: { upcoming: Item[]; past: Item[] }) {
+export default function BookingsClient({ upcoming, past, pastMoreHref }: { upcoming: Item[]; past: Item[]; pastMoreHref?: string }) {
   const [msg, setMsg] = useState<string | null>(null)
   return (
     <div className="mt-6 space-y-8">
@@ -155,6 +155,11 @@ export default function BookingsClient({ upcoming, past }: { upcoming: Item[]; p
           <EmptyState icon={Clock} title="No history yet" hint="Your past and closed bookings will collect here over time." />
         ) : (
           <ul className="mt-2 divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface shadow-xs">{past.map((b) => <Row key={b.id} b={b} upcoming={false} onErr={setMsg} />)}</ul>
+        )}
+        {/* Server-driven pagination (the page computes the href): shown only
+            when the fetch returned a full page — a short page IS the list's end. */}
+        {pastMoreHref && (
+          <Link href={pastMoreHref} className="mt-2 inline-block text-sm font-medium text-[var(--text-accent)] hover:underline">Load more</Link>
         )}
       </section>
     </div>

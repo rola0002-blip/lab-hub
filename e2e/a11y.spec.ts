@@ -173,6 +173,28 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
   await expect(page.getByRole('heading', { name: 'Welcome, Roland' }).first()).toBeVisible()
   await auditBothThemes(page, 'dashboard')
 
+  // Task 12 — the Menu keyboard model (plan F5.6 basics): opening moves focus
+  // to the first item, arrows cycle with wrap, Home/End jump, and Enter picks
+  // (a focused menuitem <button> click). Driven on the header's user menu; the
+  // menu closes per pick — no Escape anywhere in this sequence (the doctrine:
+  // menus close per pick / by re-focusing a field, never a global Escape).
+  await page.getByRole('button', { name: 'Your account' }).click()
+  const profileItem = page.getByRole('menuitem', { name: 'Profile' })
+  const signOutItem = page.getByRole('menuitem', { name: 'Sign out' })
+  await expect(profileItem).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await expect(signOutItem).toBeFocused()
+  await page.keyboard.press('ArrowDown') // wraps past the end back to the top
+  await expect(profileItem).toBeFocused()
+  await page.keyboard.press('End')
+  await expect(signOutItem).toBeFocused()
+  await page.keyboard.press('Home')
+  await expect(profileItem).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('menu')).toHaveCount(0)
+  await page.waitForURL('**/profile')
+  await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible()
+
   // A populated channel view (message + composer + hover toolbar reachable).
   await createChannel(page, 'a11y')
   const box = page.getByPlaceholder('Write a message…')

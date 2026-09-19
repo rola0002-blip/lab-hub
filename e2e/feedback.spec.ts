@@ -71,9 +71,10 @@ async function sendFeedback(page: Page, kind: 'Bug' | 'Idea', body: string, atta
   // The store closes the composer only after a 201, so its disappearance IS the success
   // signal; the toast is the user-visible half of the same event.
   await expect(d).toHaveCount(0)
-  // Filtered, not bare: the app shell also mounts an sr-only role="status" live region
-  // (#live-status), so `getByRole('status')` alone is strict-mode ambiguous.
-  await expect(page.getByRole('status').filter({ hasText: 'your feedback is in' })).toBeVisible()
+  // Task 12 toast shape: the toast node carries no role — the host container is
+  // the single polite live region — so pin the text INSIDE an aria-live region
+  // (the app shell's sr-only #live-msgs/#live-status never carry it).
+  await expect(page.locator('[aria-live="polite"]').getByText('your feedback is in')).toBeVisible()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

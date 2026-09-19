@@ -103,7 +103,9 @@ test('2: member acknowledges an RA and sees their history', async ({ browser }) 
   await mp.getByRole('button', { name: 'I have read this RA' }).click()
 
   // The toast is the immediate signal; the row (via router.refresh) is the durable one.
-  await expect(mp.getByRole('status').filter({ hasText: 'Acknowledged — recorded.' })).toBeVisible()
+  // Task 12 toast shape: toasts carry no role — the text is pinned inside the
+  // host container's single polite live region (the sr-only shell regions are empty).
+  await expect(mp.locator('[aria-live="polite"]').getByText('Acknowledged — recorded.')).toBeVisible()
   const row = mp.getByRole('listitem').filter({ hasText: RA_DOC })
   await expect(row).toContainText(MATRIC)
 
@@ -161,7 +163,7 @@ test('4: revoke — own row frees re-acknowledgement; admin revoke removes the r
   const ownConfirm = mp.getByRole('dialog', { name: `Revoke your acknowledgment of “${RA_DOC}”?` })
   await expect(ownConfirm).toBeVisible()
   await ownConfirm.getByRole('button', { name: 'Revoke' }).click()
-  await expect(mp.getByRole('status').filter({ hasText: 'Acknowledgment revoked.' })).toBeVisible()
+  await expect(mp.locator('[aria-live="polite"]').getByText('Acknowledgment revoked.')).toBeVisible()
   await expect(mp.getByRole('listitem').filter({ hasText: RA_DOC })).toHaveCount(0)
   await expect(mp.getByText('You have not acknowledged any RA yet.')).toBeVisible()
 
@@ -169,7 +171,7 @@ test('4: revoke — own row frees re-acknowledgement; admin revoke removes the r
   await mp.getByRole('combobox', { name: 'Which RA did you read?' }).selectOption({ label: RA_DOC })
   await mp.getByLabel('Matriculation number').fill(MATRIC)
   await mp.getByRole('button', { name: 'I have read this RA' }).click()
-  await expect(mp.getByRole('status').filter({ hasText: 'Acknowledged — recorded.' })).toBeVisible()
+  await expect(mp.locator('[aria-live="polite"]').getByText('Acknowledged — recorded.')).toBeVisible()
   await mp.context().close()
 
   // Admin revokes the member's row from Records; the CSV stops carrying it.
@@ -181,7 +183,7 @@ test('4: revoke — own row frees re-acknowledgement; admin revoke removes the r
   const adminConfirm = ap.getByRole('dialog', { name: `Revoke ${MEMBER.name}'s acknowledgment of “${RA_DOC}”?` })
   await expect(adminConfirm).toBeVisible()
   await adminConfirm.getByRole('button', { name: 'Revoke' }).click()
-  await expect(ap.getByRole('status').filter({ hasText: 'Acknowledgment revoked.' })).toBeVisible()
+  await expect(ap.locator('[aria-live="polite"]').getByText('Acknowledgment revoked.')).toBeVisible()
   await expect(ap.getByRole('row').filter({ hasText: MATRIC })).toHaveCount(0)
   const csv = await ap.request.get('/api/ra/acknowledgments/csv')
   expect(await csv.text()).not.toContain(MATRIC)

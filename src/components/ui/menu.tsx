@@ -29,6 +29,16 @@ export function Menu({ button, label, items, buttonClassName, align = 'right' }:
   const [pos, setPos] = useState<{ up: boolean; left: boolean; maxH: number | null }>({ up: false, left: align === 'left', maxH: null })
   const ref = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  // On open, focus the first ENABLED item (menu basics, plan F5.6 — deliberately
+  // NO typeahead). preventScroll: this runs in the same pre-paint pass as the
+  // placement effect below, before the flip/cap classes have committed — letting
+  // focus() scroll would jump based on the unpositioned popover.
+  useLayoutEffect(() => {
+    if (!open) return
+    menuRef.current
+      ?.querySelector<HTMLButtonElement>('button[role="menuitem"]:not([disabled])')
+      ?.focus({ preventScroll: true })
+  }, [open])
   useEffect(() => {
     if (!open) return
     function onDoc(e: MouseEvent) { if (!ref.current?.contains(e.target as Node)) setOpen(false) }
@@ -76,12 +86,31 @@ export function Menu({ button, label, items, buttonClassName, align = 'right' }:
     else if (!left && menuW > roomIfRight && roomIfLeft > roomIfRight) left = true
     setPos({ up, left, maxH: menuH > avail ? Math.max(0, Math.floor(avail)) : null })
   }, [open, align])
+  // Keyboard model, basics only (F5.6): arrows cycle with wrap, Home/End jump.
+  // Items stay plain buttons — no roving tabindex — so Tab keeps reaching them
+  // in DOM order exactly as before. Enter/Space pick natively (a focused
+  // <button> click), and Escape still closes via the document listener above.
+  function onMenuKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    const items = menuRef.current
+      ? Array.from(menuRef.current.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not([disabled])'))
+      : []
+    if (!items.length) return
+    const i = items.indexOf(document.activeElement as HTMLButtonElement)
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      const dir = e.key === 'ArrowDown' ? 1 : -1
+      // Focus outside the items (i < 0) enters from the end the arrow came from.
+      const next = i < 0 ? (dir === 1 ? 0 : items.length - 1) : (i + dir + items.length) % items.length
+      items[next].focus()
+    } else if (e.key === 'Home') { e.preventDefault(); items[0].focus() }
+    else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus() }
+  }
   return (
     <div ref={ref} className="relative">
       <button type="button" aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}
         className={buttonClassName ?? ICON_TRIGGER}>{button}</button>
       {open && (
-        <div role="menu" ref={menuRef} style={pos.maxH != null ? { maxHeight: pos.maxH } : undefined}
+        <div role="menu" ref={menuRef} onKeyDown={onMenuKeyDown} style={pos.maxH != null ? { maxHeight: pos.maxH } : undefined}
           className={`absolute z-40 min-w-44 rounded-lg border border-border bg-surface p-1 shadow-menu ${
             pos.left ? 'left-0' : 'right-0'
           } ${pos.up ? 'bottom-full mb-1' : 'top-full mt-1'}${pos.maxH != null ? ' overflow-y-auto' : ''}`}>
