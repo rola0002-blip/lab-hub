@@ -34,7 +34,7 @@ describe('isSystem exclusions', () => {
     const u = await makeUser()
     mockUser.current = { id: u.id, name: u.name, email: u.email, role: u.role }
     const { users } = await (await chatUsers()).json()
-    const chooser = humanUsers(users)
+    const chooser = humanUsers<{ id: string; isSystem: boolean }>(users)
     expect(chooser.some((x: { id: string }) => x.id === COLOSSUS_BOT_ID)).toBe(false) // invisible in choosers
     expect(chooser.some((x: { id: string }) => x.id === u.id)).toBe(true)             // humans still listed
   })
