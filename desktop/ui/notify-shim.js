@@ -67,7 +67,7 @@
           console.warn('desktop_notify failed', err)
         })
     } catch (_e) {
-      console.warn('desktop_notify dispatch failed', e)
+      console.warn('desktop_notify dispatch failed', _e)
     }
     // Click handling belongs to the shell (focus + switch to the notifying
     // server); onclick stays settable but is ignored, close() is a no-op.

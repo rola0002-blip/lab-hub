@@ -13,7 +13,12 @@
        signal — the same split the pre-paint boot script resolves per paint. */
     :root {
       --off-canvas:#ffffff; --off-text:#1d1c1d; --off-muted:#616160;
-      --off-accent:#0d9488; --off-accent-on:#ffffff; --off-ring:#0d9488; --off-icon:#0d9488;
+      /* accent is teal-700, not the app's light --accent teal-600: the button
+         label is normal-size text (16px/600), so the pair must clear AA 4.5:1 —
+         white on teal-600 is only ~3.7:1 (the app gates that pair at the 3:1
+         non-text bar); white on teal-700 is ~5.5:1 (globals' own sidebar note).
+         Ring/icon stay teal-600 like --ring-focus: non-text, 3:1 bar. */
+      --off-accent:#0f766e; --off-accent-on:#ffffff; --off-ring:#0d9488; --off-icon:#0d9488;
     }
     @media (prefers-color-scheme: dark) {
       :root {
