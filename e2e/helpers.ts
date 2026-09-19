@@ -42,7 +42,7 @@ export async function wipe() {
           "IssueActivity","IssueAttachment","IssueComment","IssueLabel",
           "Label","Issue","Project",
           "Conversation","ConversationMember","Message","Reaction",
-          "ChatAttachment","PushSubscription",
+          "ChatAttachment","ChatUpload","PushSubscription",
           "Notification","EmailOutbox","Booking","RecurrenceRule",
           "TrainingRecord","MaintenanceWindow","Certification","CertificationRevocation","EquipmentManager","Equipment",
           "Invitation","Organization","session","account","verification","user" CASCADE
