@@ -6,14 +6,12 @@ import { ThemeToggle } from '@/components/theme-toggle'
 import { AccentPicker } from '@/components/accent-picker'
 import { SoundsToggle } from '@/components/sounds-toggle'
 import { toast } from '@/lib/toast-store'
+import { TIMEZONES } from '@/lib/timezones'
 
 type ProfileUser = {
   id: string; name: string; email: string; image: string | null
   title: string; timezone: string; role: string
 }
-
-// Full IANA list from the runtime ICU — the same set the server validates against.
-const TIMEZONES = Intl.supportedValuesOf('timeZone')
 
 export default function ProfileClient({ user, soundsEnabled }: { user: ProfileUser; soundsEnabled: boolean }) {
   const [image, setImage] = useState<string | null>(user.image)

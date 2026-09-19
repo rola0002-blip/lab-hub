@@ -4,13 +4,14 @@ import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/db'
 import { requireAdmin } from '@/lib/session'
 import { saveUpload } from '@/lib/uploads'
+import { isValidTimezone } from '@/lib/timezones'
 
 export async function updateOrgAction(fd: FormData): Promise<{ ok: boolean; message?: string }> {
   await requireAdmin()
   const parsed = z.object({
     name: z.string().min(1).max(100),
     accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-    timezone: z.string().min(1),
+    timezone: z.string().min(1).refine(isValidTimezone, 'Choose a valid timezone.'),
     updatePromptDay: z.coerce.number().int().min(0).max(6),   // FormData values are strings
     updatePromptHour: z.coerce.number().int().min(0).max(23),
   }).safeParse({
