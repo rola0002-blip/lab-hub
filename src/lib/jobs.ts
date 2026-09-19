@@ -21,16 +21,22 @@ export async function expirePendingBookings(now: Date = new Date()): Promise<num
     include: { equipment: { include: { managers: true } }, user: { select: { name: true } } },
   })
   if (overdue.length === 0) return 0
-  await prisma.booking.updateMany({ where: { id: { in: overdue.map((b) => b.id) } }, data: { status: 'EXPIRED' } })
+  // Per-row status guard (decideRecurring pattern): the snapshot above can be
+  // stale — a decision or cancellation landing between the read and this write
+  // must win, or the sweep would stomp a just-CONFIRMED booking to EXPIRED.
+  let flipped = 0
   const org = await prisma.organization.findFirst()
   const tz = org?.timezone ?? 'Asia/Singapore'
   for (const b of overdue) {
+    const r = await prisma.booking.updateMany({ where: { id: b.id, status: 'PENDING' }, data: { status: 'EXPIRED' } })
+    if (r.count !== 1) continue // decided/cancelled between the read and this write
+    flipped++
     const when = formatRange(b.startsAt, b.endsAt, tz)
     const msg = `Booking request for ${b.equipment.name} (${when}) expired without a decision.`
     await notify(b.userId, 'booking_expired', { message: msg })
     await Promise.all(b.equipment.managers.map((m) => notify(m.userId, 'booking_expired', { message: `${b.user.name}: ${msg}` })))
   }
-  return overdue.length
+  return flipped
 }
 
 export async function sendBookingReminders(now: Date = new Date()): Promise<number> {
@@ -196,6 +202,19 @@ export async function digestUnreadChat(now: Date = new Date()): Promise<number> 
     const senders = await prisma.user.findMany({ where: { id: { in: senderIds } }, select: { id: true, isSystem: true } })
     const human = new Set(senders.filter((s) => !s.isSystem).map((s) => s.id))
     eligible = rows.filter((r) => human.has(senderOf(r) as string))
+  }
+  // Starvation fix: rows scanned but permanently ineligible (bot-authored, or
+  // pre-wave rows without a senderId) must EXIT future scans — otherwise they are
+  // re-fetched every 300s tick forever, and a scan made entirely of them returns
+  // early with nothing latched while newer eligible rows pile up behind take:1000.
+  // The tombstone is stamped at `cutoff`, NOT `now`: the per-user cooldown below
+  // orders by emailedAt desc, so a fresh stamp would postpone that user's next
+  // real digest by up to 55 min. cutoff is always ≥60 min old — it can never gate
+  // a digest, it only clears the row out of the scan window.
+  const eligibleIds = new Set(eligible.map((r) => r.id))
+  const skippedIds = rows.filter((r) => !eligibleIds.has(r.id)).map((r) => r.id)
+  if (skippedIds.length) {
+    await prisma.notification.updateMany({ where: { id: { in: skippedIds } }, data: { emailedAt: cutoff } })
   }
   if (eligible.length === 0) return 0
   const org = await prisma.organization.findFirst()

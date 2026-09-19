@@ -40,6 +40,10 @@ describe('org cadence settings (SP8 §4.2)', () => {
     expect((await updateOrgAction(fd({ updatePromptDay: '7' }))).ok).toBe(false)
     expect((await updateOrgAction(fd({ updatePromptHour: '24' }))).ok).toBe(false)
   })
+  it('rejects a non-IANA timezone with ok:false', async () => {
+    expect((await updateOrgAction(fd({ timezone: 'Not/AZone' }))).ok).toBe(false)
+    expect((await prisma.organization.findFirstOrThrow()).timezone).toBe('Asia/Singapore')
+  })
   it('non-admins are redirected (requireAdmin), org unchanged', async () => {
     mockUser.current = { id: 'g1', name: 'G', email: 'g@lab.test', role: 'guest' }
     await expect(updateOrgAction(fd())).rejects.toThrow()

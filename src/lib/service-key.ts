@@ -15,8 +15,10 @@ export async function resolveServiceKeyUser(headerValue: string | null): Promise
   if (!m) return null
   const key = await prisma.serviceKey.findFirst({ where: { tokenHash: sha256hex(m[1]), revokedAt: null } })
   if (!key) return null
-  const bot = await prisma.user.findUnique({ where: { id: COLOSSUS_BOT_ID }, select: { name: true, email: true } })
-  if (!bot) return null
+  const bot = await prisma.user.findUnique({ where: { id: COLOSSUS_BOT_ID }, select: { name: true, email: true, banned: true } })
+  // A banned service identity is dead: no key minted for it authenticates, and the
+  // lastUsedAt touch is skipped so the audit trail shows the rejection, not a use.
+  if (!bot || bot.banned) return null
   // Fire-and-forget telemetry: a failed lastUsedAt write must never fail the request.
   void prisma.serviceKey.update({ where: { id: key.id }, data: { lastUsedAt: new Date() } }).catch(() => {})
   return { id: COLOSSUS_BOT_ID, name: bot.name, email: bot.email, role: 'member' }

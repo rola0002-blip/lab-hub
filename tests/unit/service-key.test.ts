@@ -21,7 +21,7 @@ import { COLOSSUS_BOT_ID } from '@/features/bot/ids'
 const TOKEN = `labhub_${'A'.repeat(43)}` // 32 bytes → 43 base64url chars
 const HASH = createHash('sha256').update(TOKEN).digest('hex')
 const KEY = { id: 'key1', name: 'k', tokenHash: HASH, revokedAt: null }
-const BOT = { name: 'LabHub Bot', email: 'bot@colossus.local' }
+const BOT = { name: 'LabHub Bot', email: 'bot@colossus.local', banned: false }
 
 describe('resolveServiceKeyUser', () => {
   beforeEach(() => {
@@ -64,5 +64,12 @@ describe('resolveServiceKeyUser', () => {
     db.user.findUnique.mockResolvedValue(null)
     expect(await resolveServiceKeyUser(`Bearer ${TOKEN}`)).toBeNull()
     expect(db.serviceKey.update).not.toHaveBeenCalled()
+  })
+
+  it('returns null when the bot is banned (banned service identity short-circuits)', async () => {
+    db.serviceKey.findFirst.mockResolvedValue(KEY)
+    db.user.findUnique.mockResolvedValue({ ...BOT, banned: true })
+    expect(await resolveServiceKeyUser(`Bearer ${TOKEN}`)).toBeNull()
+    expect(db.serviceKey.update).not.toHaveBeenCalled() // no lastUsedAt touch for a rejected identity
   })
 })

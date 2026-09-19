@@ -2,8 +2,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { updateOrgAction } from './actions'
-
-const TIMEZONES = ['Asia/Singapore', 'UTC', 'Europe/London', 'America/New_York', 'America/Los_Angeles', 'Asia/Tokyo', 'Australia/Sydney']
+import { TIMEZONES } from '@/lib/timezones'
 
 export default function SettingsForm({ initial }: { initial: { name: string; accentColor: string; timezone: string; updatePromptDay: number; updatePromptHour: number } }) {
   const router = useRouter()
@@ -23,7 +22,7 @@ export default function SettingsForm({ initial }: { initial: { name: string; acc
       }}>
       <label className="block text-sm">Organisation name<input name="name" required defaultValue={initial.name} className={input} /></label>
       <label className="block text-sm">Accent colour<input name="accentColor" type="color" defaultValue={initial.accentColor} className="h-10 w-20 rounded-md border border-border" /></label>
-      <label className="block text-sm">Timezone<select name="timezone" defaultValue={initial.timezone} className={input}>{TIMEZONES.map((t) => <option key={t}>{t}</option>)}</select></label>
+      <label className="block text-sm">Timezone<select name="timezone" defaultValue={initial.timezone} className={input}>{TIMEZONES.map((t) => <option key={t} value={t}>{t}</option>)}</select></label>
       <label className="block text-sm">Weekly update prompt — day
         <select name="updatePromptDay" defaultValue={String(initial.updatePromptDay)} className={input}>
           {/* Monday-first for a lab week; values match Date.getDay() (0=Sunday) */}

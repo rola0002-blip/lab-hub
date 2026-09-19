@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
+import type { IssueStatus } from '@prisma/client'
 import { boardSignature } from '@/features/issues/board-signature'
 
-type Row = { id: string; status: string; rank: string; updatedAt: string }
+type Row = { id: string; status: IssueStatus; rank: string; updatedAt: string }
 const mk = (over: Partial<Row> = {}): Row =>
   ({ id: 'i1', status: 'TODO', rank: 'V', updatedAt: '2026-07-12T00:00:00.000Z', ...over })
 

@@ -123,6 +123,22 @@ export async function sendMessage(input: SendInput): Promise<SendResult> {
   // cannot forge one (it always passes the session user's id).
   if (!sender.isSystem && !checkRate(input.userId)) return { ok: false, error: 'rate_limited', message: 'Slow down — limit is 30 messages per minute.' }
 
+  // Attachment ownership (v0.31.1): every attachment path must have been minted
+  // by the SENDER (ChatUpload row from the upload route). No row, or a row owned
+  // by someone else, means the path was never handed to this user — reject.
+  if (input.attachments?.length) {
+    const uploads = await prisma.chatUpload.findMany({
+      where: { path: { in: input.attachments.map((a) => a.path) } },
+      select: { path: true, userId: true },
+    })
+    const ownerByPath = new Map(uploads.map((u) => [u.path, u.userId]))
+    for (const a of input.attachments) {
+      if (ownerByPath.get(a.path) !== input.userId) {
+        return { ok: false, error: 'invalid', message: 'Attachment not found — attach the file again.' }
+      }
+    }
+  }
+
   const { mentionUserIds, mentionsChannel } = await resolveMentions(body, input.conversationId, input.userId, sender.role)
   const created = await prisma.message.create({
     data: {
@@ -165,6 +181,7 @@ export async function editMessage(args: { messageId: string; userId: string; bod
     prisma.user.findUnique({ where: { id: args.userId } }),
   ])
   if (!msg || msg.deletedAt || !user) return { ok: false, message: 'Message not found.' }
+  if (!(await isMember(args.userId, msg.conversationId))) return { ok: false, message: 'Members only.' }
   if (msg.userId !== args.userId) return { ok: false, message: 'You can only edit your own messages.' }
   const body = args.body.trim().slice(0, 4000)
   if (!body) return { ok: false, message: 'Message cannot be empty.' }
@@ -180,6 +197,7 @@ export async function deleteMessage(args: { messageId: string; userId: string })
     prisma.user.findUnique({ where: { id: args.userId } }),
   ])
   if (!msg || msg.deletedAt || !user) return { ok: false, message: 'Message not found.' }
+  if (!(await isMember(args.userId, msg.conversationId))) return { ok: false, message: 'Members only.' }
   if (msg.userId !== args.userId && user.role !== 'admin') return { ok: false, message: 'You can only delete your own messages.' }
   // The message row stays as a tombstone, but its attachments must be revoked:
   // drop the ChatAttachment rows and unlink the on-disk files. Otherwise the
@@ -192,7 +210,23 @@ export async function deleteMessage(args: { messageId: string; userId: string })
     data: { deletedAt: new Date(), body: '', mentionUserIds: [], mentionsChannel: false, pinnedAt: null },
   })
   await prisma.chatAttachment.deleteMany({ where: { messageId: msg.id } })
-  await Promise.all(attachments.map((a) => removeUpload(a.path).catch(() => {}))) // file removal is best-effort
+  // Ownership-guarded unlink (v0.31.1): the deleter may only remove files the
+  // UPLOADER-of-record owns (admins override). Legacy pre-guard uploads have no
+  // ChatUpload row — for those, the message-ownership check above governs.
+  const ownedRows = await prisma.chatUpload.findMany({
+    where: { path: { in: attachments.map((a) => a.path) } },
+    select: { path: true, userId: true },
+  })
+  const ownerByPath = new Map(ownedRows.map((u) => [u.path, u.userId]))
+  const unlinkable = attachments.filter((a) => {
+    const owner = ownerByPath.get(a.path)
+    if (owner === undefined) return true // legacy pre-guard upload: message-ownership (checked above) governs
+    return owner === args.userId || user.role === 'admin'
+  })
+  await Promise.all(unlinkable.map((a) =>
+    removeUpload(a.path)
+      .then(() => prisma.chatUpload.deleteMany({ where: { path: a.path } }))
+      .catch(() => {}))) // file removal + row cleanup are best-effort
   await emitEvent({ t: 'msg_del', cid: msg.conversationId, mid: msg.id })
   return { ok: true }
 }

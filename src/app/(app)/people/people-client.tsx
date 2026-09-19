@@ -16,6 +16,11 @@ export default function PeopleClient({ users, invitations, isAdmin, selfId }: { 
   const [msg, setMsg] = useState<string | null>(null)
   const [pending, start] = useTransition()
   const [lastUrl, setLastUrl] = useState<string | null>(null)
+  // Optimistic role drafts: the select is controlled so a failed setRoleAction can
+  // snap the UI back to the server's role. Entries are transient — cleared on
+  // success (the refreshed prop governs) and reset to the prop on failure, so a
+  // draft can never mask a later server-side change by another admin.
+  const [roleDraft, setRoleDraft] = useState<Record<string, string>>({})
   // navigator.clipboard is a SECURE-CONTEXT API — it is `undefined` on the plain-HTTP LAN
   // beta (the same non-secure context that dorms the service worker, spec §5.2), so the write
   // below throws there and we fall back to the toast. The accept URL is therefore ALSO rendered
@@ -103,12 +108,24 @@ export default function PeopleClient({ users, invitations, isAdmin, selfId }: { 
               </span>
               {isAdmin && u.id !== selfId ? (
                 <span className="flex items-center gap-2">
-                  <select defaultValue={u.role} onChange={(e) => start(() => setRoleAction(u.id, e.target.value))} className="rounded-md border border-border bg-surface px-2 py-1">
+                  <select value={roleDraft[u.id] ?? u.role} onChange={(e) => {
+                    const role = e.target.value
+                    setRoleDraft((p) => ({ ...p, [u.id]: role }))
+                    start(async () => {
+                      const r = await setRoleAction(u.id, role)
+                      if (r.ok) {
+                        setRoleDraft((p) => { const next = { ...p }; delete next[u.id]; return next })
+                      } else {
+                        setRoleDraft((p) => ({ ...p, [u.id]: u.role }))
+                        toast(r.message ?? 'Role change failed')
+                      }
+                    })
+                  }} className="rounded-md border border-border bg-surface px-2 py-1">
                     <option value="guest">Guest</option><option value="member">Member</option><option value="admin">Admin</option>
                   </select>
                   {u.banned
                     ? <button type="button" onClick={() => start(() => reactivateAction(u.id))} className={ACTION_BTN + ' text-[var(--text-accent)]'}>Reactivate</button>
-                    : <button type="button" onClick={() => { if (confirm(`Deactivate ${u.name}? Their sessions end and future bookings are cancelled.`)) start(() => deactivateAction(u.id)) }} className={ACTION_BTN + ' text-[var(--text-danger)]'}>Deactivate</button>}
+                    : <button type="button" onClick={() => { if (confirm(`Deactivate ${u.name}? Their sessions end and future bookings are cancelled.`)) start(async () => { const r = await deactivateAction(u.id); if (!r.ok) toast(r.message ?? 'Deactivate failed') }) }} className={ACTION_BTN + ' text-[var(--text-danger)]'}>Deactivate</button>}
                 </span>
               ) : (
                 <span className="rounded-full bg-active px-2 py-0.5 text-xs uppercase tracking-wide text-muted">{u.role}</span>

@@ -71,7 +71,7 @@ describe('buildManifest', () => {
   })
 
   it('errors when a platform key is missing', () => {
-    const platforms = fullPlatforms()
+    const platforms: Partial<ReturnType<typeof fullPlatforms>> = fullPlatforms()
     delete platforms['win-x64']
     expect(() => buildManifest({ tag: 'v0.22.0', platforms })).toThrow(InputError)
     expect(() => buildManifest({ tag: 'v0.22.0', platforms })).toThrow(/win-x64/)

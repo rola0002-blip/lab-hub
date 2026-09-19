@@ -27,10 +27,15 @@ export async function notify(
     if (!user) return
     // payload is validated JSON at the call sites; Prisma's Json input type
     // (InputJsonValue) is narrower than Record<string, unknown>, so cast here.
-    // immediate-email rows are exempt from the 60-min digest (emailedAt is the latch)
-    await prisma.notification.create({ data: { userId, type, payload: payload as Prisma.InputJsonValue, ...(email ? { emailedAt: new Date() } : {}) } })
+    const row = await prisma.notification.create({ data: { userId, type, payload: payload as Prisma.InputJsonValue } })
     void emitEvent({ t: 'notif', uid: userId }) // live bell push; emitEvent never throws
-    if (email) await enqueueEmail(user.email, email.subject, email.html)
+    if (email) {
+      // emailedAt (the "exempt from the 60-min digest" latch) is stamped only
+      // AFTER the enqueue resolves: stamping in the create would silently swallow
+      // the notification's digest slot if the enqueue crashed or rejected.
+      await enqueueEmail(user.email, email.subject, email.html)
+      await prisma.notification.update({ where: { id: row.id }, data: { emailedAt: new Date() } })
+    }
   } catch (e) {
     console.error('notify failed', e) // notifications must never break the calling action
   }

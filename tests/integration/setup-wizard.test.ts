@@ -27,6 +27,14 @@ describe('setup wizard', () => {
     expect(await prisma.user.count()).toBe(1)
   })
 
+  it('rejects a non-IANA timezone with ok:false and creates nothing', async () => {
+    const r = await completeSetup({ ...input, timezone: 'Not/AZone' })
+    expect(r.ok).toBe(false)
+    expect((r as { message?: string }).message).toBe('Choose a valid timezone.')
+    expect(await prisma.organization.count()).toBe(0)
+    expect(await prisma.user.count()).toBe(0)
+  })
+
   it('serializes concurrent first-runs to a single Organization row', async () => {
     // Five simultaneous first-run submissions. Without the advisory-lock guard each
     // racer's findFirst returns null and each creates its own Organization row,

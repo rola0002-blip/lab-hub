@@ -78,6 +78,29 @@ describe('issue routes', () => {
     expect((await ok.json()).issues).toHaveLength(1)
   })
 
+  it('GET /api/issues honors ?due= overdue|week (the parseIssueFilters set) and 400s unknown values', async () => {
+    const u = await makeUser({ role: 'member' }); session.current = sessOf(u, 'member')
+    const DAY = 86_400_000
+    const past = await makeIssue(u.id, { title: 'past due', dueDate: new Date(Date.now() - 2 * DAY), rank: 'V' })
+    const soon = await makeIssue(u.id, { title: 'due right away', dueDate: new Date(Date.now() + 60_000), rank: 'V' })
+    await makeIssue(u.id, { title: 'no due date', rank: 'V' })
+    // Unknown value → 400 (the same posture as the status/priority enums above);
+    // previously ?due= was silently dropped from the API read.
+    expect((await listGET(new Request('http://x/api/issues?due=whenever'))).status).toBe(400)
+    const ids = (r: Response) => r.json().then((b: { issues: { id: string }[] }) => b.issues.map((i) => i.id))
+    const overdue = await listGET(new Request('http://x/api/issues?due=overdue'))
+    expect(overdue.status).toBe(200)
+    expect(await ids(overdue)).toEqual([past.id])
+    // A due-a-minute-out row is inside [start of today, end of week] on every
+    // weekday; the past row is excluded — the param demonstrably reached
+    // listIssues (the unfiltered read returns all three issues).
+    const week = await listGET(new Request('http://x/api/issues?due=week'))
+    expect(week.status).toBe(200)
+    const weekIds = await ids(week)
+    expect(weekIds).toContain(soon.id)
+    expect(weekIds).not.toContain(past.id)
+  })
+
   it('POST /api/issues: 401 signed out, 403 guest, 400 bad body, 200 member', async () => {
     expect((await createPOST(jreq({ title: 'x' }))).status).toBe(401)
 

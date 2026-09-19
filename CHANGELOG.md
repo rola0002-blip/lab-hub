@@ -6,6 +6,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Chat attachments are now bound to the uploader at send time via an
+  ownership record: a sender can no longer attach a file someone else
+  uploaded, and deleting a message no longer unlinks files the deleter
+  doesn't own. Attachments uploaded before this version that were never
+  sent must be re-attached.
+- Invitation signup now requires the invitation link — the signup form no
+  longer accepts a bare email match for pending invitations.
+- Admins can no longer edit or delete messages in channels they are not a
+  member of; the admin delete override now applies only inside the admin's
+  own conversations.
+
+### Fixed
+- Correctness batch: booking decision/sweep/maintenance-window races;
+  maintenance-dialog timezone handling; approvals keep a per-row rejection
+  reason; setup-wizard timezone validation with the full IANA list;
+  membership/banned/isSystem authorization hardening; honest chat read-state
+  after message actions; digest and notification delivery fixes; CSV formula
+  injection guard; one SSE stream per browser tab.
+
 ## [0.31.0] - 2026-09-11
 
 ### Fixed

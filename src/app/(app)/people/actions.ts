@@ -1,6 +1,7 @@
 'use server'
 import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
+import { prisma } from '@/lib/db'
 import { requireAdmin } from '@/lib/session'
 import { createInvitation, revokeInvitation, resendInvitation, acceptInviteUrl } from '@/features/invitations/service'
 import { deactivateUser, reactivateUser, setUserRole } from '@/features/people/service'
@@ -28,16 +29,31 @@ export async function revokeInviteAction(id: string) {
 export async function resendInviteAction(id: string) {
   await requireAdmin(); await resendInvitation(id); revalidatePath('/people')
 }
-export async function setRoleAction(userId: string, role: string) {
-  const admin = await requireAdmin()
-  const r = roleSchema.parse(role)
-  if (userId === admin.id) return
-  await setUserRole(userId, r); revalidatePath('/people')
+// The bot (isSystem) is load-bearing infrastructure — role flips or deactivation
+// would orphan its messages, memberships and DMs. Same guard shape in both actions.
+async function assertHumanTarget(userId: string): Promise<{ ok: false; message: string } | null> {
+  const target = await prisma.user.findUnique({ where: { id: userId }, select: { isSystem: true } })
+  if (!target || target.isSystem) return { ok: false, message: 'System accounts cannot be modified.' }
+  return null
 }
-export async function deactivateAction(userId: string) {
+
+export async function setRoleAction(userId: string, role: string): Promise<{ ok: boolean; message?: string }> {
   const admin = await requireAdmin()
-  if (userId === admin.id) return
+  const r = roleSchema.safeParse(role)
+  if (!r.success) return { ok: false, message: 'Enter a valid role.' }
+  if (userId === admin.id) return { ok: false, message: 'You cannot change your own role.' }
+  const rejected = await assertHumanTarget(userId)
+  if (rejected) return rejected
+  await setUserRole(userId, r.data); revalidatePath('/people')
+  return { ok: true }
+}
+export async function deactivateAction(userId: string): Promise<{ ok: boolean; message?: string }> {
+  const admin = await requireAdmin()
+  if (userId === admin.id) return { ok: false, message: 'You cannot deactivate yourself.' }
+  const rejected = await assertHumanTarget(userId)
+  if (rejected) return rejected
   await deactivateUser(userId); revalidatePath('/people')
+  return { ok: true }
 }
 export async function reactivateAction(userId: string) {
   await requireAdmin(); await reactivateUser(userId); revalidatePath('/people')

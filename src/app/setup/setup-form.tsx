@@ -2,8 +2,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { completeSetup } from './actions'
-
-const TIMEZONES = ['Asia/Singapore', 'UTC', 'Europe/London', 'America/New_York', 'America/Los_Angeles', 'Asia/Tokyo', 'Australia/Sydney']
+import { TIMEZONES } from '@/lib/timezones'
 
 export default function SetupForm({ tokenRequired = false }: { tokenRequired?: boolean }) {
   const router = useRouter()
@@ -39,7 +38,7 @@ export default function SetupForm({ tokenRequired = false }: { tokenRequired?: b
       )}
       <label className="block text-sm">Organisation name<input name="orgName" required defaultValue="LabHub" className={input} /></label>
       <label className="block text-sm">Accent colour<input name="accentColor" type="color" defaultValue="#0d9488" className="h-10 w-20 rounded-md border border-border" /></label>
-      <label className="block text-sm">Timezone<select name="timezone" defaultValue="Asia/Singapore" className={input}>{TIMEZONES.map((t) => <option key={t}>{t}</option>)}</select></label>
+      <label className="block text-sm">Timezone<select name="timezone" defaultValue="Asia/Singapore" className={input}>{TIMEZONES.map((t) => <option key={t} value={t}>{t}</option>)}</select></label>
       <label className="block text-sm">Logo (optional, PNG/JPEG/WebP ≤ 2 MB)<input name="logo" type="file" accept="image/png,image/jpeg,image/webp" className={input} /></label>
       <hr className="my-2 border-border" />
       <p className="text-sm font-medium text-subtle">02 — Administrator account</p>

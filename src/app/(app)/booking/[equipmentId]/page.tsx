@@ -79,7 +79,7 @@ export default async function EquipmentPage({ params, searchParams }: {
             <span className="font-medium text-default">{format(weekStart, 'd MMM')} – {format(addDays(weekStart, 6), 'd MMM yyyy')}</span>
             <Link href={`?week=${next}`} className="rounded-md border border-border px-2 py-1 text-default transition-colors hover:bg-hover">Next →</Link>
           </div>
-          {canManage && <MaintenanceDialogButton equipmentId={equipmentId} />}
+          {canManage && <MaintenanceDialogButton equipmentId={equipmentId} tz={org.timezone} />}
           {canManage && (
             <a href={`/api/equipment/${equipmentId}/export`} className="rounded-md border border-border px-2 py-1 text-default transition-colors hover:bg-hover">Export records</a>
           )}

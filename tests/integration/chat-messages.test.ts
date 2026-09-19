@@ -4,6 +4,7 @@ import { resetDb, makeUser, makeChannel, makeDm, makeMember, makeMessage } from 
 import { resetRate } from '@/features/chat/rate-limit'
 import { _resetForTests } from '@/lib/events'
 import { saveUpload, readUpload } from '@/lib/uploads'
+import { recordChatUpload } from '@/features/chat/upload-ownership'
 import {
   sendMessage, editMessage, deleteMessage, toggleReaction, listMessages, listThread, markRead,
 } from '@/features/chat/message-service'
@@ -171,6 +172,7 @@ describe('message service', () => {
   it('deleting a message removes its attachment rows and unlinks the files', async () => {
     const { ch, users: [a] } = await channelWith('member')
     const uploadPath = await saveUpload(new File([new Uint8Array(32)], 'data.pdf', { type: 'application/pdf' }), 'chat')
+    await recordChatUpload(uploadPath, a.id) // the upload route records ownership; bypassing it must too
     const rel = uploadPath.replace('/uploads/', '').split('/')
     const sent = await sendMessage({
       userId: a.id, conversationId: ch.id, body: 'here',
