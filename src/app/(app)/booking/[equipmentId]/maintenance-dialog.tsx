@@ -2,8 +2,9 @@
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createMaintenanceAction } from './maintenance-actions'
+import { parseLocalDateTime } from '@/lib/local-datetime'
 
-export default function MaintenanceDialogButton({ equipmentId }: { equipmentId: string }) {
+export default function MaintenanceDialogButton({ equipmentId, tz }: { equipmentId: string; tz: string }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [pending, start] = useTransition()
@@ -22,7 +23,7 @@ export default function MaintenanceDialogButton({ equipmentId }: { equipmentId: 
   function submit(confirmCancel: boolean) {
     start(async () => {
       setError(null)
-      const r = await createMaintenanceAction(equipmentId, new Date(form.start).toISOString(), new Date(form.end).toISOString(), form.reason, confirmCancel)
+      const r = await createMaintenanceAction(equipmentId, parseLocalDateTime(form.start, tz).toISOString(), parseLocalDateTime(form.end, tz).toISOString(), form.reason, confirmCancel)
       if (r.ok) { setOpen(false); setConflicts([]); router.refresh(); return }
       if (r.error === 'needs_confirmation') setConflicts(r.conflicts)
       else setError(r.error === 'forbidden' ? 'Only managers can schedule maintenance.' : 'Enter a valid time range and reason.')
