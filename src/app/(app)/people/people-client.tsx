@@ -125,7 +125,7 @@ export default function PeopleClient({ users, invitations, isAdmin, selfId }: { 
                   </select>
                   {u.banned
                     ? <button type="button" onClick={() => start(() => reactivateAction(u.id))} className={ACTION_BTN + ' text-[var(--text-accent)]'}>Reactivate</button>
-                    : <button type="button" onClick={() => { if (confirm(`Deactivate ${u.name}? Their sessions end and future bookings are cancelled.`)) start(() => deactivateAction(u.id)) }} className={ACTION_BTN + ' text-[var(--text-danger)]'}>Deactivate</button>}
+                    : <button type="button" onClick={() => { if (confirm(`Deactivate ${u.name}? Their sessions end and future bookings are cancelled.`)) start(async () => { const r = await deactivateAction(u.id); if (!r.ok) toast(r.message ?? 'Deactivate failed') }) }} className={ACTION_BTN + ' text-[var(--text-danger)]'}>Deactivate</button>}
                 </span>
               ) : (
                 <span className="rounded-full bg-active px-2 py-0.5 text-xs uppercase tracking-wide text-muted">{u.role}</span>
