@@ -1,7 +1,7 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   Bell as BellIcon, BellPlus, Check, Hash, AtSign, MessageSquare,
   CalendarClock, CalendarCheck, CalendarX, UserPlus, CircleCheck, ClipboardCheck, Megaphone,
@@ -14,6 +14,7 @@ import { renderBody } from '@/features/chat/mentions'
 import { humanTime } from '@/lib/humanize'
 import { notificationHref } from '@/lib/notification-href'
 import { shouldChime, shouldPingFromMessage, decideAlert } from '@/lib/chime'
+import { popupPref } from '@/lib/popup-pref'
 import { useNotificationStatus } from './hooks/use-notification-state'
 import { NotificationWizard } from './notification-wizard'
 import { useInstallPrompt } from './hooks/use-install-prompt'
@@ -178,21 +179,31 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
   // the closure every render), so no ref mirror is needed anymore.
   const pathname = usePathname()
   const openCid = pathname.match(/^\/chat\/([^/]+)/)?.[1] ?? null
+  // Task 9: popup clicks navigate to the conversation. Bell had no router
+  // (pathname was enough until now); the App Router's useRouter is
+  // referentially stable, so the funnel's useCallback just lists it — soft
+  // nav keeps the SSE subscription and chat store alive, unlike a
+  // window.location.assign full reload.
+  const router = useRouter()
 
   // The single alert funnel (Task 8): EVERY qualifying message runs this —
   // no burst throttle. WHERE the alert renders (decideAlert): in the desktop
   // shell every alert becomes an OS-sounded native toast (the shell bridges
   // Notification natively and attaches the OS sound) and the in-page chime
-  // stays silent — exactly one sound. Browsers/PWA keep the WebAudio chime.
-  // The shell toast renders regardless of the sound toggle — `silent` carries
-  // the toggle — while in browsers sounds-off still means total silence.
-  // `__TAURI__` exists only in the Tauri webviews, and the app never requests
-  // direct Notification permission in browsers (push opt-in goes through the
-  // service worker), so a 'granted' permission in a normal browser means a
-  // push subscription whose toasts the SW already shows — gating on the shell
-  // marker prevents a second toast from here.
+  // stays silent — exactly one sound. Browsers/PWA keep the WebAudio chime
+  // plus (Task 9) a SILENT browser OS popup — silent because the chime is
+  // the sound there; no double audio. The popup is per-device optional
+  // (labhub.popups) and needs the plain Notification permission the wizard's
+  // Browser popups step grants. The shell toast renders regardless of the
+  // sound toggle — `silent` carries the toggle — while in browsers sounds-off
+  // still means total silence. `__TAURI__` exists only in the Tauri
+  // webviews, and the app never requests direct Notification permission in
+  // browsers outside that wizard step, so a 'granted' permission in a normal
+  // browser means either the wizard step or a push subscription whose toasts
+  // the SW already shows — gating the popup arm on the shell marker
+  // prevents a second toast from here in-shell.
   const alertFromMessage = useCallback((msgAlert: { title: string; body: string; tag: string }) => {
-    const { chime, toast } = decideAlert(true, '__TAURI__' in window)
+    const { chime, toast, popup } = decideAlert(true, '__TAURI__' in window)
     if (toast && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       try {
         // silent: respects the per-device sound toggle — the shell's OS
@@ -204,8 +215,19 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
       } catch { /* best-effort */ }
       return
     }
+    if (popup && popupPref() && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      try {
+        // silent: the WebAudio chime below is the sound in browsers — the
+        // popup must not double it. tag: same-conversation messages replace
+        // the popup instead of stacking.
+        const opts: NotificationOptions = { body: msgAlert.body.slice(0, 100), silent: true }
+        opts.tag = msgAlert.tag
+        const t = new Notification(msgAlert.title, opts)
+        t.onclick = () => { window.focus(); router.push(`/chat/${msgAlert.tag}`) }
+      } catch { /* some platforms throw on construction — the chime still covers the alert */ }
+    }
     if (chime && soundsRef.current) playChime()
-  }, [])
+  }, [router])
 
   const load = useCallback(async () => {
     try {

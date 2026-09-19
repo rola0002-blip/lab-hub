@@ -52,10 +52,12 @@ export function alertRendering(inShell: boolean): { chime: boolean; toast: boole
 // msg path calls this for EVERY qualifying inbound message — the old 3 s
 // PingThrottle is gone ("whenever there are new messages"), so the decision
 // is pure and stateless: two qualifying messages 1 ms apart both alert.
-// `popup` is the browser OS-popup arm that lands in Task 9 — always false
-// until then.
+// `popup` (Task 9) is the browser OS-popup arm: on for browsers/PWA, never
+// in the desktop shell (the shell's own native toast is the popup there).
+// Permission + per-device pref are environment concerns — the funnel gates
+// on them at fire time, keeping this pure.
 export function decideAlert(msgQualifies: boolean, inShell: boolean): { chime: boolean; toast: boolean; popup: boolean } {
   if (!msgQualifies) return { chime: false, toast: false, popup: false }
   const { chime, toast } = alertRendering(inShell)
-  return { chime, toast, popup: false }
+  return { chime, toast, popup: !inShell }
 }

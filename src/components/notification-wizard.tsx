@@ -16,6 +16,9 @@ export function NotificationWizard({ open, onClose }: { open: boolean; onClose: 
   const [busy, setBusy] = useState(false)
   const [testSent, setTestSent] = useState(false)
   const [error, setError] = useState(false)
+  // Task 9 browser-popups step: Notification.permission is read-only, so the
+  // grant from requestPermission() would never re-render — mirror it in state.
+  const [popupPerm, setPopupPerm] = useState<NotificationPermission | 'unsupported' | null>(null)
 
   // Deliberate reset on the OPEN TRANSITION only (deps [open], never onClose):
   // Bell re-renders on every 30 s poll / SSE event, and an effect keyed on
@@ -26,6 +29,7 @@ export function NotificationWizard({ open, onClose }: { open: boolean; onClose: 
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTestSent(false)
     setError(false)
+    setPopupPerm(typeof Notification !== 'undefined' ? Notification.permission : 'unsupported')
   }, [open])
 
   if (!open) return null
@@ -44,6 +48,26 @@ export function NotificationWizard({ open, onClose }: { open: boolean; onClose: 
     }
   }
 
+  // Task 9: the plain Notification API needs no VAPID keys or service worker
+  // — this step stands alone. The grant doubles as the funnel's gate, and the
+  // sample popup shows exactly what new-message alerts will look like.
+  async function enablePopups() {
+    setBusy(true)
+    try {
+      const perm = await Notification.requestPermission()
+      setPopupPerm(perm)
+      if (perm === 'granted') {
+        try {
+          const t = new Notification('LabHub', { body: 'This is how new-message popups will look', silent: true })
+          t.onclick = () => window.focus()
+        } catch { /* best-effort sample — the grant itself is the win */ }
+      }
+    } finally {
+      setBusy(false)
+      refresh()
+    }
+  }
+
   async function sendTest() {
     setBusy(true)
     try {
@@ -51,6 +75,33 @@ export function NotificationWizard({ open, onClose }: { open: boolean; onClose: 
       if (r.ok) setTestSent(true)
     } catch { /* transient */ } finally { setBusy(false) }
   }
+
+  // Task 9 "Browser popups" step, shared by the pre-push (ready/denied) and
+  // post-push (done) panels: the plain Notification API needs no VAPID keys,
+  // service worker, or phone — it stands alone. Rendered only where the
+  // wizard is already actionable; the shell status never reaches it.
+  const popupsStep = popupPerm !== null && popupPerm !== 'unsupported' && (
+    <div className="mt-4 border-t border-border pt-3">
+      <p className="text-sm font-medium text-default">Browser popups</p>
+      <p className="mt-1 text-xs text-muted">
+        {popupPerm === 'granted'
+          ? 'On — new messages pop up on this browser even when the tab is in the background.'
+          : 'A small popup on this browser for new messages — no phone setup needed.'}
+      </p>
+      {popupPerm === 'granted' ? (
+        <p className="mt-1 flex items-center gap-1.5 text-xs text-subtle">
+          <Check size={14} className="text-accent" aria-hidden /> Browser popups are enabled.
+        </p>
+      ) : popupPerm === 'denied' ? (
+        <p className="mt-1 text-xs text-subtle">Popup permission is blocked for this site — re-enable it in your browser or OS site settings.</p>
+      ) : (
+        <button type="button" onClick={() => void enablePopups()} disabled={busy}
+          className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-default hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] disabled:opacity-50">
+          <BellPlus size={16} aria-hidden /> Enable browser popups
+        </button>
+      )}
+    </div>
+  )
 
   return (
     <Modal title="Get notified" onClose={onClose}>
@@ -79,6 +130,7 @@ export function NotificationWizard({ open, onClose }: { open: boolean; onClose: 
         {status === 'denied' && (
           <p className="mt-3 text-sm text-muted">Notification permission is blocked for this site. Re-enable it in your browser or OS site settings, then open this bell again.</p>
         )}
+        {(status === 'ready' || status === 'denied') && popupsStep}
         {(status === 'ready' || status === 'denied') && (
           <button type="button" onClick={() => void enable()} disabled={busy}
             className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-on hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] disabled:opacity-50">
@@ -90,6 +142,7 @@ export function NotificationWizard({ open, onClose }: { open: boolean; onClose: 
             <p className="flex items-center gap-2 text-sm text-muted">
               <Check size={16} className="text-accent" aria-hidden /> Push is enabled on this device.
             </p>
+            {popupsStep}
             <button type="button" onClick={() => void sendTest()} disabled={busy}
               className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-default hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] disabled:opacity-50">
               <Send size={16} aria-hidden /> Send test notification

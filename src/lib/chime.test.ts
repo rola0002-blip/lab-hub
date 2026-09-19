@@ -89,11 +89,11 @@ describe('decideAlert', () => {
     expect(decideAlert(false, true)).toEqual({ chime: false, toast: false, popup: false })
   })
 
-  it('qualifying, browser/PWA → chime only (popup arm lands in Task 9)', () => {
-    expect(decideAlert(true, false)).toEqual({ chime: true, toast: false, popup: false })
+  it('qualifying, browser/PWA → chime + popup arm (permission/pref gate in the funnel)', () => {
+    expect(decideAlert(true, false)).toEqual({ chime: true, toast: false, popup: true })
   })
 
-  it('qualifying, desktop shell → OS-sounded toast only (exactly one sound)', () => {
+  it('qualifying, desktop shell → OS-sounded toast only (popup never fires in-shell)', () => {
     expect(decideAlert(true, true)).toEqual({ chime: false, toast: true, popup: false })
   })
 
@@ -104,8 +104,8 @@ describe('decideAlert', () => {
     const m = { cid: 'c1', authorId: 'other', muted: false }
     const opts = { openCid: null, focused: false, selfId: 'me' }
     expect(decideAlert(shouldPingFromMessage(m, opts), false))
-      .toEqual({ chime: true, toast: false, popup: false })
+      .toEqual({ chime: true, toast: false, popup: true })
     expect(decideAlert(shouldPingFromMessage({ ...m }, opts), false))
-      .toEqual({ chime: true, toast: false, popup: false })
+      .toEqual({ chime: true, toast: false, popup: true })
   })
 })

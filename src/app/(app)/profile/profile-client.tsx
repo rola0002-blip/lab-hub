@@ -5,6 +5,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { AccentPicker } from '@/components/accent-picker'
 import { SoundsToggle } from '@/components/sounds-toggle'
+import { PopupToggle } from '@/components/popup-toggle'
 import { toast } from '@/lib/toast-store'
 import { TIMEZONES } from '@/lib/timezones'
 
@@ -131,6 +132,10 @@ export default function ProfileClient({ user, soundsEnabled }: { user: ProfileUs
         <div className="mt-4 flex items-center justify-between gap-4">
           <p className="text-sm text-muted">Notification sounds — a soft ping for new messages in unmuted conversations on this device.</p>
           <SoundsToggle initial={soundsEnabled} />
+        </div>
+        <div className="mt-4 flex items-center justify-between gap-4">
+          <p className="text-sm text-muted">Message popups — a browser popup for new messages in unmuted conversations on this device. Enable it once from the bell or the button beside the switch.</p>
+          <PopupToggle />
         </div>
       </section>
     </div>
