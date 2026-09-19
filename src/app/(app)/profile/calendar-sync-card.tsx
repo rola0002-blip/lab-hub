@@ -1,12 +1,14 @@
 'use client'
 import { useState } from 'react'
 import { CalendarClock, Copy, RefreshCw } from 'lucide-react'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from '@/lib/toast-store'
 import { regenerateIcsTokenAction } from './calendar-actions'
 
 export function CalendarSyncCard({ initialToken, host }: { initialToken: string; host: string }) {
   const [token, setToken] = useState(initialToken)
   const [busy, setBusy] = useState(false)
+  const [confirming, setConfirming] = useState(false)
   const httpsUrl = `https://${host}/api/calendar/${token}.ics`
   const webcalUrl = `webcal://${host}/api/calendar/${token}.ics`
 
@@ -15,7 +17,6 @@ export function CalendarSyncCard({ initialToken, host }: { initialToken: string;
     catch { toast('Could not copy — select the URL and copy it manually.') }
   }
   async function regenerate() {
-    if (!confirm('Regenerate your calendar link? The old link stops working immediately.')) return
     setBusy(true)
     const r = await regenerateIcsTokenAction()
     setBusy(false)
@@ -52,10 +53,14 @@ export function CalendarSyncCard({ initialToken, host }: { initialToken: string;
         <li><strong className="text-default">Outlook / Exchange:</strong> Add calendar → Subscribe from web → paste the HTTPS link.</li>
       </ul>
 
-      <button type="button" onClick={regenerate} disabled={busy}
+      <button type="button" onClick={() => setConfirming(true)} disabled={busy}
         className="mt-4 inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-default transition-colors hover:bg-hover disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
         <RefreshCw size={14} aria-hidden /> Regenerate link
       </button>
+
+      <ConfirmDialog open={confirming} danger title="Regenerate your calendar link?"
+        body="The old link stops working immediately." confirmLabel="Regenerate"
+        onClose={() => setConfirming(false)} onConfirm={regenerate} />
     </section>
   )
 }

@@ -28,8 +28,11 @@ test('profile Calendar-sync card: copy + regenerate', async ({ browser }) => {
   const https = page.getByLabel('https subscription URL')
   const before = await https.inputValue()
   expect(before).toMatch(/\/api\/calendar\/.+\.ics$/)
-  page.on('dialog', (d) => d.accept()) // confirm() in regenerate
+  // v0.32: regenerate confirms in the styled ConfirmDialog (was native confirm).
   await page.getByRole('button', { name: 'Regenerate link' }).click()
+  const confirm = page.getByRole('dialog', { name: 'Regenerate your calendar link?' })
+  await expect(confirm).toBeVisible()
+  await confirm.getByRole('button', { name: 'Regenerate' }).click()
   await expect(async () => expect(await https.inputValue()).not.toBe(before)).toPass()
 })
 

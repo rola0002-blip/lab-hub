@@ -370,10 +370,12 @@ test('tapping a booking shows details and cancels it', async ({ browser }) => {
   const cancelBtn = details.getByRole('button', { name: 'Cancel booking' })
   expect((await cancelBtn.boundingBox())!.height).toBeGreaterThanOrEqual(44)
 
-  // Registered BEFORE the click: Playwright auto-DISMISSES an unhandled dialog,
-  // so window.confirm would silently refuse and this test would assert nothing.
-  page.on('dialog', (d) => d.accept())
+  // v0.32: the cancel now confirms in the styled ConfirmDialog layered over the
+  // details modal — scoped by its own accessible name, then the destructive arm.
   await cancelBtn.click()
+  const confirm = page.getByRole('dialog', { name: 'Cancel this booking?' })
+  await expect(confirm).toBeVisible()
+  await confirm.getByRole('button', { name: 'Cancel booking' }).click()
 
   // The modal closes and the refreshed schedule no longer carries the block —
   // cancelMyBookingAction revalidates /bookings only, so this is the modal's own

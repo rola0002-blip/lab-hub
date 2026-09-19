@@ -3,6 +3,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { ShieldCheck } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from '@/lib/toast-store'
 import { formatDateTime } from '@/lib/time'
 // TYPE-ONLY: ra-service.ts is `server-only`, so a value import here would fail
@@ -29,6 +30,9 @@ export function RaClient({ name, options, mine, all, tz }: {
   const [pending, start] = useTransition()
   const [documentId, setDocumentId] = useState('')
   const [matric, setMatric] = useState('')
+  // v0.32 Task 11: the revoke confirm (was native confirm) — whose=null is the
+  // self-serve arm ("your acknowledgment"), a name is the records-table arm.
+  const [confirmRevoke, setConfirmRevoke] = useState<{ id: string; doc: string; whose: string | null } | null>(null)
   const acked = options.acknowledgedDocumentIds
 
   function submit(e: React.FormEvent) {
@@ -48,11 +52,7 @@ export function RaClient({ name, options, mine, all, tz }: {
 
   // The files del() idiom: confirm, await, toast + refresh (no per-button
   // pending — the row leaving via router.refresh is the durable signal).
-  async function revoke(id: string, doc: string, whose: string | null) {
-    const q = whose
-      ? `Revoke ${whose}'s acknowledgment of “${doc}”? This removes the record.`
-      : `Revoke your acknowledgment of “${doc}”? You can acknowledge it again afterwards.`
-    if (!confirm(q)) return
+  async function revoke(id: string) {
     const r = await revokeRaAction(id)
     if (r.ok) { toast('Acknowledgment revoked.'); router.refresh() } else toast(r.message)
   }
@@ -119,7 +119,7 @@ export function RaClient({ name, options, mine, all, tz }: {
                 <span className="text-muted">{m.matricNumber}</span>
                 <span aria-hidden className="text-subtle">·</span>
                 <time dateTime={m.createdAt} className="text-subtle">{formatDateTime(new Date(m.createdAt), tz)}</time>
-                <button type="button" onClick={() => revoke(m.id, m.documentName, null)}
+                <button type="button" onClick={() => setConfirmRevoke({ id: m.id, doc: m.documentName, whose: null })}
                   className={`ml-1 ${REVOKE_BTN}`}>
                   Revoke
                 </button>
@@ -170,7 +170,7 @@ export function RaClient({ name, options, mine, all, tz }: {
                         <time dateTime={r.createdAt}>{formatDateTime(new Date(r.createdAt), tz)}</time>
                       </td>
                       <td className="border-t border-border px-2 py-1.5">
-                        <button type="button" onClick={() => revoke(r.id, r.documentName, r.author.name)}
+                        <button type="button" onClick={() => setConfirmRevoke({ id: r.id, doc: r.documentName, whose: r.author.name })}
                           className={REVOKE_BTN}>
                           Revoke
                         </button>
@@ -180,7 +180,7 @@ export function RaClient({ name, options, mine, all, tz }: {
                 </tbody>
               </table>
             </div>
-          ) : (
+           ) : (
             <div className="mt-3">
               <EmptyState icon={ShieldCheck} title="No acknowledgments yet"
                 hint="Records appear here as team members acknowledge RAs." />
@@ -188,6 +188,16 @@ export function RaClient({ name, options, mine, all, tz }: {
           )}
         </section>
       )}
+      <ConfirmDialog open={confirmRevoke !== null} danger
+        title={confirmRevoke
+          ? confirmRevoke.whose
+            ? `Revoke ${confirmRevoke.whose}'s acknowledgment of “${confirmRevoke.doc}”?`
+            : `Revoke your acknowledgment of “${confirmRevoke.doc}”?`
+          : ''}
+        body={confirmRevoke?.whose ? 'This removes the record.' : 'You can acknowledge it again afterwards.'}
+        confirmLabel="Revoke"
+        onClose={() => setConfirmRevoke(null)}
+        onConfirm={() => revoke((confirmRevoke ?? { id: '' }).id)} />
     </div>
   )
 }

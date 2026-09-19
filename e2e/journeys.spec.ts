@@ -280,8 +280,8 @@ test('member logs a session on a booking (log on → note → log off)', async (
 // branch keeps it in Upcoming (whatever the status) so Log off stays reachable;
 // Note disappears (its save path requires CONFIRMED server-side). startsAt +10m
 // sits inside the 15-minute early log-on window; endsAt +70m keeps log-off inside
-// its window. The Row cancel confirms via window.confirm — the dialog handler is
-// registered BEFORE the click (Playwright auto-dismisses unhandled dialogs).
+// its window. The Row cancel confirms via the styled ConfirmDialog (v0.32) — the
+// destructive arm lives INSIDE the dialog, scoped by its accessible name.
 test('cancel during an active session keeps the row closeable in Upcoming', async ({ page }) => {
   await runWizard(page)
   const eq = await db.equipment.create({ data: { name: 'Sputter', approvalPolicy: 'NONE' } })
@@ -297,8 +297,11 @@ test('cancel during an active session keeps the row closeable in Upcoming', asyn
   const row = upcoming.getByRole('listitem').filter({ hasText: 'Sputter' })
   await row.getByRole('button', { name: 'Log on' }).click()
   await expect(row.getByRole('button', { name: 'Log off' })).toBeVisible()
-  page.on('dialog', (d) => d.accept())
   await row.getByRole('button', { name: 'Cancel', exact: true }).click()
+  const confirm = page.getByRole('dialog', { name: 'Cancel this booking?' })
+  await expect(confirm).toBeVisible()
+  await confirm.getByRole('button', { name: 'Cancel booking' }).click()
+  await expect(confirm).toHaveCount(0)
   await expect(row.getByText('cancelled')).toBeVisible() // row REMAINS in Upcoming, now cancelled
   await expect(row.getByRole('button', { name: 'Log off' })).toBeVisible()
   await expect(row.getByRole('button', { name: 'Note' })).toHaveCount(0)

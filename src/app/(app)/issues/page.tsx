@@ -11,6 +11,7 @@ import { IssuesSurface } from '@/components/issues/issues-surface'
 import { FilterBar } from '@/components/issues/filter-bar'
 import { NewIssueButton } from '@/components/issues/new-issue-button'
 import { EmptyState } from '@/components/ui/empty-state'
+import { PageHeader } from '@/components/page-header'
 
 export default async function IssuesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const user = await requireUser()
@@ -35,10 +36,7 @@ export default async function IssuesPage({ searchParams }: { searchParams: Promi
     : <EmptyState icon={ListTodo} title="No issues yet" hint="Create the first issue to start tracking research and lab work." />
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold text-default">Issues</h1>
-        {user.role !== 'guest' && <NewIssueButton />}
-      </div>
+      <PageHeader eyebrow="Projects" title="Issues" actions={user.role !== 'guest' ? <NewIssueButton /> : undefined} />
       <FilterBar users={users} projects={projects} labels={labels} />
       <IssuesSurface key={JSON.stringify(sp)} initial={visible} role={user.role} users={users} timezone={timezone} today={today} empty={empty} />
     </div>

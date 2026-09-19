@@ -2,6 +2,7 @@ import { requireUser } from '@/lib/session'
 import { getOrg } from '@/lib/org'
 import { canReviewFeedback } from '@/features/feedback/feedback-policy'
 import { listMyFeedback, listAllFeedback } from '@/features/feedback/feedback-service'
+import { PageHeader } from '@/components/page-header'
 import { FeedbackClient } from './feedback-client'
 
 // One role-adaptive route (spec §9.2), the /people conditional-data pattern: the
@@ -19,8 +20,7 @@ export default async function FeedbackPage() {
   ])
   return (
     <div>
-      <p className="text-sm font-medium text-subtle">Workspace</p>
-      <h1 className="mt-1 text-2xl font-semibold text-default">Feedback</h1>
+      <PageHeader eyebrow="Workspace" title="Feedback" />
       <FeedbackClient user={{ id: me.id, role: me.role }} mine={mine} all={all} tz={tz} />
     </div>
   )

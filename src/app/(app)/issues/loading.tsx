@@ -1,14 +1,17 @@
 import { Skeleton } from '@/components/ui/skeleton'
 
 // Route-level fallback while the issues page's server data resolves. Mirrors the
-// board's shape (heading + New-issue button, FilterBar selects, then the six
-// sunken columns with two cards each — ISSUE_STATUSES is six wide, not five) so
-// the landing doesn't reflow when content replaces it.
+// board's shape (eyebrow + heading + New-issue button, FilterBar selects, then
+// the six sunken columns with two cards each — ISSUE_STATUSES is six wide, not
+// five) so the landing doesn't reflow when content replaces it.
 export default function IssuesLoading() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="h-8 w-20 rounded bg-active motion-safe:animate-pulse" />
+        <div>
+          <div className="h-4 w-20 rounded bg-active motion-safe:animate-pulse" />
+          <div className="mt-1 h-8 w-20 rounded bg-active motion-safe:animate-pulse" />
+        </div>
         <div className="h-9 w-24 rounded-md bg-active motion-safe:animate-pulse" />
       </div>
       <div className="flex flex-wrap gap-2">

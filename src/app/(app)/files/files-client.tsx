@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { FileText, FileImage, FileSpreadsheet, FileArchive, File as FileIcon, Folder, FolderPlus, Upload, Search, MoreHorizontal, ExternalLink } from 'lucide-react'
 import { Menu } from '@/components/ui/menu'
 import { Modal } from '@/components/ui/modal'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { toast } from '@/lib/toast-store'
 import type { Role } from '@/lib/session'
@@ -55,7 +56,7 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
   const [versionPick, setVersionPick] = useState<{ doc: DocVM; n: number } | null>(null)
   const [historyFor, setHistoryFor] = useState<DocVM | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<DocVM | null>(null)
-  const [deleting, setDeleting] = useState(false)
+  const [confirmFolder, setConfirmFolder] = useState<FolderVM | null>(null)
   const versionFileRef = useRef<HTMLInputElement>(null)
   const current = folders.find((f) => f.id === currentFolderId) ?? null
 
@@ -115,16 +116,14 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
     const r = await p
     if (r.ok) { toast(ok); setDialog(null); router.refresh() } else toast(r.message ?? 'Something went wrong.')
   }
-  // v0.32: delete confirms in a Modal (the conversation-menu archive idiom) so
-  // the warning can name the version count that goes with the file.
+  // v0.32: delete confirms via the shared ConfirmDialog (the conversation-menu
+  // archive idiom) so the warning can name the version count that goes with
+  // the file.
   async function confirmDeleteFile(id: string) {
-    setDeleting(true)
     const r = await deleteDocumentAction(id)
-    setDeleting(false)
     if (r.ok) { toast('File deleted.'); setConfirmDelete(null); router.refresh() } else toast(r.message)
   }
   async function delFolder(id: string) {
-    if (!confirm('Delete this folder? It must be empty.')) return
     const r = await deleteFolderAction(id)
     if (r.ok) { toast('Folder deleted.'); router.refresh() } else toast(r.message)
   }
@@ -166,7 +165,7 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
             {canManageFolder(role, f.createdById, selfId) && (
               <Menu label={`Folder ${f.name} actions`} button={<MoreHorizontal size={16} aria-hidden />} items={[
                 { label: 'Rename', onSelect: () => openDialog({ kind: 'renamefolder', id: f.id, name: f.name }) },
-                { label: 'Delete', danger: true, onSelect: () => delFolder(f.id) },
+                { label: 'Delete', danger: true, onSelect: () => setConfirmFolder(f) },
               ]} />
             )}
           </div>
@@ -304,21 +303,15 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
         <VersionHistoryDrawer docId={historyFor.id} docName={historyFor.name} uploaderId={historyFor.uploaderId}
           role={role} selfId={selfId} onClose={() => setHistoryFor(null)} />
       )}
-      {confirmDelete && (
-        <Modal title="Delete file?" onClose={() => setConfirmDelete(null)}>
-          <p className="mt-2 text-sm text-muted">
-            Delete {confirmDelete.name} and its {confirmDelete.latestVersion} version{confirmDelete.latestVersion === 1 ? '' : 's'}? This cannot be undone.
-          </p>
-          <div className="mt-4 flex justify-end gap-2">
-            <button onClick={() => setConfirmDelete(null)}
-              className="rounded-md border border-border px-3 py-1.5 text-sm text-default hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">Cancel</button>
-            <button onClick={() => void confirmDeleteFile(confirmDelete.id)} disabled={deleting}
-              className="rounded-md border border-[var(--text-danger)]/40 px-3 py-1.5 text-sm font-medium text-[var(--text-danger)] transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] disabled:opacity-50">
-              {deleting ? 'Deleting…' : 'Delete'}
-            </button>
-          </div>
-        </Modal>
-      )}
+      <ConfirmDialog open={confirmDelete !== null} danger title="Delete file?"
+        body={confirmDelete && <>Delete {confirmDelete.name} and its {confirmDelete.latestVersion} version{confirmDelete.latestVersion === 1 ? '' : 's'}? This cannot be undone.</>}
+        confirmLabel="Delete"
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => confirmDeleteFile((confirmDelete ?? { id: '' }).id)} />
+      <ConfirmDialog open={confirmFolder !== null} danger title="Delete this folder?"
+        body="It must be empty." confirmLabel="Delete"
+        onClose={() => setConfirmFolder(null)}
+        onConfirm={() => delFolder((confirmFolder ?? { id: '' }).id)} />
       {dialog && (dialog.kind === 'newfolder' || dialog.kind === 'renamefolder' || dialog.kind === 'renamedoc') && (
         <Modal title={dialog.kind === 'newfolder' ? 'New folder' : dialog.kind === 'renamefolder' ? 'Rename folder' : 'Rename file'} onClose={() => setDialog(null)}>
           <label className="block text-sm text-default">Name

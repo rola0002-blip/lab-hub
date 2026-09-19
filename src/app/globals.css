@@ -120,9 +120,12 @@
      clear the 4.5:1 AA bar — #71706e sits ~4.9:1. The dark value already passes. */
   --text-subtle:#71706e;  --text-inverse:var(--color-neutral-0);
   --text-link:var(--color-teal-700);       --text-accent:var(--color-teal-700);
-  /* danger AS TEXT: the raw --color-danger (#e01e5a) is a fill colour that only
-     clears ~3.6:1 on the dark canvas; --text-danger is theme-flipped to stay AA. */
-  --text-danger:var(--color-danger);
+  /* danger AS TEXT: the raw --color-danger (#e01e5a) is a fill colour; as text
+     it clears 4.5:1 on white (~4.66) but NOT on the neutral-50 hover fill many
+     danger actions sit on (~4.38 — surfaced by the v0.32 ConfirmDialog axe
+     pass). --text-danger is theme-split and darkened just past AA everywhere
+     text can land (#d91d57: ~4.93 on canvas, ~4.68 on bg-hover). */
+  --text-danger:#d91d57;
   /* Due-date legibility (v0.9.5): overdue reads red, due-today reads amber, both
      AS TEXT on the canvas, so both clear the 4.5:1 AA bar (gated in
      scripts/check-contrast.mjs) and are theme-split like --text-danger. */
