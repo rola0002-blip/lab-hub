@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.1] - 2026-09-19
+
 ### Security
 - Chat attachments are now bound to the uploader at send time via an
   ownership record: a sender can no longer attach a file someone else
