@@ -9,25 +9,28 @@ import { PolicyError, assertCanUpload, assertCanDeleteDocument, assertCanModifyD
 export type DocumentDto = {
   id: string; folderId: string | null; folderName: string | null; name: string; path: string; mime: string; size: number
   uploaderId: string; uploaderName: string; createdAt: Date
+  latestVersion: number // v0.32: pointer to the newest DocumentVersion (1 until a new version lands)
 }
 export type FolderDto = { id: string; name: string; createdById: string }
 
 const NAME_MAX = 200 // the IssueAttachment name.slice(0, 200) precedent
-
-// Assert a document path is one WE minted (saveUpload('documents') → /uploads/documents/<uuid>.<ext>).
-// Closes a cross-feature file-reference IDOR — a chat/issue/avatar file can never be
-// registered as a document. Mirrors attachIssueFiles (issue-service.ts:347–355).
-function assertDocumentPath(path: string): void {
-  if (!path.startsWith('/uploads/documents/') || path.includes('..')) {
-    throw new PolicyError('invalid', 'A document must be an uploaded file.')
-  }
-}
 
 // Exported for project-service (v0.15 §5.2) — the first issues→documents edge; both modules are server-only.
 export async function assertFolderExists(folderId: string): Promise<{ id: string; name: string }> {
   const folder = await prisma.documentFolder.findUnique({ where: { id: folderId }, select: { id: true, name: true } })
   if (!folder) throw new PolicyError('invalid', 'That folder no longer exists.')
   return folder
+}
+
+// Exported for version-service (v0.32): new versions must pass the SAME
+// server-minted-path gate as creates — a chat/issue/avatar file can never be
+// registered as a document version either. Asserts a document path is one WE
+// minted (saveUpload('documents') → /uploads/documents/<uuid>.<ext>) — closes a
+// cross-feature file-reference IDOR. Mirrors attachIssueFiles (issue-service.ts:347–355).
+export function assertDocumentPath(path: string): void {
+  if (!path.startsWith('/uploads/documents/') || path.includes('..')) {
+    throw new PolicyError('invalid', 'A document must be an uploaded file.')
+  }
 }
 
 // One-shot create: the row is created after the file is saved by the route. Server-
@@ -38,8 +41,15 @@ export async function createDocument(args: {
   assertDocumentPath(args.path)
   const folder = args.folderId ? await assertFolderExists(args.folderId) : null
   const name = args.name.slice(0, NAME_MAX)
-  const doc = await prisma.document.create({
-    data: { folderId: folder?.id ?? null, name, path: args.path, mime: args.mime, size: args.size, uploaderId: args.uploaderId },
+  // v0.32: the Document and its v1 version snapshot land in ONE transaction — a
+  // Document without a version row is no longer a complete record (deleteDocument
+  // and listVersions assume every file's history starts at 1).
+  const doc = await prisma.$transaction(async (tx) => {
+    const d = await tx.document.create({
+      data: { folderId: folder?.id ?? null, name, path: args.path, mime: args.mime, size: args.size, uploaderId: args.uploaderId },
+    })
+    await tx.documentVersion.create({ data: { documentId: d.id, version: 1, path: args.path, name, mime: args.mime, size: args.size, uploadedById: args.uploaderId } })
+    return d
   })
   // §6.9: one line, uploader + filename + folder (root if none); NO @-mention → posted,
   // not pinged. Awaited but non-fatal (announceToChannel is internally try/caught).
@@ -68,9 +78,13 @@ export async function deleteDocument(args: { userId: string; role: Role; id: str
   const doc = await prisma.document.findUnique({ where: { id: args.id }, select: { id: true, path: true, uploaderId: true } })
   if (!doc) throw new PolicyError('not_found', 'File not found.')
   assertCanDeleteDocument(args.role, doc.uploaderId, args.userId)
+  // v0.32: every version's file goes, not just the current pointer. Read the
+  // paths BEFORE the delete (CASCADE removes the rows with the Document).
+  const versions = await prisma.documentVersion.findMany({ where: { documentId: args.id }, select: { path: true } })
   await prisma.document.delete({ where: { id: args.id } })
   // Best-effort file unlink (the avatar-cleanup precedent, settings/service.ts:50).
-  await removeUpload(doc.path)
+  const paths = new Set([...versions.map((v) => v.path), doc.path])
+  await Promise.all([...paths].map((p) => removeUpload(p)))
 }
 
 export async function createFolder(args: { userId: string; role: Role; name: string }): Promise<FolderDto> {
@@ -127,6 +141,8 @@ export async function listDocuments(args: { folderId?: string | null; take?: num
   return rows.map(toDto)
 }
 
-function toDto(d: { id: string; folderId: string | null; name: string; path: string; mime: string; size: number; uploaderId: string; createdAt: Date; uploader: { name: string }; folder: { name: string } | null }): DocumentDto {
-  return { id: d.id, folderId: d.folderId, folderName: d.folder?.name ?? null, name: d.name, path: d.path, mime: d.mime, size: d.size, uploaderId: d.uploaderId, uploaderName: d.uploader.name, createdAt: d.createdAt }
+// Exported for version-service (v0.32) — uploadNewVersion returns the same DTO
+// shape the Files list consumes, just re-pointed at the new version.
+export function toDto(d: { id: string; folderId: string | null; name: string; path: string; mime: string; size: number; uploaderId: string; createdAt: Date; latestVersion: number; uploader: { name: string }; folder: { name: string } | null }): DocumentDto {
+  return { id: d.id, folderId: d.folderId, folderName: d.folder?.name ?? null, name: d.name, path: d.path, mime: d.mime, size: d.size, uploaderId: d.uploaderId, uploaderName: d.uploader.name, createdAt: d.createdAt, latestVersion: d.latestVersion }
 }
