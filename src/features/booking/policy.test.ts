@@ -10,7 +10,8 @@ function input(over: Partial<PolicyInput> & { eq?: Partial<PolicyInput['equipmen
     now: NOW, role: 'member', isManager: false, isCertified: false,
     equipment: {
       status: 'ACTIVE', advanceBookingDays: 14, maxDurationMinutes: 480,
-      certificationRequired: false, approvalPolicy: 'GUESTS', allowRecurring: false, ...eq,
+      certificationRequired: false, approvalPolicy: 'GUESTS', allowRecurring: false,
+      accessStartMinutes: 0, accessEndMinutes: 1439, ...eq,
     },
     slot: { startsAt: h(24), endsAt: h(28) },
     recurring: false, maintenance: [],
@@ -148,5 +149,75 @@ describe('recurring follows the per-equipment policy (SP5 §3.4)', () => {
     const far = { startsAt: h(180 * 24), endsAt: h(180 * 24 + 1) }
     expect(evaluateBooking(input({ recurring: true, slot: far, eq: { allowRecurring: true, approvalPolicy: 'NONE' } })))
       .toEqual({ kind: 'instant' }) // not blocked by advance_window
+  })
+})
+
+describe('evaluateBooking — equipment access windows', () => {
+  // 07:00–23:00 daily access window (420..1380). Wall times below are SGT (UTC+8):
+  // the file's NOW (2026-07-07) is ~76 days before the slots, so the advance
+  // window is widened to 90 days to keep these fixtures on the access-hours path.
+  const eq = { status: 'ACTIVE', advanceBookingDays: 90, maxDurationMinutes: 1440, certificationRequired: false,
+    approvalPolicy: 'NONE', allowRecurring: true, accessStartMinutes: 420, accessEndMinutes: 1380 } as const
+
+  it('allows a slot inside the access window', () => {
+    const v = evaluateBooking(input({ eq: eq,
+      slot: { startsAt: new Date('2026-09-21T02:00:00Z'), endsAt: new Date('2026-09-21T04:00:00Z') }, // 10:00-12:00 SGT
+      slotWall: { startMin: 10 * 60, endMin: 12 * 60, sameDay: true } }))
+    // 10:00 & 12:00 are within 420..1381 → instant
+    expect(v.kind).toBe('instant')
+  })
+  it('blocks when the start is before accessStart', () => {
+    const v = evaluateBooking(input({ eq: eq,
+      slot: { startsAt: new Date('2026-09-21T20:00:00Z'), endsAt: new Date('2026-09-21T21:00:00Z') }, // 04:00-05:00 SGT
+      slotWall: { startMin: 4 * 60, endMin: 5 * 60, sameDay: true } }))
+    expect(v).toMatchObject({ kind: 'blocked', reason: 'outside_access_hours' })
+  })
+  it('blocks overnight slots unless the window is 24h', () => {
+    const v = evaluateBooking(input({ eq: eq,
+      slot: { startsAt: new Date('2026-09-21T14:00:00Z'), endsAt: new Date('2026-09-22T01:00:00Z') }, // 22:00 → 09:00 next day SGT
+      slotWall: { startMin: 22 * 60, endMin: 9 * 60, sameDay: false } }))
+    expect(v).toMatchObject({ kind: 'blocked', reason: 'outside_access_hours' })
+  })
+  it('allows anything (≤ maxDuration) when the window is 24h', () => {
+    const v = evaluateBooking(input({ eq: { ...eq, accessStartMinutes: 0, accessEndMinutes: 1439 },
+      slot: { startsAt: new Date('2026-09-21T14:00:00Z'), endsAt: new Date('2026-09-22T01:00:00Z') },
+      slotWall: { startMin: 22 * 60, endMin: 9 * 60, sameDay: false } }))
+    expect(v.kind).toBe('instant')
+  })
+  it('managers bypass the access window', () => {
+    const v = evaluateBooking(input({ isManager: true, eq,
+      slot: { startsAt: new Date('2026-09-21T20:00:00Z'), endsAt: new Date('2026-09-21T21:00:00Z') },
+      slotWall: { startMin: 4 * 60, endMin: 5 * 60, sameDay: true } }))
+    expect(v.kind).toBe('instant')
+  })
+  it('managers bypass overnight slots too', () => {
+    const v = evaluateBooking(input({ isManager: true, eq,
+      slot: { startsAt: new Date('2026-09-21T14:00:00Z'), endsAt: new Date('2026-09-22T01:00:00Z') },
+      slotWall: { startMin: 22 * 60, endMin: 9 * 60, sameDay: false } }))
+    expect(v.kind).toBe('instant')
+  })
+  it('start exactly at accessStart and end within close+1 are allowed (half-open minute)', () => {
+    const v = evaluateBooking(input({ eq: eq,
+      slot: { startsAt: new Date('2026-09-21T23:00:00Z'), endsAt: new Date('2026-09-22T00:00:00Z') }, // 07:00–08:00 SGT
+      slotWall: { startMin: 420, endMin: 1381, sameDay: true } }))
+    expect(v.kind).toBe('instant')
+  })
+  it('end past close+1 is blocked', () => {
+    const v = evaluateBooking(input({ eq: eq,
+      slot: { startsAt: new Date('2026-09-21T23:00:00Z'), endsAt: new Date('2026-09-22T00:00:00Z') },
+      slotWall: { startMin: 420, endMin: 1382, sameDay: true } }))
+    expect(v).toMatchObject({ kind: 'blocked', reason: 'outside_access_hours' })
+  })
+  it('blocked message names the formatted window', () => {
+    const v = evaluateBooking(input({ eq: eq,
+      slot: { startsAt: new Date('2026-09-21T20:00:00Z'), endsAt: new Date('2026-09-21T21:00:00Z') },
+      slotWall: { startMin: 4 * 60, endMin: 5 * 60, sameDay: true } }))
+    if (v.kind !== 'blocked') throw new Error('expected blocked')
+    expect(v.message).toContain('07:00–23:00')
+  })
+  it('skips the check entirely when slotWall is absent (precomputed-input back-compat)', () => {
+    const v = evaluateBooking(input({ eq: eq,
+      slot: { startsAt: new Date('2026-09-21T20:00:00Z'), endsAt: new Date('2026-09-21T21:00:00Z') } }))
+    expect(v.kind).toBe('instant')
   })
 })

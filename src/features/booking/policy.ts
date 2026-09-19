@@ -2,6 +2,7 @@ export type Role = 'admin' | 'member' | 'guest'
 export type BlockReason =
   | 'invalid_range' | 'in_past' | 'retired' | 'certification_required'
   | 'recurring_not_allowed' | 'advance_window' | 'max_duration' | 'maintenance_overlap'
+  | 'outside_access_hours'
 export type Verdict =
   | { kind: 'blocked'; reason: BlockReason; message: string }
   | { kind: 'instant' }
@@ -19,13 +20,21 @@ export interface PolicyInput {
     certificationRequired: boolean
     approvalPolicy: 'NONE' | 'GUESTS' | 'ALL'
     allowRecurring: boolean
+    accessStartMinutes: number
+    accessEndMinutes: number
   }
   slot: { startsAt: Date; endsAt: Date }
+  // Slot wall-clock in the org timezone, precomputed by buildPolicyInput (the
+  // policy stays pure and tz-library-free). Absent → the access check is skipped.
+  slotWall?: { startMin: number; endMin: number; sameDay: boolean }
   recurring: boolean
   maintenance: Array<{ startsAt: Date; endsAt: Date }>
 }
 
 const blocked = (reason: BlockReason, message: string): Verdict => ({ kind: 'blocked', reason, message })
+
+const hm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+const fmtWindow = (eq: PolicyInput['equipment']) => `${hm(eq.accessStartMinutes)}–${hm(eq.accessEndMinutes)}`
 
 export function evaluateBooking(i: PolicyInput): Verdict {
   const { slot, equipment: eq } = i
@@ -46,6 +55,18 @@ export function evaluateBooking(i: PolicyInput): Verdict {
   }
   if (!i.isManager && durationMin > eq.maxDurationMinutes)
     return blocked('max_duration', `Maximum booking length on this instrument is ${eq.maxDurationMinutes / 60} hours.`)
+  // Daily access window (org-tz wall clock, precomputed as slotWall). endMin is
+  // compared to close+1: a slot whose final minute begins at the closing minute
+  // still ends "within" the window (half-open minute bucket). Overnight slots
+  // fail `sameDay`; the only way to book them is a 24h window (or a manager).
+  const fullDay = eq.accessStartMinutes === 0 && eq.accessEndMinutes >= 1439
+  if (!i.isManager && !fullDay && i.slotWall) {
+    const { startMin, endMin, sameDay } = i.slotWall
+    if (!sameDay || startMin < eq.accessStartMinutes || endMin > eq.accessEndMinutes + 1) {
+      return blocked('outside_access_hours',
+        `This instrument is bookable ${fmtWindow(eq)} — overnight or 24-hour runs need the window set to 24 hours.`)
+    }
+  }
   const clash = i.maintenance.some((m) => m.startsAt < slot.endsAt && m.endsAt > slot.startsAt)
   if (clash) return blocked('maintenance_overlap', 'The requested time overlaps scheduled maintenance.')
 

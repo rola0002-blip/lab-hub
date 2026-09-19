@@ -10,7 +10,8 @@ import { isManagerOf } from '@/features/equipment/service'
 import { isCertified } from '@/features/certifications/service'
 import * as bot from '@/features/bot'
 import { evaluateBooking, type Verdict, type Role, type PolicyInput } from './policy'
-import { expandWeekly } from './recurrence'
+import { expandWeekly, NonexistentWallTimeError } from './recurrence'
+import { wallMinutes } from '@/lib/wall-time'
 import { canStartSession, canEndSession } from './session'
 
 export type BookingListItem = {
@@ -69,7 +70,8 @@ async function orgInfo() {
 export async function buildPolicyInput(
   userId: string, equipmentId: string, slot: { startsAt: Date; endsAt: Date }, recurring: boolean,
 ): Promise<PolicyInput | null> {
-  const [user, eq] = await Promise.all([
+  const [{ tz }, user, eq] = await Promise.all([
+    orgInfo(),
     prisma.user.findUnique({ where: { id: userId } }),
     prisma.equipment.findUnique({ where: { id: equipmentId } }),
   ])
@@ -82,9 +84,14 @@ export async function buildPolicyInput(
       select: { startsAt: true, endsAt: true },
     }),
   ])
+  // slotWall: the slot's wall clock in the org timezone, precomputed once so
+  // evaluateBooking stays a pure function (see PolicyInput.slotWall).
+  const startW = wallMinutes(slot.startsAt, tz)
+  const endW = wallMinutes(slot.endsAt, tz)
   return {
     now: new Date(), role: user.role as Role, isManager: manager, isCertified: certified,
     equipment: eq, slot, recurring, maintenance,
+    slotWall: { startMin: startW.min, endMin: endW.min, sameDay: startW.day === endW.day },
   }
 }
 
@@ -217,7 +224,14 @@ export type CreateRecurringResult =
 
 export async function createRecurringBooking(input: CreateRecurringInput): Promise<CreateRecurringResult> {
   const { tz } = await orgInfo()
-  const occurrences = expandWeekly({ ...input, timezone: tz })
+  let occurrences: Array<{ startsAt: Date; endsAt: Date }>
+  try {
+    occurrences = expandWeekly({ ...input, timezone: tz })
+  } catch (e) {
+    if (e instanceof NonexistentWallTimeError)
+      return { ok: false, error: 'blocked', message: `That time does not exist on ${e.date} (daylight-saving transition).` }
+    throw e
+  }
   if (occurrences.length === 0) return { ok: false, error: 'blocked', message: 'The pattern produces no occurrences.' }
   if (occurrences.length > 200) return { ok: false, error: 'blocked', message: 'Too many occurrences (max 200). Shorten the date range.' }
 

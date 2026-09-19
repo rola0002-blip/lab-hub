@@ -169,6 +169,8 @@ model Equipment {
   certificationRequired Boolean         @default(false)
   approvalPolicy        ApprovalPolicy  @default(GUESTS)
   allowRecurring        Boolean         @default(false)
+  accessStartMinutes    Int             @default(0)
+  accessEndMinutes      Int             @default(1439)
   createdAt             DateTime        @default(now())
 
   bookings       Booking[]

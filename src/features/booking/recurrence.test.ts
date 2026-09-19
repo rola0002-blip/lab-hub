@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { expandWeekly } from './recurrence'
+import { expandWeekly, NonexistentWallTimeError } from './recurrence'
 
 describe('expandWeekly', () => {
   it('expands Tuesdays 14:00–18:00 SGT over three weeks (until inclusive)', () => {
@@ -23,5 +23,23 @@ describe('expandWeekly', () => {
   })
   it('returns empty for an inverted range', () => {
     expect(expandWeekly({ daysOfWeek: [1], startMinutes: 0, durationMinutes: 60, firstDate: '2026-07-20', untilDate: '2026-07-01', timezone: 'UTC' })).toEqual([])
+  })
+})
+
+describe('expandWeekly — DST guard', () => {
+  it('throws NonexistentWallTimeError naming the occurrence date for a skipped wall time', () => {
+    // Sundays 02:30 America/New_York: 2026-03-08 02:30 does not exist (spring forward).
+    const rule = { daysOfWeek: [0], startMinutes: 2 * 60 + 30, durationMinutes: 60,
+      firstDate: '2026-03-01', untilDate: '2026-03-15', timezone: 'America/New_York' }
+    expect(() => expandWeekly(rule)).toThrow(NonexistentWallTimeError)
+    let caught: NonexistentWallTimeError | undefined
+    try { expandWeekly(rule) } catch (e) { if (e instanceof NonexistentWallTimeError) caught = e }
+    expect(caught?.date).toBe('2026-03-08')
+  })
+  it('expands the same Sundays at 03:30 without throwing (EST before, EDT after)', () => {
+    const occ = expandWeekly({ daysOfWeek: [0], startMinutes: 3 * 60 + 30, durationMinutes: 60,
+      firstDate: '2026-03-01', untilDate: '2026-03-15', timezone: 'America/New_York' })
+    expect(occ.map((o) => o.startsAt.toISOString()))
+      .toEqual(['2026-03-01T08:30:00.000Z', '2026-03-08T07:30:00.000Z', '2026-03-15T07:30:00.000Z'])
   })
 })
