@@ -21,16 +21,22 @@ export async function expirePendingBookings(now: Date = new Date()): Promise<num
     include: { equipment: { include: { managers: true } }, user: { select: { name: true } } },
   })
   if (overdue.length === 0) return 0
-  await prisma.booking.updateMany({ where: { id: { in: overdue.map((b) => b.id) } }, data: { status: 'EXPIRED' } })
+  // Per-row status guard (decideRecurring pattern): the snapshot above can be
+  // stale — a decision or cancellation landing between the read and this write
+  // must win, or the sweep would stomp a just-CONFIRMED booking to EXPIRED.
+  let flipped = 0
   const org = await prisma.organization.findFirst()
   const tz = org?.timezone ?? 'Asia/Singapore'
   for (const b of overdue) {
+    const r = await prisma.booking.updateMany({ where: { id: b.id, status: 'PENDING' }, data: { status: 'EXPIRED' } })
+    if (r.count !== 1) continue // decided/cancelled between the read and this write
+    flipped++
     const when = formatRange(b.startsAt, b.endsAt, tz)
     const msg = `Booking request for ${b.equipment.name} (${when}) expired without a decision.`
     await notify(b.userId, 'booking_expired', { message: msg })
     await Promise.all(b.equipment.managers.map((m) => notify(m.userId, 'booking_expired', { message: `${b.user.name}: ${msg}` })))
   }
-  return overdue.length
+  return flipped
 }
 
 export async function sendBookingReminders(now: Date = new Date()): Promise<number> {

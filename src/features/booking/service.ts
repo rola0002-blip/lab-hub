@@ -161,10 +161,14 @@ export async function decideBooking(args: { bookingId: string; deciderId: string
   if (args.decision === 'reject' && !args.reason?.trim()) return { ok: false, message: 'A rejection reason is required.' }
 
   const approved = args.decision === 'approve'
-  await prisma.booking.update({
-    where: { id: b.id },
+  // Status-guarded write (decideRecurring pattern): the read above can be stale —
+  // an owner cancel or a rival decision landing between read and write would
+  // otherwise be overwritten, resurrecting a decided/cancelled request.
+  const r = await prisma.booking.updateMany({
+    where: { id: b.id, status: 'PENDING' },
     data: { status: approved ? 'CONFIRMED' : 'REJECTED', decidedById: args.deciderId, decidedAt: new Date(), rejectionReason: approved ? null : args.reason!.trim() },
   })
+  if (r.count === 0) return { ok: false, message: 'This request is no longer pending.' }
   const { name: orgName, tz } = await orgInfo()
   const when = formatRange(b.startsAt, b.endsAt, tz)
   await notify(b.userId, 'booking_decided',
