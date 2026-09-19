@@ -10,8 +10,16 @@ export type ClientEvent = LabEvent | { t: 'reconnect' }
 // = 3+ concurrent /api/events) and could exhaust the browser's 6-connections-per-
 // origin HTTP/1.1 budget on self-hosted deployments.
 const g = globalThis as unknown as { __labhubEventRegistry?: ReturnType<typeof createEventRegistry> }
-function sharedRegistry() {
-  if (!g.__labhubEventRegistry) g.__labhubEventRegistry = createEventRegistry(() => new EventSource('/api/events'))
+// Exported for tests (no renderHook infra in this repo's unit suite).
+export function sharedRegistry() {
+  // A 401 (session gone) fails the EventSource permanently — CLOSED, no retry —
+  // so a cached dead source would starve every remounting consumer after
+  // sign-out→sign-in in the same tab. Discard and rebuild. Check-then-swap is
+  // safe: single JS thread, no await between check and replace, so concurrent
+  // subscribers can't double-create (no interleaving point).
+  if (!g.__labhubEventRegistry || g.__labhubEventRegistry.es.readyState === EventSource.CLOSED) {
+    g.__labhubEventRegistry = createEventRegistry(() => new EventSource('/api/events'))
+  }
   return g.__labhubEventRegistry
 }
 
