@@ -3,6 +3,7 @@ import { resetDb, makeUser, makeChannel, makeMember } from '../factories'
 import { resetRate } from '@/features/chat/rate-limit'
 import { _resetForTests } from '@/lib/events'
 import { saveUpload } from '@/lib/uploads'
+import { recordChatUpload } from '@/features/chat/upload-ownership'
 import { sendMessage } from '@/features/chat/message-service'
 
 const mockUser = vi.hoisted(() => ({ current: null as null | { id: string; name: string; email: string; role: string } }))
@@ -28,6 +29,9 @@ describe('attachment serving', () => {
     const ch = await makeChannel()
     await makeMember(ch.id, author.id)
     const path = await saveUpload(new File([new Uint8Array(64)], 'secret.pdf', { type: 'application/pdf' }), 'chat')
+    // The upload route records ownership; seeds that bypass it must too (v0.31.1
+    // sendMessage rejects attachment paths with no/mismatched ChatUpload row).
+    await recordChatUpload(path, author.id)
     const sent = await sendMessage({
       userId: author.id, conversationId: ch.id, body: 'see attached',
       attachments: [{ path, name: 'secret.pdf', mime: 'application/pdf', size: 64 }],
