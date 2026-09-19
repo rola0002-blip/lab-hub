@@ -7,9 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Security
-- Chat attachment uploads are now bound to the uploader's conversation
-  membership: serving a chat attachment requires membership of the chat the
-  file belongs to. Attachments uploaded before this version that were never
+- Chat attachments are now bound to the uploader at send time via an
+  ownership record: a sender can no longer attach a file someone else
+  uploaded, and deleting a message no longer unlinks files the deleter
+  doesn't own. Attachments uploaded before this version that were never
   sent must be re-attached.
 - Invitation signup now requires the invitation link — the signup form no
   longer accepts a bare email match for pending invitations.
