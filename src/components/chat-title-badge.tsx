@@ -19,9 +19,14 @@ export function ChatTitleBadge() {
     // Capture the server-rendered title once; it is the restore target.
     if (base.current === null) base.current = document.title
     const n = sumUnread(conversations)
-    document.title = n > 0 ? `(${n}) ${base.current}` : base.current
     // Same n drives the installed-PWA launcher badge (no-op where unsupported).
     applyAppBadge(n)
+    // A streaming shell (loading.tsx) can hydrate before the document's
+    // <title> commits — an empty capture is not a base to prefix or restore.
+    // Skip the write and recapture on the next store change, by which time
+    // the title has landed; writing '' here would blank the tab title.
+    if (!base.current) return
+    document.title = n > 0 ? `(${n}) ${base.current}` : base.current
   }, [conversations])
   return null
 }
