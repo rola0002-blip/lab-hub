@@ -118,7 +118,10 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
   }
   // v0.32: delete confirms via the shared ConfirmDialog (the conversation-menu
   // archive idiom) so the warning can name the version count that goes with
-  // the file.
+  // the file. The dialog closes once the action settles, success or not — a
+  // failed delete surfaces via this toast, not by staying open; the
+  // success-branch clear below just front-runs the onClose the dialog fires
+  // anyway.
   async function confirmDeleteFile(id: string) {
     const r = await deleteDocumentAction(id)
     if (r.ok) { toast('File deleted.'); setConfirmDelete(null); router.refresh() } else toast(r.message)

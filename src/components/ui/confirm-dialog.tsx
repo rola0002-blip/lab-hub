@@ -38,6 +38,9 @@ export function ConfirmDialog({ open, title, body, confirmLabel = 'Confirm', can
           className="min-h-11 rounded-md border border-border px-3 py-1.5 text-sm text-default transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
           {cancelLabel}
         </button>
+        {/* Contract: closes after onConfirm settles regardless of outcome —
+            no veto; a failed action surfaces via the caller's toast, never by
+            the dialog staying open. */}
         {/* disabled while busy: a double-click would re-fire the destructive
             action against state the first click is already mutating. */}
         <button type="button" disabled={busy}
