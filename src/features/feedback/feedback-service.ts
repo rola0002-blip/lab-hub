@@ -93,10 +93,13 @@ export async function submitFeedback(
   user: SessionUser, input: SubmitFeedbackInput,
 ): Promise<{ ok: true; feedback: FeedbackDto } | { ok: false; error: 'rate_limited' }> {
   assertCanSubmitFeedback(user.role)                                  // guests included, by design
-  if (!checkFeedbackRate(user.id)) return { ok: false, error: 'rate_limited' }
   const body = input.body.trim()
   if (!body || body.length > BODY_MAX) throw new PolicyError('invalid', 'Feedback needs a few words, and at most 4000 characters.')
   if (input.screenshotPath) assertFeedbackPath(input.screenshotPath)
+  // v0.31.1 order: validate FIRST, consume the rate-limit slot only when the
+  // submission is otherwise valid — a whitespace-body flood must not lock a user
+  // out of real reports (the throw already throttles invalid traffic).
+  if (!checkFeedbackRate(user.id)) return { ok: false, error: 'rate_limited' }
   const created = await prisma.feedback.create({
     data: {
       type: input.type,

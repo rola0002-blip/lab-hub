@@ -203,6 +203,19 @@ export async function digestUnreadChat(now: Date = new Date()): Promise<number> 
     const human = new Set(senders.filter((s) => !s.isSystem).map((s) => s.id))
     eligible = rows.filter((r) => human.has(senderOf(r) as string))
   }
+  // Starvation fix: rows scanned but permanently ineligible (bot-authored, or
+  // pre-wave rows without a senderId) must EXIT future scans — otherwise they are
+  // re-fetched every 300s tick forever, and a scan made entirely of them returns
+  // early with nothing latched while newer eligible rows pile up behind take:1000.
+  // The tombstone is stamped at `cutoff`, NOT `now`: the per-user cooldown below
+  // orders by emailedAt desc, so a fresh stamp would postpone that user's next
+  // real digest by up to 55 min. cutoff is always ≥60 min old — it can never gate
+  // a digest, it only clears the row out of the scan window.
+  const eligibleIds = new Set(eligible.map((r) => r.id))
+  const skippedIds = rows.filter((r) => !eligibleIds.has(r.id)).map((r) => r.id)
+  if (skippedIds.length) {
+    await prisma.notification.updateMany({ where: { id: { in: skippedIds } }, data: { emailedAt: cutoff } })
+  }
   if (eligible.length === 0) return 0
   const org = await prisma.organization.findFirst()
   const byUser = new Map<string, typeof eligible>()

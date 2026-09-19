@@ -2,10 +2,6 @@ import { getSessionUser } from '@/lib/session'
 import { subscribe, type LabEvent } from '@/lib/events'
 import { accessibleConversationIds } from '@/features/chat/conversation-service'
 
-// NOTE: Task 4 creates accessibleConversationIds. Until Task 4 lands, this
-// route is committed with the import above and the build will fail if Task 4
-// is skipped — the plan runs Task 4 immediately after; do not reorder.
-
 export async function GET(req: Request) {
   const user = await getSessionUser()
   if (!user) return new Response('unauthorized', { status: 401 })

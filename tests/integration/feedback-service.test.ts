@@ -82,9 +82,9 @@ describe('feedback-service', () => {
     await expect(submitFeedback(su(m), input({ body: 'x'.repeat(4001) }))).rejects.toThrow(PolicyError)
     await expect(submitFeedback(su(m), input({ body: '   ' }))).rejects.toThrow(PolicyError)
     await expect(submitFeedback(su(m), input({ body: '' }))).rejects.toMatchObject({ code: 'invalid' })
-    // The limiter runs BEFORE validation (spec §6.2 order), so each of those three
-    // rejected submits still consumed a token — a flood of invalid bodies is throttled
-    // too. Hence the successful cases below use a fresh user.
+    // Validation runs BEFORE the limiter (v0.31.1 order), so rejected submits
+    // consume no rate-limit budget — a flood of invalid bodies is throttled by the
+    // throw itself, and the successful cases below can reuse the same user.
     const m2 = await makeUser({ role: 'member' })
     const long = await submitOk(su(m2), { pagePath: '/issues?q=' + 'y'.repeat(400), userAgent: 'u'.repeat(400) })
     expect(long.pagePath.length).toBe(300)
@@ -121,6 +121,20 @@ describe('feedback-service', () => {
     // Per-user window: someone else is unaffected.
     const other = await makeUser({ role: 'member' })
     expect((await submitFeedback(su(other), input())).ok).toBe(true)
+  })
+
+  it('whitespace-only bodies do not consume rate-limit budget (validation runs before the limiter)', async () => {
+    const m = await makeUser({ role: 'member' })
+    // Five rejected submits (empty after trim) — pre-v0.31.1 each of these burned a
+    // limiter token because checkFeedbackRate ran first, locking the user out with
+    // nothing submitted.
+    for (let i = 0; i < 5; i++) {
+      await expect(submitFeedback(su(m), input({ body: '   ' }))).rejects.toThrow(PolicyError)
+    }
+    expect(await prisma.feedback.count()).toBe(0)
+    // The budget is untouched: the next VALID submission is accepted.
+    const res = await submitFeedback(su(m), input({ body: 'real report' }))
+    expect(res.ok).toBe(true)
   })
 
   it('bells every OTHER admin — never the author, members, guests, banned or system rows', async () => {

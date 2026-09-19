@@ -288,7 +288,11 @@ export default function MessagePane({ conversationId, conversationType, channelN
           }
           return
         }
-        upsert(m); markRead()
+        // Read-state honesty: an inbound message only advances lastReadAt when we
+        // are actually LOOKING at it — scrolled to the bottom AND the tab focused.
+        // Otherwise the unread badge clears while the message was never seen.
+        upsert(m)
+        if (atBottomRef.current && document.hasFocus()) markRead()
         // A genuinely-new inbound message (this handler already filters to the
         // current conversation and this branch drops our own echo + system rows,
         // and backfill never routes through here) is announced to assistive tech
@@ -408,12 +412,22 @@ export default function MessagePane({ conversationId, conversationType, channelN
     focusRow(rows?.[rows.length - 1])
   }, [focusRow])
 
+  // In-flight guard: the button (and the deep-link pager below) can fire loadEarlier
+  // again while a fetch is pending — without the ref, two concurrent page loads
+  // prepend the same window twice (double rows) and burn a redundant request.
+  const loadingEarlier = useRef(false)
   const loadEarlier = useCallback(async () => {
     if (!messages.length) return
-    const r = await fetch(`/api/chat/conversations/${conversationId}/messages?before=${messages[0].id}`)
-    if (!r.ok) return
-    const d = await r.json()
-    setMessages((prev) => [...d.messages, ...prev]); setHasMore(d.hasMore)
+    if (loadingEarlier.current) return
+    loadingEarlier.current = true
+    try {
+      const r = await fetch(`/api/chat/conversations/${conversationId}/messages?before=${messages[0].id}`)
+      if (!r.ok) return
+      const d = await r.json()
+      setMessages((prev) => [...d.messages, ...prev]); setHasMore(d.hasMore)
+    } finally {
+      loadingEarlier.current = false
+    }
   }, [conversationId, messages])
 
   // Deep-link: land ON the `?msg=` target. If it isn't loaded yet, page older

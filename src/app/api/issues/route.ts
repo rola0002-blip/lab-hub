@@ -11,6 +11,11 @@ export async function GET(req: Request) {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const p = new URL(req.url).searchParams
+  // Due quick-filter — the SAME fixed set parseIssueFilters accepts on the pages
+  // ('overdue' | 'week'); anything else is a client error, not a silently
+  // dropped filter (matching the status/priority posture below).
+  const due = p.get('due')
+  if (due && !['overdue', 'week'].includes(due)) return NextResponse.json({ error: 'invalid_due' }, { status: 400 })
   // Validate the enum query params (mirror the POST body validation): the previous
   // compile-time-only `as` cast let a bad `?status=FOO` reach the Prisma enum column
   // and throw → 500. An invalid enum value is a client error → 400. Free-form id
@@ -24,6 +29,7 @@ export async function GET(req: Request) {
     projectId: p.get('project') ?? undefined,
     labelId: p.get('label') ?? undefined,
     priority: filters.data.priority,
+    due: due as 'overdue' | 'week' | undefined,
   })
   return NextResponse.json({ issues })
 }

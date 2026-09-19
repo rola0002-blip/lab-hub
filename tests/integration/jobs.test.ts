@@ -46,7 +46,7 @@ describe('scheduler jobs', () => {
     const a1 = await mk(u1.id, sender.id, old)
     await mk(u2.id, sender.id, old)
     await mk(u1.id, 'colossus-bot', old)       // bot sender → skipped
-    await mk(u1.id, sender.id, new Date())     // fresh (<60min) → skipped
+    const freshId = await mk(u1.id, sender.id, new Date()) // fresh (<60min) → skipped
     const preWave = await prisma.notification.create({ data: { userId: u2.id, type: 'message_dm', payload: { message: 'old row', conversationId: 'c', messageId: 'm3' } } })
     await prisma.notification.update({ where: { id: preWave.id }, data: { createdAt: old } }) // no senderId (pre-wave) → skipped
     const emailed = await prisma.notification.create({ data: { userId: u1.id, type: 'message_dm', payload: { message: 'y', conversationId: 'c', messageId: 'm2', senderId: sender.id }, emailedAt: old } })
@@ -54,6 +54,12 @@ describe('scheduler jobs', () => {
     expect(await digestUnreadChat()).toBe(2)
     expect(await prisma.emailOutbox.count()).toBe(2)
     expect((await prisma.notification.findUniqueOrThrow({ where: { id: a1 } })).emailedAt).not.toBeNull()
+    // Starvation fix: rows that were scanned but found permanently ineligible (bot
+    // sender / no senderId) are stamped emailedAt so they EXIT future scans —
+    // previously they were re-fetched every 300s tick forever, and a set made
+    // entirely of them returned early without latching anything. Only the fresh
+    // (<60-min, unscanned) row keeps emailedAt null.
+    expect((await prisma.notification.findMany({ where: { emailedAt: null }, select: { id: true } })).map((r) => r.id)).toEqual([freshId])
     expect(await digestUnreadChat()).toBe(0) // latched
     // Per-user cooldown: a NEW old unread row for u1 must not digest — u1 was
     // just emailed (emailedAt stamped moments ago by the run above).

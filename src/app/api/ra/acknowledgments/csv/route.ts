@@ -1,10 +1,10 @@
 import { getSessionUser } from '@/lib/session'
 import { canReviewRa } from '@/features/ra/ra-policy'
 import { listAllRaAcknowledgments } from '@/features/ra/ra-service'
+import { csvCell as cell } from '@/features/ra/csv'
 
 // Admin-only CSV export (the /api/bookings/[id]/ics posture: session-gated,
 // 404-as-deny so the existence of records never leaks to non-admins).
-const cell = (v: string) => `"${v.replace(/"/g, '""')}"`
 
 export async function GET() {
   const user = await getSessionUser()
