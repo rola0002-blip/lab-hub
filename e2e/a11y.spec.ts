@@ -295,7 +295,10 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
   await createIssueViaUI(page, 'A11y issue')
 
   await page.goto('/issues')
-  await expect(page.getByText('A11y issue')).toBeVisible()
+  // Rooted at <main>: dev SSR's hidden streamed-tree duplicate (div#S:0, body
+  // level) can still hold the just-resolved list row alongside the live one —
+  // a bare getByText strict-fails on the pair (the project-modal precedent below).
+  await expect(page.getByRole('main').getByText('A11y issue')).toBeVisible()
   await auditBothThemes(page, 'issues-list')
 
   await page.getByRole('button', { name: 'Board' }).click()
