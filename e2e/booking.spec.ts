@@ -1,7 +1,7 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
 import { TZDate } from '@date-fns/tz'
 import { addDays, format, startOfWeek } from 'date-fns'
-import { db, wipe, runWizard, signIn, ADMIN, createMemberViaInvite, acceptInvite } from './helpers'
+import { db, wipe, runWizard, signIn, ADMIN, createMemberViaInvite, acceptInvite, waitForHydration } from './helpers'
 import { rowsToRange, type Band } from '@/features/booking/grid'
 
 // v0.32.0 "access windows": the booking surfaces follow the equipment's daily
@@ -43,6 +43,7 @@ test('admin sets the window; member books an overnight run that spans midnight',
 
   // ── Leg 1: the admin form edits the window through the UI ──────────────────
   await adminPage.goto(`/admin/equipment/${eq.id}`)
+  await waitForHydration(adminPage)
   const from = adminPage.getByRole('combobox', { name: 'Bookable from' })
   const until = adminPage.getByRole('combobox', { name: 'Bookable until' })
   // The stored 07:00–23:00 window renders in the two selects, unchecked 24 h.
@@ -64,6 +65,7 @@ test('admin sets the window; member books an overnight run that spans midnight',
 
   // ── Leg 2: widen to 24 hours via the checkbox, which disables the selects ──
   await adminPage.goto(`/admin/equipment/${eq.id}`)
+  await waitForHydration(adminPage)
   await expect(from).toHaveValue('480')
   await adminPage.getByLabel('24 hours').check()
   await expect(from).toBeDisabled()
@@ -87,6 +89,7 @@ test('admin sets the window; member books an overnight run that spans midnight',
   const wed = format(addDays(tue, 1), 'yyyy-MM-dd')
 
   await page.goto(`/booking/${eq.id}`)
+  await waitForHydration(page)
   await main(page).getByRole('button', { name: 'New booking' }).click()
   const dlg = dialog(page)
   await expect(dlg).toBeVisible()
@@ -128,6 +131,7 @@ test('a windowed instrument caps the dialog time options to its band', async ({ 
   const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE', accessStartMinutes: 420, accessEndMinutes: 1380 } })
   await signIn(page, ADMIN.email, ADMIN.password)
   await page.goto(`/booking/${eq.id}`)
+  await waitForHydration(page)
   await expect(main(page).getByText('Bookable 07:00–23:00 daily')).toBeVisible()
 
   await main(page).getByRole('button', { name: 'New booking' }).click()
