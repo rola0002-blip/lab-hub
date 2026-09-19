@@ -2,16 +2,22 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { TZDate } from '@date-fns/tz'
-import { format } from 'date-fns'
+import { addDays, format } from 'date-fns'
 import { Modal } from '@/components/ui/modal'
 import { toast } from '@/components/ui/toast'
 import { AddToCalendar } from '@/components/calendar/add-to-calendar'
-import { ROWS, START_HOUR, rangeToRows, rowLabel, rowsToRange } from '@/features/booking/grid'
+import { wallTimeExists } from '@/lib/wall-time'
+import { type Band, bandRows, rangeToRows, rowLabel, rowsToRange } from '@/features/booking/grid'
 
 type Props = {
   equipmentId: string; timezone: string; allowRecurring: boolean
   equipmentName: string; equipmentLocation: string
   initialStart: Date; initialEnd: Date; onClose: () => void
+  // The equipment's access window (grid.ts bandFor) and duration cap: the time
+  // selects generate from the band, and the To select may extend past the band
+  // close by up to maxDurationMinutes — an overnight run's 06:00 end is a row
+  // past midnight, which policy (not the UI) admits or refuses.
+  band: Band; maxDurationMinutes: number
   // Optional: entry paths that own a draft selection clear it here once the
   // booking lands. The calendar's drag mount has nothing to clear and omits it.
   onBooked?: () => void
@@ -25,11 +31,23 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 // which stays the PRIMITIVE row trio. A derived Date in those deps would be a
 // fresh object every render and the preview fetch would re-arm itself forever.
 const durationOf = (startRow: number, endRow: number) => (endRow - startRow) * 30
-const startMinutesOf = (startRow: number) => START_HOUR * 60 + startRow * 30
+const startMinutesOf = (startRow: number, band: Band) => band.startHour * 60 + startRow * 30
+
+// Client DST guard, at the site where a select option resolves to a wall time:
+// a skipped clock reading (02:30 on a US spring-forward Sunday) must not be
+// offered, because the TZDate construction below would silently book 03:30.
+// Rows past the band close roll into the NEXT calendar day, so the existence
+// check resolves the rolled date, not the picked one.
+const optionExists = (dateStr: string, row: number, band: Band, timezone: string): boolean => {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const hh = band.startHour + Math.floor(row / 2)
+  const day = addDays(new Date(Date.UTC(y, m - 1, d)), Math.floor(hh / 24))
+  return wallTimeExists(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), hh % 24, (row % 2) * 30, timezone)
+}
 
 const FIELD = 'mt-1 block rounded-md border border-border bg-surface px-3 py-2'
 
-export default function BookingDialog({ equipmentId, timezone, allowRecurring, equipmentName, equipmentLocation, initialStart, initialEnd, onClose, onBooked }: Props) {
+export default function BookingDialog({ equipmentId, timezone, allowRecurring, equipmentName, equipmentLocation, initialStart, initialEnd, band, maxDurationMinutes, onClose, onBooked }: Props) {
   const router = useRouter()
   const [purpose, setPurpose] = useState('')
   const [recurring, setRecurring] = useState(false)
@@ -37,7 +55,7 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, e
   // The editable range, held as the primitive trio and seeded ONCE from the
   // opening props — every entry path hands us an already row-aligned range, so
   // the seed is lossless, and later prop churn must not stomp an edit.
-  const [range, setRange] = useState(() => rangeToRows(initialStart, initialEnd, timezone))
+  const [range, setRange] = useState(() => rangeToRows(initialStart, initialEnd, timezone, band))
   const { dateStr, startRow, endRow } = range
   // Seed-once from the opening props too (deliberate): the weekday chip and the
   // four-week horizon describe where the dialog OPENED, not where it was edited to.
@@ -48,12 +66,18 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, e
   const [conflicts, setConflicts] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
 
+  const rows = bandRows(band)
+  // The end select may run past the band close for an overnight run, bounded by
+  // the policy duration cap measured from the selected start (the old 16-h
+  // select ceiling is gone); the same-day band close stays selectable whatever
+  // the cap, and the preview verdict still refuses what policy disallows.
+  const maxEndRow = Math.max(rows, startRow + Math.floor(maxDurationMinutes / 30))
   const durationMinutes = durationOf(startRow, endRow)
   // Memoised on the trio so the instants are referentially stable. They are read
   // by the render and by submit — never by a dependency array (see above).
   const { start: startsAt, end: endsAt } = useMemo(
-    () => rowsToRange(dateStr, startRow, endRow, timezone),
-    [dateStr, startRow, endRow, timezone],
+    () => rowsToRange(dateStr, startRow, endRow, timezone, band),
+    [dateStr, startRow, endRow, timezone, band],
   )
 
   // Moving the start drags the end along only when it would otherwise be left at
@@ -71,19 +95,19 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, e
   useEffect(() => {
     const t = setTimeout(async () => {
       try {
-        const { start, end } = rowsToRange(dateStr, startRow, endRow, timezone)
+        const { start, end } = rowsToRange(dateStr, startRow, endRow, timezone, band)
         const r = await fetch('/api/bookings/preview', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             equipmentId, startsAt: start, endsAt: end, purpose: '',
-            ...(recurring ? { recurring: { daysOfWeek: days, startMinutes: startMinutesOf(startRow), durationMinutes: durationOf(startRow, endRow), firstDate: dateStr, untilDate: until } } : {}),
+            ...(recurring ? { recurring: { daysOfWeek: days, startMinutes: startMinutesOf(startRow, band), durationMinutes: durationOf(startRow, endRow), firstDate: dateStr, untilDate: until } } : {}),
           }),
         })
         if (r.ok) setVerdict(await r.json())
       } catch { /* preview is best-effort — keep the last verdict on network/parse failure */ }
     }, 300)
     return () => clearTimeout(t)
-  }, [equipmentId, dateStr, startRow, endRow, timezone, recurring, days, until])
+  }, [equipmentId, dateStr, startRow, endRow, timezone, band, recurring, days, until])
 
   async function submit() {
     setBusy(true); setError(null); setConflicts([])
@@ -92,7 +116,7 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, e
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           equipmentId, startsAt, endsAt, purpose,
-          ...(recurring ? { recurring: { daysOfWeek: days, startMinutes: startMinutesOf(startRow), durationMinutes, firstDate: dateStr, untilDate: until } } : {}),
+          ...(recurring ? { recurring: { daysOfWeek: days, startMinutes: startMinutesOf(startRow, band), durationMinutes, firstDate: dateStr, untilDate: until } } : {}),
         }),
       })
       const body = await r.json() // may throw on a non-JSON 5xx — caught below
@@ -138,14 +162,20 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, e
         <div className="mt-3 flex flex-wrap items-end gap-x-3 gap-y-2">
           <label className="text-sm text-default">From
             <select value={startRow} onChange={(e) => moveStart(Number(e.target.value))} className={FIELD}>
-              {Array.from({ length: ROWS }, (_, r) => <option key={r} value={r}>{rowLabel(r)}</option>)}
+              {Array.from({ length: rows }, (_, r) => (
+                <option key={r} value={r} disabled={!optionExists(dateStr, r, band, timezone)}>{rowLabel(r, band)}</option>
+              ))}
             </select>
           </label>
           <label className="text-sm text-default">To
-            {/* Rows start+1 … ROWS only, so an end at or before the start is unrepresentable. */}
+            {/* Rows start+1 … max(maxEndRow, endRow), so an end at or before the
+                start is unrepresentable, an overnight end past the band close is
+                offered up to the duration cap (policy has the final word), and a
+                To chosen under an earlier From stays listed — the select never
+                shows a value it does not offer. */}
             <select value={endRow} onChange={(e) => setRange((r) => ({ ...r, endRow: Number(e.target.value) }))} className={FIELD}>
-              {Array.from({ length: ROWS - startRow }, (_, i) => startRow + 1 + i)
-                .map((r) => <option key={r} value={r}>{rowLabel(r)}</option>)}
+              {Array.from({ length: Math.max(maxEndRow, endRow) - startRow }, (_, i) => startRow + 1 + i)
+                .map((r) => <option key={r} value={r} disabled={!optionExists(dateStr, r, band, timezone)}>{rowLabel(r, band)}</option>)}
             </select>
           </label>
           <span className="py-2 text-sm text-muted">({(durationMinutes / 60).toFixed(1)} h)</span>
@@ -170,7 +200,7 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, e
                   ))}
                 </div>
                 <label className="block">Until (inclusive)
-                  <input type="date" value={until} onChange={(e) => setUntil(e.target.value)} className="mt-1 rounded-md border border-border bg-surface px-2 py-1" />
+                  <input type="date" value={until} onChange={(e) => setUntil(e.target.value)} className="mt-1 rounded-md border border-border bg-surface px-3 py-1" />
                 </label>
               </div>
             )}

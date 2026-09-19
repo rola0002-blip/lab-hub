@@ -14,6 +14,12 @@ export const equipmentSchema = z.object({
   certificationRequired: z.boolean(),
   approvalPolicy: z.enum(['NONE', 'GUESTS', 'ALL']),
   allowRecurring: z.boolean(),
+  // Daily access window, minutes of day in the ORG timezone (0/1439 = 24 h).
+  // Cross-field ordering (start <= end unless the 24 h pair) lives with the
+  // form schema in the admin action — a refinement here would break the
+  // `.omit()`/`.partial()` calls this schema's other consumers rely on.
+  accessStartMinutes: z.coerce.number().int().min(0).max(1439).default(0),
+  accessEndMinutes: z.coerce.number().int().min(0).max(1439).default(1439),
   photoPath: z.string().nullable().optional(),
 })
 export type EquipmentPolicyInput = z.infer<typeof equipmentSchema>

@@ -2,7 +2,13 @@ import { test, expect, type Browser, type Locator, type Page } from '@playwright
 import { TZDate } from '@date-fns/tz'
 import { addDays, format } from 'date-fns'
 import { db, wipe, runWizard, signIn, ADMIN, createMemberViaInvite, acceptInvite, waitForHydration } from './helpers'
-import { ROW_PX_DAY, rangeToRows, rowsToRange } from '@/features/booking/grid'
+import { ROW_PX_DAY, rangeToRows, rowsToRange, type Band } from '@/features/booking/grid'
+
+// v0.32.0: the grid renders the equipment's ACCESS WINDOW (grid.ts bandFor), not
+// a fixed 07:00–23:00 band. Every instrument this spec seeds pins the legacy
+// window (420/1380 = 07:00–23:00) so the row math below keeps its historical
+// meaning; the 24 h default band's journey lives in booking.spec.ts.
+const BAND: Band = { startHour: 7, endHour: 23 }
 
 // v0.14 "mobile UX": the booking schedule becomes one responsive component — the
 // 7-column week grid at md+, a single touch-sized day column below it — plus a
@@ -62,7 +68,7 @@ test('phone gets a day view with a coarse pointer', async ({ browser }) => {
   test.setTimeout(90_000)
   const page = await phonePage(browser)
   await runWizard(page)
-  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE' } })
+  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE', accessStartMinutes: 420, accessEndMinutes: 1380 } })
   await signIn(page, ADMIN.email, ADMIN.password)
   await page.goto(`/booking/${eq.id}?week=${futureWeek()}`)
 
@@ -86,7 +92,7 @@ test('day bar navigates within the week and links across the boundary', async ({
   test.setTimeout(90_000)
   const page = await phonePage(browser)
   await runWizard(page)
-  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE' } })
+  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE', accessStartMinutes: 420, accessEndMinutes: 1380 } })
   await signIn(page, ADMIN.email, ADMIN.password)
   const week = futureWeek()
   await page.goto(`/booking/${eq.id}?week=${week}`)
@@ -113,7 +119,7 @@ test('New booking button books the SELECTED range (desktop keyboard path)', asyn
   test.setTimeout(120_000)
   const adminPage = await desktopPage(browser)
   await runWizard(adminPage)
-  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE' } })
+  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE', accessStartMinutes: 420, accessEndMinutes: 1380 } })
   await signIn(adminPage, ADMIN.email, ADMIN.password)
   // Booked as a MEMBER, not the admin: `isManagerOf` treats every admin as a manager
   // of every instrument, and the manager arm of evaluateBooking skips BOTH the
@@ -167,7 +173,7 @@ test('New booking button books the SELECTED range (desktop keyboard path)', asyn
 
   // The gate this test exists for: the SELECTED range — not the range the dialog
   // opened with — is what reached POST /api/bookings.
-  const { start, end } = rowsToRange(dateStr, 6, 10, org.timezone)
+  const { start, end } = rowsToRange(dateStr, 6, 10, org.timezone, BAND)
   const b = await db.booking.findFirstOrThrow({ where: { equipmentId: eq.id } })
   expect(b.startsAt.toISOString()).toBe(start.toISOString())
   expect(b.endsAt.toISOString()).toBe(end.toISOString())
@@ -183,7 +189,7 @@ test('clearing the dialog date keeps the last valid date instead of crashing the
   const pageErrors: string[] = []
   page.on('pageerror', (e) => pageErrors.push(String(e)))
   await runWizard(page)
-  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE' } })
+  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE', accessStartMinutes: 420, accessEndMinutes: 1380 } })
   await signIn(page, ADMIN.email, ADMIN.password)
   await page.goto(`/booking/${eq.id}`)
 
@@ -205,7 +211,7 @@ test('phone books via tap → draft → handle drag → Book', async ({ browser 
   test.setTimeout(120_000)
   const page = await phonePage(browser)
   await runWizard(page)
-  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE' } })
+  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE', accessStartMinutes: 420, accessEndMinutes: 1380 } })
   await signIn(page, ADMIN.email, ADMIN.password)
   await page.goto(`/booking/${eq.id}?week=${futureWeek()}`)
   await expect(dayColumn(page)).toHaveCount(1)      // polls past the SSR week paint
@@ -260,7 +266,7 @@ test('phone books via tap → draft → handle drag → Book', async ({ browser 
   // uses the same TZDate math the app does rather than a re-derivation.
   const org = await db.organization.findFirstOrThrow()
   const b = await db.booking.findFirstOrThrow({ where: { equipmentId: eq.id } })
-  const rows = rangeToRows(b.startsAt, b.endsAt, org.timezone)
+  const rows = rangeToRows(b.startsAt, b.endsAt, org.timezone, BAND)
   expect(rows.startRow).toBe(6)
   expect(rows.endRow).toBe(10)
   expect(format(new TZDate(b.startsAt, org.timezone), 'EEE d MMM')).toBe(dayText)
@@ -270,7 +276,7 @@ test('draft lifecycle: re-seed, cancel keeps, day switch discards, success clear
   test.setTimeout(120_000)
   const page = await phonePage(browser)
   await runWizard(page)
-  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE' } })
+  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE', accessStartMinutes: 420, accessEndMinutes: 1380 } })
   await signIn(page, ADMIN.email, ADMIN.password)
   await page.goto(`/booking/${eq.id}?week=${futureWeek()}`)
   await expect(dayColumn(page)).toHaveCount(1)
@@ -326,7 +332,7 @@ const orgDayIndex = (d: Date, timezone: string) => (new TZDate(d, timezone).getD
 async function futureSlot(rowStart = 6, rowEnd = 8) {
   const org = await db.organization.findFirstOrThrow()
   const dateStr = format(new TZDate(new Date(Date.now() + 8 * 86_400_000), org.timezone), 'yyyy-MM-dd')
-  const { start, end } = rowsToRange(dateStr, rowStart, rowEnd, org.timezone)
+  const { start, end } = rowsToRange(dateStr, rowStart, rowEnd, org.timezone, BAND)
   return { dateStr, start, end, day: orgDayIndex(start, org.timezone) }
 }
 
@@ -334,7 +340,7 @@ test('tapping a booking shows details and cancels it', async ({ browser }) => {
   test.setTimeout(90_000)
   const page = await phonePage(browser)
   await runWizard(page)
-  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE' } })
+  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE', accessStartMinutes: 420, accessEndMinutes: 1380 } })
   await signIn(page, ADMIN.email, ADMIN.password)
 
   const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
@@ -381,7 +387,7 @@ test('maintenance blocks are read-only', async ({ browser }) => {
   test.setTimeout(90_000)
   const page = await phonePage(browser)
   await runWizard(page)
-  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE' } })
+  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE', accessStartMinutes: 420, accessEndMinutes: 1380 } })
   await signIn(page, ADMIN.email, ADMIN.password)
 
   const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
@@ -420,7 +426,7 @@ test('mobile systemics: 16px inputs, viewport meta, chat composer above keyboard
   test.setTimeout(120_000)
   const page = await phonePage(browser)
   await runWizard(page)                                   // lands on /sign-in
-  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE' } })
+  const eq = await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE', accessStartMinutes: 420, accessEndMinutes: 1380 } })
   // Seeded straight into the DB (a11y.spec.ts:180's shape): what is under test is
   // the title INPUT's computed size, not another round of creating an issue.
   const admin = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
@@ -618,7 +624,7 @@ async function seedRows() {
   const admin = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
   const project = await db.project.create({ data: { name: LONG_PROJECT, rank: 'B' } })
   await db.issue.create({ data: { title: LONG_ISSUE, creatorId: admin.id, status: 'TODO', rank: 'a0', projectId: project.id } })
-  await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE' } })
+  await db.equipment.create({ data: { name: 'Raman', approvalPolicy: 'NONE', accessStartMinutes: 420, accessEndMinutes: 1380 } })
   await db.documentFolder.create({ data: { name: 'Standard operating procedures', createdById: admin.id } })
   await db.document.create({ data: { name: 'graphene transfer SOP.pdf', path: '/uploads/documents/t7.pdf', mime: 'application/pdf', size: 2048, uploaderId: admin.id, folderId: null } })
   await db.invitation.create({ data: { email: 'pending@lab.test', role: 'member', token: 't7-invite-token', invitedById: admin.id, expiresAt: new Date(Date.now() + 86_400_000) } })
@@ -703,7 +709,7 @@ test('session log-on from the day view (phone)', async ({ browser }) => {
   test.setTimeout(90_000)
   const page = await phonePage(browser)
   await runWizard(page)
-  const eq = await db.equipment.create({ data: { name: 'Sputter', approvalPolicy: 'NONE' } })
+  const eq = await db.equipment.create({ data: { name: 'Sputter', approvalPolicy: 'NONE', accessStartMinutes: 420, accessEndMinutes: 1380 } })
   await signIn(page, ADMIN.email, ADMIN.password)
   const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
   const { timezone } = await db.organization.findFirstOrThrow()

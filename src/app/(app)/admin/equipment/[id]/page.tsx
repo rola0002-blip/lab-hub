@@ -15,7 +15,7 @@ export default async function EditEquipmentPage({ params }: { params: Promise<{ 
     <div>
       <h1 className="text-2xl font-semibold text-default">Edit {eq.name}</h1>
       <EquipmentForm action={bound} users={users}
-        initial={{ name: eq.name, description: eq.description, location: eq.location, advanceBookingDays: eq.advanceBookingDays, maxDurationMinutes: eq.maxDurationMinutes, certificationRequired: eq.certificationRequired, approvalPolicy: eq.approvalPolicy, allowRecurring: eq.allowRecurring, managerIds: eq.managers.map((m) => m.userId) }} />
+        initial={{ name: eq.name, description: eq.description, location: eq.location, advanceBookingDays: eq.advanceBookingDays, maxDurationMinutes: eq.maxDurationMinutes, certificationRequired: eq.certificationRequired, approvalPolicy: eq.approvalPolicy, allowRecurring: eq.allowRecurring, managerIds: eq.managers.map((m) => m.userId), accessStartMinutes: eq.accessStartMinutes, accessEndMinutes: eq.accessEndMinutes }} />
     </div>
   )
 }

@@ -1,10 +1,13 @@
 'use client'
 import { useRef } from 'react'
-import { clientYToRow, draftLabel, type Draft } from '@/features/booking/grid'
+import { clientYToRow, draftLabel, type Band, type Draft } from '@/features/booking/grid'
 
 type Props = {
   draft: Draft
   rowPx: number
+  // The day column's band — row clamping and the label read the same window the
+  // parent rendered (grid.ts).
+  band: Band
   // The parent owns the Draft and applies the pure transition from grid.ts.
   // `onResize` is ABSOLUTE (the row under the pointer — idempotent, so a repeated
   // row is free to drop); `onMove` is INCREMENTAL (rows since the last emitted
@@ -35,7 +38,7 @@ const HANDLE_REACH = 22
 const BAR_PX = 44
 const BAR_FITS_PX = 88
 
-export default function DraftBlock({ draft, rowPx, onResize, onMove, onBook, onDiscard }: Props) {
+export default function DraftBlock({ draft, rowPx, band, onResize, onMove, onBook, onDiscard }: Props) {
   const gesture = useRef<Gesture | null>(null)
   const height = (draft.endRow - draft.startRow) * rowPx
   const barInside = height >= BAR_FITS_PX
@@ -44,7 +47,7 @@ export default function DraftBlock({ draft, rowPx, onResize, onMove, onBook, onD
   // block moves under the pointer mid-gesture, the column does not.
   function rowUnder(el: Element, clientY: number): number | null {
     const col = el.closest('[data-day-col]')
-    return col ? clientYToRow(clientY, col.getBoundingClientRect().top, rowPx) : null
+    return col ? clientYToRow(clientY, col.getBoundingClientRect().top, rowPx, band) : null
   }
 
   // Takes the mode as an argument rather than currying it: a curried factory would
@@ -95,7 +98,7 @@ export default function DraftBlock({ draft, rowPx, onResize, onMove, onBook, onD
   return (
     // Named as a group so the four buttons inside are announced with the range they
     // act on, and so the name re-announces as the handles reshape it.
-    <div data-draft-block="" role="group" aria-label={`Draft booking ${draftLabel(draft)}`}
+    <div data-draft-block="" role="group" aria-label={`Draft booking ${draftLabel(draft, band)}`}
       style={{ top: draft.startRow * rowPx, height }}
       className="absolute inset-x-0.5 touch-none rounded-md border border-[var(--accent)] bg-accent/20"
       onPointerMove={move} onPointerUp={end} onPointerCancel={end}>
@@ -103,7 +106,7 @@ export default function DraftBlock({ draft, rowPx, onResize, onMove, onBook, onD
           handles and the action bar stack above it — no z-index anywhere. */}
       <div className="absolute inset-0 px-1 py-0.5 text-[11px] font-medium text-default"
         onPointerDown={(e) => begin('move', e)}>
-        {draftLabel(draft)}
+        {draftLabel(draft, band)}
       </div>
       <button type="button" aria-label="Adjust start time" className={HANDLE} style={{ top: -HANDLE_REACH }}
         onPointerDown={(e) => begin('start', e)} onKeyDown={(e) => nudge('start', e)}>
