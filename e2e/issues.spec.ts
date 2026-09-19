@@ -520,7 +520,7 @@ test('project labels: create on the project page, apply via the properties menu,
 
 // Wave-8 (feedback cmt13v3ca): labels assignable at creation, in the +New issue
 // composer itself — the picker mirrors the properties panel (scope filter on
-// the selected project, toggles, quick-create), the backend has taken labelIds
+// the selected project, toggles, quick-create), and the backend has taken labelIds
 // since v0.16. Covers: select-and-create (global + scoped), the project-switch
 // honesty filter, and quick-create auto-select.
 test('composer labels: assign at creation, scope filter on project switch, quick-create', async ({ page }) => {
@@ -597,4 +597,22 @@ test('composer labels: assign at creation, scope filter on project switch, quick
   await page.waitForURL(/\/issues\/LAB-\d+$/)
   await expect(page.getByRole('button', { name: 'Set labels' })).toContainText('triage')
   await expect(page.getByRole('button', { name: 'Set labels' })).toContainText('beta-minted')
+})
+
+// v0.32 task 10: a bad LAB-n must land on the styled, in-shell not-found —
+// the route-level boundary keeps the (app) layout (sidebar + header) on screen
+// instead of Next's bare 404, which replaces the whole document.
+test('unknown issue id renders the styled not-found inside the app shell', async ({ page }) => {
+  test.setTimeout(90_000)
+  await runWizard(page)
+  await signIn(page, ADMIN.email, ADMIN.password)
+
+  await page.goto('/issues/LAB-999999')
+  // The shell survives a notFound() thrown by the page: the sidebar's Primary
+  // nav is still rendered (the bare 404 has no nav at all).
+  await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible()
+  // Styled EmptyState-pattern copy — matched exactly so Next's default
+  // "This page could not be found." can never satisfy the assertion.
+  await expect(page.getByText('Not found', { exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Go to dashboard' })).toBeVisible()
 })

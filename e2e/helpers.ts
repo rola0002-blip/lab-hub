@@ -141,9 +141,14 @@ export async function createIssueViaUI(page: Page, title: string): Promise<void>
   // then assert whichever rendering carries our title. This is the durable signal
   // the create succeeded, not a getByText race against the input value.
   await page.waitForURL(/\/issues\/LAB-\d+$/)
+  // The detail streams in behind the route-level loading skeleton (v0.32), so
+  // neither rendering may exist yet at the instant the URL commits — wait for
+  // EITHER shape before branching, or the one-shot count() probe below can race
+  // the skeleton and pin the wrong branch.
   const asInput = page.getByRole('textbox', { name: 'Issue title' })
+  const asHeading = page.getByRole('heading', { name: title })
+  await expect(asInput.or(asHeading)).toBeVisible()
   if (await asInput.count()) await expect(asInput).toHaveValue(title)
-  else await expect(page.getByRole('heading', { name: title })).toBeVisible()
 }
 
 // Drive @dnd-kit's KeyboardSensor to move a board card one column to the right and

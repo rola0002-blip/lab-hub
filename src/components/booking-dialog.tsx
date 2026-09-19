@@ -92,8 +92,8 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, e
   // `<input type="date">` reports '' for a cleared or half-entered value (Backspace
   // on a segment, an Android picker's Clear). An empty dateStr would reach
   // rowsToRange as an Invalid Date and throw RangeError out of `format` below
-  // DURING RENDER — and the app has no error.tsx, so Next would replace the whole
-  // route and the half-filled dialog with it. Keep the last valid date instead;
+  // DURING RENDER — the (app) error boundary would catch it now, but only after
+  // unmounting the half-filled dialog. Keep the last valid date instead;
   // React restores the input's displayed value to it.
   const setDate = (v: string) => { if (v) setRange((r) => ({ ...r, dateStr: v })) }
 
