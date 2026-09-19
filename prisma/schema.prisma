@@ -58,6 +58,7 @@ model User {
 
   documents       Document[]
   documentFolders DocumentFolder[]
+  documentVersions DocumentVersion[]
 
   feedback Feedback[]
   raAcknowledgments RaAcknowledgment[]
@@ -683,12 +684,38 @@ model Document {
   size       Int
   uploaderId String
   uploader   User                     @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  // v0.32: pointer to the newest DocumentVersion row (1 until a new version is
+  // uploaded). Denormalized so listings don't need a MAX() over versions.
+  latestVersion Int                   @default(1)
   // Generated tsvector over `name`; the GIN index lives in the migration SQL only
   // (like Issue.search) — this is what keeps the migration hand-written.
   search     Unsupported("tsvector")?
   createdAt  DateTime                 @default(now())
 
+  versions DocumentVersion[]
+
   @@index([folderId])
+}
+
+// One immutable snapshot per upload: v1 is the original file, each replace
+// appends v+1. The live path/name/mime/size on Document mirror latestVersion.
+model DocumentVersion {
+  id           String   @id @default(cuid())
+  documentId   String
+  document     Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  version      Int
+  path         String // the exact uploads/documents object this snapshot serves
+  name         String // original filename at upload time, capped at 200 chars
+  mime         String
+  size         Int
+  uploadedById String
+  // Restrict like Feedback.authorId: version history is part of the record and
+  // must fail loudly rather than be silently erased.
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  createdAt    DateTime @default(now())
+
+  @@unique([documentId, version])
+  @@index([documentId])
 }
 
 // ---------- Feedback: in-app bug reports and ideas (v0.13) ----------
