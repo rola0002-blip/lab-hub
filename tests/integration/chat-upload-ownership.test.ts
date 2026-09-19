@@ -67,6 +67,21 @@ describe('sendMessage / deleteMessage attachment ownership', () => {
     expect(await prisma.message.count({ where: { conversationId: ch.id } })).toBe(0) // nothing landed
   })
 
+  it('sendMessage rejects an attachment path with no ownership row (fail-closed)', async () => {
+    const { ch, users: [a] } = await channelWith('member')
+    const path = await saveUpload(new File([new Uint8Array([7])], 'ghost.txt', { type: 'text/plain' }), 'chat')
+    // No recordChatUpload call: the path exists on disk but was never handed to
+    // this sender (no ChatUpload row at all) — the guard must fail closed, not
+    // treat a missing row as unowned-and-allowed.
+    const r = await sendMessage({
+      userId: a.id, conversationId: ch.id, body: 'ghost',
+      attachments: [{ path, name: 'ghost.txt', mime: 'text/plain', size: 1 }],
+    })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toBe('invalid')
+    expect(await prisma.message.count({ where: { conversationId: ch.id } })).toBe(0) // nothing landed
+  })
+
   it('uploader sends their own file; deleting that message unlinks it and the ownership row', async () => {
     const { ch, users: [a] } = await channelWith('member')
     const path = await saveUpload(new File([new Uint8Array([2])], 'k.txt', { type: 'text/plain' }), 'chat')
