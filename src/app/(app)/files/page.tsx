@@ -16,6 +16,7 @@ export default async function FilesPage({ searchParams }: { searchParams: Promis
   const documents = docs.map((d) => ({
     id: d.id, name: d.name, path: d.path, mime: d.mime, size: d.size,
     uploaderId: d.uploaderId, uploaderName: d.uploaderName, created: formatDateTime(d.createdAt, tz), folderId: d.folderId, folderName: d.folderName,
+    latestVersion: d.latestVersion, // v0.32: drives the row's vN chip
   }))
   return (
     <div>

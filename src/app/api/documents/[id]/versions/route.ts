@@ -1,8 +1,26 @@
 import { NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/session'
+import { getOrg } from '@/lib/org'
+import { formatDateTime } from '@/lib/time'
 import { saveUpload, removeUpload } from '@/lib/uploads'
 import { assertCanUpload, PolicyError, policyStatus } from '@/features/documents/documents-policy'
-import { uploadNewVersion } from '@/features/documents/version-service'
+import { listVersions, uploadNewVersion } from '@/features/documents/version-service'
+
+// History read for the Files version drawer. Browse = any authenticated user
+// (guests included — the listing/download posture), so there is no role gate
+// beyond the session. The wire shape is built explicitly: VersionDto + `path`
+// (each version's bytes serve through the normal uploads gate) with `created`
+// formatted SERVER-side in the org timezone — the formatDateTime idiom, never
+// the browser's ambient zone.
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getSessionUser()
+  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const { id } = await params
+  const org = await getOrg()
+  const tz = org?.timezone ?? 'Asia/Singapore'
+  const versions = await listVersions(id)
+  return NextResponse.json({ versions: versions.map((v) => ({ id: v.id, version: v.version, name: v.name, mime: v.mime, size: v.size, path: v.path, uploadedByName: v.uploadedByName, created: formatDateTime(v.createdAt, tz) })) })
+}
 
 // Multipart one-shot: save the office file + register it as the file's NEXT
 // version. Mirrors api/documents/route.ts exactly — session gate, guest 403

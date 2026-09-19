@@ -13,9 +13,10 @@ import {
   createFolderAction, renameFolderAction, deleteFolderAction,
   renameDocumentAction, moveDocumentAction, deleteDocumentAction,
 } from './actions'
+import { VersionHistoryDrawer } from './version-history-drawer'
 
 type FolderVM = { id: string; name: string; createdById: string }
-type DocVM = { id: string; name: string; path: string; mime: string; size: number; uploaderId: string; uploaderName: string; created: string; folderId: string | null; folderName: string | null }
+type DocVM = { id: string; name: string; path: string; mime: string; size: number; uploaderId: string; uploaderName: string; created: string; folderId: string | null; folderName: string | null; latestVersion: number }
 type SearchHit = { id: string; name: string; path: string; mime: string }
 type Dialog =
   | { kind: 'newfolder' } | { kind: 'renamefolder'; id: string; name: string }
@@ -47,7 +48,21 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
   const [dialogName, setDialogName] = useState('')
   const [moveTarget, setMoveTarget] = useState<string>('')
   const fileRef = useRef<HTMLInputElement>(null)
+  // v0.32 versioning: the row whose "Upload new version…" pick is pending (the
+  // hidden input mounts only while set, keeping the page at ONE input[type=file]
+  // until a pick — the plain Upload flow's selector stays unambiguous), the row
+  // whose history drawer is open, and the row pending delete confirmation.
+  const [versionPick, setVersionPick] = useState<{ doc: DocVM; n: number } | null>(null)
+  const [historyFor, setHistoryFor] = useState<DocVM | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<DocVM | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const versionFileRef = useRef<HTMLInputElement>(null)
   const current = folders.find((f) => f.id === currentFolderId) ?? null
+
+  // The version input mounts on menu pick; open the OS picker from this effect
+  // (still inside the click's user-activation window) so the flow is one
+  // interaction. `n` re-fires the effect on a repeat pick of the same row.
+  useEffect(() => { if (versionPick) versionFileRef.current?.click() }, [versionPick])
 
   // Debounced filename search across all folders (null hits = not searching).
   useEffect(() => {
@@ -76,14 +91,37 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
     router.refresh()
   }
 
+  async function uploadNewVersionFile(doc: DocVM, file: File) {
+    setUploading((n) => n + 1)
+    try {
+      const fd = new FormData(); fd.append('file', file)
+      const r = await fetch(`/api/documents/${doc.id}/versions`, { method: 'POST', body: fd })
+      if (r.ok) {
+        const dto = (await r.json()) as { latestVersion?: number }
+        toast(dto.latestVersion ? `Uploaded v${dto.latestVersion}.` : 'New version uploaded.')
+      } else {
+        const d = await r.json().catch(() => null)
+        toast(d?.message ?? d?.error ?? 'Upload failed.')
+      }
+    } catch { toast('Upload failed.') } finally {
+      setUploading((n) => n - 1)
+      if (versionFileRef.current) versionFileRef.current.value = ''
+      setVersionPick(null)
+    }
+    router.refresh()
+  }
+
   async function run(p: Promise<{ ok: boolean; message?: string }>, ok: string) {
     const r = await p
     if (r.ok) { toast(ok); setDialog(null); router.refresh() } else toast(r.message ?? 'Something went wrong.')
   }
-  async function del(id: string) {
-    if (!confirm('Delete this file? This cannot be undone.')) return
+  // v0.32: delete confirms in a Modal (the conversation-menu archive idiom) so
+  // the warning can name the version count that goes with the file.
+  async function confirmDeleteFile(id: string) {
+    setDeleting(true)
     const r = await deleteDocumentAction(id)
-    if (r.ok) { toast('File deleted.'); router.refresh() } else toast(r.message)
+    setDeleting(false)
+    if (r.ok) { toast('File deleted.'); setConfirmDelete(null); router.refresh() } else toast(r.message)
   }
   async function delFolder(id: string) {
     if (!confirm('Delete this folder? It must be empty.')) return
@@ -107,7 +145,7 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
   const chip = 'flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]'
   const chipState = (selected: boolean) => selected ? 'bg-selected font-medium text-[var(--text-accent)]' : 'text-default hover:bg-hover'
   const rows: DocVM[] = hits
-    ? hits.map((h) => ({ id: h.id, name: h.name, path: h.path, mime: h.mime, size: 0, uploaderId: '', uploaderName: '', created: '', folderId: null, folderName: null }))
+    ? hits.map((h) => ({ id: h.id, name: h.name, path: h.path, mime: h.mime, size: 0, uploaderId: '', uploaderName: '', created: '', folderId: null, folderName: null, latestVersion: 1 }))
     : documents
 
   return (
@@ -228,6 +266,10 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
                     action Menu trigger is already 28px, ICON_TRIGGER's h-7). */}
                 <a href={d.path} target="_blank" rel="noreferrer"
                   className="min-w-0 flex-1 truncate py-1 text-default hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">{d.name}</a>
+                {/* v0.32: version chip only once history exists (the certifications-badge shape). */}
+                {!hits && d.latestVersion > 1 && (
+                  <span className="inline-flex shrink-0 items-center rounded-full border border-border px-1.5 py-0.5 text-2xs text-subtle">v{d.latestVersion}</span>
+                )}
                 {/* SP8 §3.1: the unscoped listing mixes folders, so the row names its folder ('—' at root). */}
                 {!hits && <span className="hidden w-32 shrink-0 truncate text-subtle sm:block">{d.folderName ?? '—'}</span>}
                 {!hits && <span className="hidden w-16 shrink-0 text-right tabular-nums text-subtle sm:block">{fmtSize(d.size)}</span>}
@@ -238,9 +280,11 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
                     ...(mayUpload && canModifyDocument(role, d.uploaderId, selfId) ? [
                       { label: 'Rename', onSelect: () => openDialog({ kind: 'renamedoc', id: d.id, name: d.name }) },
                       { label: 'Move…', onSelect: () => openDialog({ kind: 'movedoc', id: d.id, name: d.name, folderId: d.folderId }) },
+                      { label: 'Upload new version…', onSelect: () => setVersionPick({ doc: d, n: Date.now() }) },
                     ] : []),
+                    { label: 'History', onSelect: () => setHistoryFor(d) },
                     { label: 'Download', onSelect: () => window.open(d.path, '_blank', 'noopener') },
-                    ...(canDeleteDocument(role, d.uploaderId, selfId) ? [{ label: 'Delete', danger: true, onSelect: () => del(d.id) }] : []),
+                    ...(canDeleteDocument(role, d.uploaderId, selfId) ? [{ label: 'Delete', danger: true, onSelect: () => setConfirmDelete(d) }] : []),
                   ]} />
                 )}
               </li>
@@ -250,6 +294,31 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
       </section>
 
       {/* Dialogs */}
+      {/* The pending version pick's hidden input — mounted ONLY while a pick is
+          pending (see the versionPick comment above). */}
+      {versionPick && (
+        <input ref={versionFileRef} type="file" hidden aria-label={`Version file for ${versionPick.doc.name}`}
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadNewVersionFile(versionPick.doc, f) }} />
+      )}
+      {historyFor && (
+        <VersionHistoryDrawer docId={historyFor.id} docName={historyFor.name} uploaderId={historyFor.uploaderId}
+          role={role} selfId={selfId} onClose={() => setHistoryFor(null)} />
+      )}
+      {confirmDelete && (
+        <Modal title="Delete file?" onClose={() => setConfirmDelete(null)}>
+          <p className="mt-2 text-sm text-muted">
+            Delete {confirmDelete.name} and its {confirmDelete.latestVersion} version{confirmDelete.latestVersion === 1 ? '' : 's'}? This cannot be undone.
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <button onClick={() => setConfirmDelete(null)}
+              className="rounded-md border border-border px-3 py-1.5 text-sm text-default hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">Cancel</button>
+            <button onClick={() => void confirmDeleteFile(confirmDelete.id)} disabled={deleting}
+              className="rounded-md border border-[var(--text-danger)]/40 px-3 py-1.5 text-sm font-medium text-[var(--text-danger)] transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] disabled:opacity-50">
+              {deleting ? 'Deleting…' : 'Delete'}
+            </button>
+          </div>
+        </Modal>
+      )}
       {dialog && (dialog.kind === 'newfolder' || dialog.kind === 'renamefolder' || dialog.kind === 'renamedoc') && (
         <Modal title={dialog.kind === 'newfolder' ? 'New folder' : dialog.kind === 'renamefolder' ? 'Rename folder' : 'Rename file'} onClose={() => setDialog(null)}>
           <label className="block text-sm text-default">Name

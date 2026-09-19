@@ -1,7 +1,7 @@
 import 'server-only'
 import type { Role } from '@/lib/session'
 import { prisma } from '@/lib/db'
-import { copyUpload } from '@/lib/uploads'
+import { copyUpload, removeUpload } from '@/lib/uploads'
 import * as bot from '@/features/bot'
 import { PolicyError, assertCanModifyDocument } from './documents-policy'
 import { assertDocumentPath, toDto } from './document-service'
@@ -13,7 +13,10 @@ import type { DocumentDto } from './document-service'
 // file's life. The Document row stays the "current" pointer (path/size/etc.
 // mirror the newest version; latestVersion is denormalized for listings).
 
-export type VersionDto = { id: string; version: number; name: string; mime: string; size: number; uploadedByName: string; createdAt: Date }
+// `path` rides along so the history UI (Task 5) can link each version's bytes
+// through the normal uploads gate; `createdAt` stays a Date (the GET route
+// formats it in the org timezone — the formatDateTime idiom).
+export type VersionDto = { id: string; version: number; name: string; mime: string; size: number; path: string; uploadedByName: string; createdAt: Date }
 
 async function getDocOrThrow(id: string) {
   const doc = await prisma.document.findUnique({ where: { id } })
@@ -55,7 +58,7 @@ export async function listVersions(documentId: string): Promise<VersionDto[]> {
     where: { documentId }, orderBy: { version: 'desc' },
     include: { uploadedBy: { select: { name: true } } },
   })
-  return rows.map((r) => ({ id: r.id, version: r.version, name: r.name, mime: r.mime, size: r.size, uploadedByName: r.uploadedBy.name, createdAt: r.createdAt }))
+  return rows.map((r) => ({ id: r.id, version: r.version, name: r.name, mime: r.mime, size: r.size, path: r.path, uploadedByName: r.uploadedBy.name, createdAt: r.createdAt }))
 }
 
 // Restore = copy the old bytes to a FRESH path and register them as the NEXT
@@ -67,5 +70,13 @@ export async function restoreVersion(args: { versionId: string; userId: string; 
   assertCanModifyDocument(args.role, v.document.uploaderId, args.userId)
   if (v.version === v.document.latestVersion) throw new PolicyError('invalid', 'That version is already the latest.')
   const newPath = await copyUpload(v.path)
-  return uploadNewVersion({ documentId: v.documentId, uploaderId: args.userId, role: args.role, name: v.name, path: newPath, mime: v.mime, size: v.size })
+  try {
+    return await uploadNewVersion({ documentId: v.documentId, uploaderId: args.userId, role: args.role, name: v.name, path: newPath, mime: v.mime, size: v.size })
+  } catch (err) {
+    // The copy is already on the volume; a failed insert (tx rollback) would
+    // orphan it — the same unlink-on-failure guard the POST route applies to
+    // fresh uploads. Best-effort, swallowed so the ORIGINAL error survives.
+    await removeUpload(newPath).catch(() => {})
+    throw err
+  }
 }

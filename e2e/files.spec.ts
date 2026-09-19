@@ -1,5 +1,5 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
-import { wipe, seedSystem, runWizard, signIn, ADMIN, createMemberViaInvite, acceptInvite } from './helpers'
+import { wipe, seedSystem, runWizard, signIn, waitForHydration, ADMIN, createMemberViaInvite, acceptInvite } from './helpers'
 
 // Per-context client IP so better-auth's per-IP sign-in/up rate limit never trips
 // (mirrors the sp5/a11y/messaging/redesign suites). Band 10.50.x is unused by the
@@ -140,6 +140,56 @@ test('a member can rename/move their own upload but has no Rename/Move on the ad
   await expect(mp.getByRole('menuitem', { name: 'Move…' })).toHaveCount(0)
   await expect(mp.getByRole('menuitem', { name: 'Download' })).toBeVisible()
   await memberCtx.close()
+})
+
+// ── v0.32 — file versioning ──────────────────────────────────────────────────
+test('uploading a new version shows a v2 chip; history lists both; restore makes v3', async ({ browser }) => {
+  const page = await newPage(browser)
+  await signIn(page, ADMIN.email, ADMIN.password)
+  await page.goto('/files')
+  await waitForHydration(page)
+  const DOC = 'furnace log.pdf'
+  const PDF2 = Buffer.from('%PDF-1.4\n%COLOSSUS e2e v2\n', 'utf8')
+  // v1: the plain upload flow (exactly one file input exists while no version
+  // pick is pending — the version input mounts only after its menu item).
+  await page.locator('input[type=file]').first().setInputFiles({ name: DOC, mimeType: 'application/pdf', buffer: PDF })
+  const row = page.locator('li').filter({ has: page.getByRole('link', { name: DOC }) })
+  await expect(page.getByRole('link', { name: DOC })).toBeVisible()
+  await expect(row.getByText('v1', { exact: true })).toHaveCount(0) // no chip at v1
+
+  // v2: "Upload new version…" mounts the hidden per-pick input, then POSTs.
+  await page.getByRole('button', { name: `File ${DOC} actions` }).click()
+  await page.getByRole('menuitem', { name: 'Upload new version…' }).click()
+  await page.getByLabel(`Version file for ${DOC}`).setInputFiles({ name: DOC, mimeType: 'application/pdf', buffer: PDF2 })
+  await expect(row.getByText('v2', { exact: true })).toBeVisible()
+
+  // History drawer: both versions, newest first, with per-version Download.
+  await page.getByRole('button', { name: `File ${DOC} actions` }).click()
+  await page.getByRole('menuitem', { name: 'History' }).click()
+  const drawer = page.getByRole('dialog', { name: 'Version history' })
+  await expect(drawer).toBeVisible()
+  await expect(drawer.getByText('v2', { exact: true })).toBeVisible()
+  await expect(drawer.getByText('v1', { exact: true })).toBeVisible()
+  await expect(drawer.getByRole('link', { name: 'Download' })).toHaveCount(2)
+
+  // Restore v1 → linear history appends v3 (now current); v1 stays restorable.
+  // NB: filter({ has }) matches the inner locator starting from the OUTER li —
+  // pre-scoping it to the drawer matches nothing (verified empirically).
+  const v1Row = drawer.locator('li').filter({ has: page.getByText('v1', { exact: true }) })
+  await v1Row.getByRole('button', { name: 'Restore' }).click()
+  await expect(drawer.getByText('v3', { exact: true })).toBeVisible()
+  await expect(drawer.getByRole('link', { name: 'Download' })).toHaveCount(3)
+  await drawer.getByRole('button', { name: 'Close version history' }).click()
+  await expect(drawer).toHaveCount(0)
+  await expect(row.getByText('v3', { exact: true })).toBeVisible() // row chip caught up
+
+  // Delete confirm names the version count.
+  await page.getByRole('button', { name: `File ${DOC} actions` }).click()
+  await page.getByRole('menuitem', { name: 'Delete' }).click()
+  const confirm = page.getByRole('dialog', { name: 'Delete file?' })
+  await expect(confirm).toContainText(`Delete ${DOC} and its 3 versions?`)
+  await confirm.getByRole('button', { name: 'Delete', exact: true }).click()
+  await expect(page.getByRole('link', { name: DOC })).toHaveCount(0)
 })
 
 // ── v0.15 §5.3 — project ↔ Files folder ──────────────────────────────────────

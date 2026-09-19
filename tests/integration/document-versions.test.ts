@@ -1,6 +1,6 @@
 import path from 'node:path'
 import os from 'node:os'
-import { access, mkdir, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, readdir, rm, writeFile } from 'node:fs/promises'
 
 // Restore copies REAL bytes via copyUpload, so confine every write to a
 // throwaway dir instead of the repo's own ./data/uploads (the
@@ -56,6 +56,14 @@ describe('document versions', () => {
     expect((await prisma.document.findUniqueOrThrow({ where: { id: doc.id } })).path).toBe('/uploads/documents/b.pdf')
   })
 
+  it('listVersions carries each snapshot’s path (the history UI download link)', async () => {
+    const { u, doc } = await seedDoc()
+    await writeFile(onDisk('/uploads/documents/b.pdf'), Buffer.alloc(20))
+    await uploadNewVersion({ documentId: doc.id, uploaderId: u.id, role: 'member', name: 'SOP.pdf', path: '/uploads/documents/b.pdf', mime: 'application/pdf', size: 20 })
+    const vs = await listVersions(doc.id)
+    expect(vs.map((v) => v.path)).toEqual(['/uploads/documents/b.pdf', '/uploads/documents/a.pdf'])
+  })
+
   it('restore promotes old bytes as a NEW version (linear history)', async () => {
     const { u, doc } = await seedDoc()
     await writeFile(onDisk('/uploads/documents/b.pdf'), Buffer.alloc(20))
@@ -76,6 +84,22 @@ describe('document versions', () => {
     const { u, doc } = await seedDoc()
     const latest = (await listVersions(doc.id)).find((v) => v.version === doc.latestVersion)!
     await expect(restoreVersion({ versionId: latest.id, userId: u.id, role: 'member' })).rejects.toThrowError(/already the latest/i)
+  })
+
+  it('restoreVersion unlinks the copied bytes when the version insert fails', async () => {
+    const { u, doc } = await seedDoc()
+    await writeFile(onDisk('/uploads/documents/b.pdf'), Buffer.alloc(20))
+    await uploadNewVersion({ documentId: doc.id, uploaderId: u.id, role: 'member', name: 'SOP.pdf', path: '/uploads/documents/b.pdf', mime: 'application/pdf', size: 20 })
+    // Force the restore's insert to collide: pre-seed the NEXT version number
+    // (unique [documentId, version]) so uploadNewVersion's tx rolls back.
+    await prisma.documentVersion.create({ data: { documentId: doc.id, version: 3, path: '/uploads/documents/zz.pdf', name: 'x.pdf', mime: 'application/pdf', size: 1, uploadedById: u.id } })
+    const v1 = (await listVersions(doc.id)).find((v) => v.version === 1)!
+    // beforeEach never cleans the documents dir, so diff around the call: the
+    // assertion must see only files THIS restore minted.
+    const dir = path.join(uploadsDir(), 'documents')
+    const before = new Set(await readdir(dir))
+    await expect(restoreVersion({ versionId: v1.id, userId: u.id, role: 'member' })).rejects.toThrow()
+    expect((await readdir(dir)).filter((f) => !before.has(f))).toEqual([]) // the minted copy was unlinked
   })
 
   it('non-uploader member cannot upload a new version', async () => {
