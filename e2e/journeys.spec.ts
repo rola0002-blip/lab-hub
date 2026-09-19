@@ -60,6 +60,10 @@ test('member books instantly via API-backed dialog flow', async ({ page }) => {
   // grows past the starting row.
   const cols = page.locator('div.relative.border-l')
   const col = cols.nth(2)
+  // The route streams in behind its loading skeleton (v0.32) and boundingBox()
+  // does not retry — gate on the real calendar column or a mid-skeleton probe
+  // returns null and `box.x` throws.
+  await expect(col).toBeVisible()
   const box = (await col.boundingBox())!
   await page.mouse.move(box.x + box.width / 2, box.y + 120)
   await page.mouse.down()
