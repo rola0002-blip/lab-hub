@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { prisma } from '@/lib/db'
 import { auth } from '@/lib/auth'
+import { runAuthorizedInviteSignup } from '@/lib/invite-signup'
 import { resetDb, seedSystem } from '../factories'
 import { LAB_UPDATES_CHANNEL_ID, COLOSSUS_BOT_ID } from '@/features/bot'
 
@@ -30,7 +31,10 @@ describe('auth signup gate', () => {
     await prisma.invitation.create({
       data: { email: 'fyp@ntu.test', role: 'guest', token: 'tok1', invitedById: 'x', expiresAt: new Date(Date.now() + 86_400_000) },
     })
-    await auth.api.signUpEmail({ body: { email: 'fyp@ntu.test', password: 'Str0ngPass!123', name: 'FYP' } })
+    // Post-setup signups must run inside the authorized-invite context (v0.31.1 token
+    // binding) — only acceptInviteAction enters it, after re-validating the token.
+    await runAuthorizedInviteSignup(() =>
+      auth.api.signUpEmail({ body: { email: 'fyp@ntu.test', password: 'Str0ngPass!123', name: 'FYP' } }))
     const u = await prisma.user.findUniqueOrThrow({ where: { email: 'fyp@ntu.test' } })
     expect(u.role).toBe('guest')
     const inv = await prisma.invitation.findFirstOrThrow({ where: { email: 'fyp@ntu.test' } })

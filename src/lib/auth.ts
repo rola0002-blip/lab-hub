@@ -11,6 +11,7 @@ import { trustedIpConfig } from './auth-ip'
 import { enqueueEmail } from './email/outbox'
 import { resetPasswordEmail } from './email/templates'
 import { setupTokenConfigured, inAuthorizedBootstrap } from './setup-token'
+import { inAuthorizedInviteSignup } from './invite-signup'
 import { LAB_UPDATES_CHANNEL_ID } from '@/features/bot'
 
 async function isSetupComplete() {
@@ -61,6 +62,16 @@ export const auth = betterAuth({
             throw new APIError('FORBIDDEN', {
               message: 'Sign-up is by invitation only. Ask an administrator for an invite.',
             })
+          // Invitation token binding (v0.31.1): a live PENDING invite for the email is
+          // necessary but NOT sufficient — anyone who knows the invited address could
+          // satisfy it directly. The signup must also run inside the authorized-invite
+          // context, which only acceptInviteAction() enters AFTER re-validating the
+          // token server-side (it signs up with the token-derived email, not a
+          // client-sent one).
+          if (!inAuthorizedInviteSignup())
+            throw new APIError('FORBIDDEN', {
+              message: 'Sign-up must go through your invitation link.',
+            })
         },
         after: async (user) => {
           const inv = await prisma.invitation.findFirst({
@@ -74,6 +85,11 @@ export const auth = betterAuth({
             // (created by a migration at deploy, before setup) must never consume the
             // first-admin slot under any ordering.
             await prisma.user.update({ where: { id: user.id }, data: { role: 'admin' } })
+          } else {
+            // Fail closed (v0.31.1): signup was authorized above but the invite no longer
+            // reads PENDING (revoked mid-flight). The account exists but stays banned
+            // until an admin lifts it.
+            await prisma.user.update({ where: { id: user.id }, data: { banned: true } })
           }
           // Auto-join every new human account to #lab-updates. Best-effort + idempotent:
           // this is the single choke point through which the setup admin and every
