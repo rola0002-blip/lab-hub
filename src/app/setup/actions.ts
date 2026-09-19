@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { auth } from '@/lib/auth'
 import { saveUpload } from '@/lib/uploads'
 import { setupTokenMatches, runAuthorizedBootstrap } from '@/lib/setup-token'
+import { isValidTimezone } from '@/lib/timezones'
 
 // Constant advisory-lock key: every first-run contends on the same lock so the
 // Organization row stays a singleton (see the guard in completeSetup below).
@@ -12,7 +13,7 @@ const ORG_LOCK_KEY = 'organization-singleton'
 const schema = z.object({
   orgName: z.string().min(1).max(100),
   accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-  timezone: z.string().min(1),
+  timezone: z.string().min(1).refine(isValidTimezone, 'Choose a valid timezone.'),
   adminName: z.string().min(1).max(100),
   adminEmail: z.string().email(),
   adminPassword: z.string().min(10),
