@@ -117,6 +117,12 @@ export async function previewBooking(
   return verdict
 }
 
+// Sentinel thrown inside the booking transactions when the post-lock maintenance
+// re-check finds a window: buildPolicyInput's maintenance read races window
+// creation (the exclusion constraint is booking-vs-booking only), so the overlap
+// must be re-checked under the advisory lock the window transaction also takes.
+class MaintenanceBlocked extends Error {}
+
 export async function createBooking(input: CreateBookingInput): Promise<CreateBookingResult> {
   const ctx = await buildPolicyInput(input.userId, input.equipmentId, { startsAt: input.startsAt, endsAt: input.endsAt }, false)
   if (!ctx) return { ok: false, error: 'not_found' }
@@ -134,6 +140,13 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
     // sole source of truth for overlap — this only orders the contenders.
     const booking = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.equipmentId}, 0))`
+      // Re-check under the lock: a maintenance window may have committed after
+      // buildPolicyInput's read and before this transaction acquired the lock.
+      const windows = await tx.maintenanceWindow.findMany({
+        where: { equipmentId: input.equipmentId, startsAt: { lt: input.endsAt }, endsAt: { gt: input.startsAt } },
+        select: { startsAt: true, endsAt: true },
+      })
+      if (windows.length > 0) throw new MaintenanceBlocked()
       return tx.booking.create({
         data: {
           userId: input.userId, equipmentId: input.equipmentId,
@@ -149,6 +162,7 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
     }
     return { ok: true, bookingId: booking.id, pending }
   } catch (e) {
+    if (e instanceof MaintenanceBlocked) return { ok: false, error: 'blocked', message: 'The requested time overlaps scheduled maintenance.' }
     if (isOverlapError(e)) return { ok: false, error: 'slot_taken' }
     throw e
   }
@@ -245,6 +259,13 @@ export async function createRecurringBooking(input: CreateRecurringInput): Promi
         },
       })
       for (const o of occurrences) {
+        // Per-occurrence maintenance re-check under the lock: a window may have
+        // committed after the bulk pre-check above ran.
+        const windows = await tx.maintenanceWindow.findMany({
+          where: { equipmentId: input.equipmentId, startsAt: { lt: o.endsAt }, endsAt: { gt: o.startsAt } },
+          select: { startsAt: true, endsAt: true },
+        })
+        if (windows.length > 0) throw new MaintenanceBlocked()
         await tx.booking.create({
           data: {
             userId: input.userId, equipmentId: input.equipmentId, purpose: input.purpose.slice(0, 500),
@@ -261,6 +282,7 @@ export async function createRecurringBooking(input: CreateRecurringInput): Promi
     }
     return { ok: true, ruleId: rule.id, count: occurrences.length, pending }
   } catch (e) {
+    if (e instanceof MaintenanceBlocked) return { ok: false, error: 'blocked', message: 'The requested time overlaps scheduled maintenance.' }
     if (isOverlapError(e)) return { ok: false, error: 'conflicts', conflicts: ['A slot was taken while submitting. Try again.'] }
     throw e
   }
