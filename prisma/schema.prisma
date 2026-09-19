@@ -8,21 +8,21 @@ datasource db {
 
 // ---------- better-auth managed (verify with: npx @better-auth/cli generate) ----------
 model User {
-  id            String    @id
-  name          String
-  email         String    @unique
-  emailVerified Boolean   @default(false)
-  image         String?
-  role          String    @default("guest") // 'admin' | 'member' | 'guest'
-  banned        Boolean   @default(false)
-  banReason     String?
-  banExpires    DateTime?
-  themePreference String? // 'light' | 'dark' — per-user theme, applied SSR when device localStorage is empty
-  accentPreference String? // accent slug (src/lib/accents.ts); applied SSR when device localStorage is empty
-  title            String? // free-text role/title, ≤100 chars, shown under the name on People
-  timezone         String? // IANA tz id; drives the member's local time on People
-  isSystem         Boolean   @default(false) // true ONLY for the LabHub Bot; excluded from every human enumeration (SP5 §5.6)
-  icsToken         String?   @unique // per-user calendar-feed token; nullable-unique (many NULLs coexist), minted lazily (SP5 §4.1)
+  id                 String    @id
+  name               String
+  email              String    @unique
+  emailVerified      Boolean   @default(false)
+  image              String?
+  role               String    @default("guest") // 'admin' | 'member' | 'guest'
+  banned             Boolean   @default(false)
+  banReason          String?
+  banExpires         DateTime?
+  themePreference    String? // 'light' | 'dark' — per-user theme, applied SSR when device localStorage is empty
+  accentPreference   String? // accent slug (src/lib/accents.ts); applied SSR when device localStorage is empty
+  title              String? // free-text role/title, ≤100 chars, shown under the name on People
+  timezone           String? // IANA tz id; drives the member's local time on People
+  isSystem           Boolean   @default(false) // true ONLY for the LabHub Bot; excluded from every human enumeration (SP5 §5.6)
+  icsToken           String?   @unique // per-user calendar-feed token; nullable-unique (many NULLs coexist), minted lazily (SP5 §4.1)
   // v0.16 F3/F7/F9 + v0.23 D6: per-user workspace state. pinnedProjectIds is pin order
   // (NOT NULL array, SQL DEFAULT '{}' — a rolled-back binary INSERTs fine);
   // lastConversationId is a plain string (membership re-validated at read, NOT
@@ -32,8 +32,8 @@ model User {
   pinnedProjectIds   String[]  @default([])
   lastConversationId String?
   soundsEnabled      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   sessions       Session[]
   accounts       Account[]
@@ -56,17 +56,19 @@ model User {
   issueUploads    IssueAttachment[]
   issueActivities IssueActivity[]
 
-  documents       Document[]
-  documentFolders DocumentFolder[]
+  documents        Document[]
+  documentFolders  DocumentFolder[]
   documentVersions DocumentVersion[]
 
-  feedback Feedback[]
-  raAcknowledgments RaAcknowledgment[]
-  trainings          TrainingRecord[] @relation("TrainingUser")
-  trainingsAsTrainer TrainingRecord[] @relation("TrainingTrainer")
-  trainingRecordsRevoked TrainingRecord[]          @relation("TrainingRevokedBy")
-  certRevocationsFor     CertificationRevocation[] @relation("CertRevocationUser")
-  certRevocationsBy      CertificationRevocation[] @relation("CertRevocationRevoker")
+  feedback                Feedback[]
+  raAcknowledgments       RaAcknowledgment[]
+  trainings               TrainingRecord[]          @relation("TrainingUser")
+  trainingsAsTrainer      TrainingRecord[]          @relation("TrainingTrainer")
+  trainingRecordsRevoked  TrainingRecord[]          @relation("TrainingRevokedBy")
+  certRevocationsFor      CertificationRevocation[] @relation("CertRevocationUser")
+  certRevocationsBy       CertificationRevocation[] @relation("CertRevocationRevoker")
+  trainingRequests        TrainingRequest[]         @relation("TrainingRequestUser")
+  trainingRequestsDecided TrainingRequest[]         @relation("TrainingRequestDecider")
 
   @@map("user")
 }
@@ -174,13 +176,14 @@ model Equipment {
   accessEndMinutes      Int             @default(1439)
   createdAt             DateTime        @default(now())
 
-  bookings       Booking[]
-  certifications Certification[]
-  certRevocations CertificationRevocation[]
-  trainings TrainingRecord[]
-  managers       EquipmentManager[]
-  maintenance    MaintenanceWindow[]
-  recurrences    RecurrenceRule[]
+  bookings         Booking[]
+  certifications   Certification[]
+  certRevocations  CertificationRevocation[]
+  trainings        TrainingRecord[]
+  trainingRequests TrainingRequest[]
+  managers         EquipmentManager[]
+  maintenance      MaintenanceWindow[]
+  recurrences      RecurrenceRule[]
 }
 
 model Certification {
@@ -231,8 +234,8 @@ model Booking {
   reminderSentAt   DateTime?
   sessionStartedAt DateTime?
   sessionEndedAt   DateTime?
-  sessionNote      String    @default("")
-  createdAt        DateTime  @default(now())
+  sessionNote      String          @default("")
+  createdAt        DateTime        @default(now())
 
   @@index([equipmentId, startsAt])
   @@index([userId, startsAt])
@@ -572,8 +575,8 @@ model Issue {
   // migration) so Postgres orders it by byte = base-62 order (rank.ts).
   rank            String
   completedAt     DateTime?
-  dueSoonPingedAt DateTime?                // set when the due-soon bot DM fires; cleared when dueDate changes (re-arms) (SP5 §5.7)
-  overduePingedAt DateTime?                // set when the overdue bot DM fires; cleared when dueDate changes (re-arms) (v0.9.5)
+  dueSoonPingedAt DateTime? // set when the due-soon bot DM fires; cleared when dueDate changes (re-arms) (SP5 §5.7)
+  overduePingedAt DateTime? // set when the overdue bot DM fires; cleared when dueDate changes (re-arms) (v0.9.5)
   // Backlink for create-from-message. SetNull: deleting the source message never
   // deletes the issue.
   originMessageId String?
@@ -675,22 +678,22 @@ model DocumentFolder {
 }
 
 model Document {
-  id         String                   @id @default(cuid())
-  folderId   String? // null = root
-  folder     DocumentFolder?          @relation(fields: [folderId], references: [id], onDelete: SetNull)
-  name       String // original filename, capped at 200 chars on write
-  path       String // served /uploads/documents/<uuid>.<ext>
-  mime       String
-  size       Int
-  uploaderId String
-  uploader   User                     @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  id            String                   @id @default(cuid())
+  folderId      String? // null = root
+  folder        DocumentFolder?          @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  name          String // original filename, capped at 200 chars on write
+  path          String // served /uploads/documents/<uuid>.<ext>
+  mime          String
+  size          Int
+  uploaderId    String
+  uploader      User                     @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
   // v0.32: pointer to the newest DocumentVersion row (1 until a new version is
   // uploaded). Denormalized so listings don't need a MAX() over versions.
-  latestVersion Int                   @default(1)
+  latestVersion Int                      @default(1)
   // Generated tsvector over `name`; the GIN index lives in the migration SQL only
   // (like Issue.search) — this is what keeps the migration hand-written.
-  search     Unsupported("tsvector")?
-  createdAt  DateTime                 @default(now())
+  search        Unsupported("tsvector")?
+  createdAt     DateTime                 @default(now())
 
   versions DocumentVersion[]
 
@@ -818,16 +821,39 @@ model CertificationRevocation {
   revokedTrainingRecordId String?
 }
 
+// v0.32 Task 6: a certification training request. An uncertified member asks;
+// an equipment manager (or admin) decides. One PENDING row per (userId,
+// equipmentId) — enforced ONLY by the partial unique index in the migration SQL
+// (the Label posture; never reintroduce @@unique here, it would fight the
+// partial). status is a CHECK-constrained plain String ('PENDING' | 'GRANTED' |
+// 'DECLINED' — the Notification.type posture). People CASCADE on the requester
+// (the Certification posture), SET NULL on the decider (history outlives the
+// account), equipment CASCADEs (requests die with the instrument).
+model TrainingRequest {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation("TrainingRequestUser", fields: [userId], references: [id], onDelete: Cascade)
+  equipmentId     String
+  equipment       Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  note            String?
+  status          String    @default("PENDING")
+  decidedById     String?
+  decidedBy       User?     @relation("TrainingRequestDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedAt       DateTime?
+  rejectionReason String?
+  createdAt       DateTime  @default(now())
+}
+
 // v0.30: service API keys (the service-api-key + labhub-mcp design, 2026-09-09).
 // Bearer `labhub_<base64url>` credentials for headless callers; every valid key
 // resolves to the LabHub Bot at runtime (COLOSSUS_BOT_ID — deliberately no
 // relation, no per-key user mapping in v1). tokenHash is sha256-hex of the full
 // token: no plaintext at rest, deterministic lookup.
 model ServiceKey {
-  id          String    @id @default(cuid())
-  name        String    @unique
-  tokenHash   String    @unique
-  createdAt   DateTime  @default(now())
-  lastUsedAt  DateTime?
-  revokedAt   DateTime?
+  id         String    @id @default(cuid())
+  name       String    @unique
+  tokenHash  String    @unique
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
 }

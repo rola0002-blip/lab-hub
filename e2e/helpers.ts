@@ -44,7 +44,7 @@ export async function wipe() {
           "Conversation","ConversationMember","Message","Reaction",
           "ChatAttachment","ChatUpload","PushSubscription",
           "Notification","EmailOutbox","Booking","RecurrenceRule",
-          "TrainingRecord","MaintenanceWindow","Certification","CertificationRevocation","EquipmentManager","Equipment",
+          "TrainingRecord","TrainingRequest","MaintenanceWindow","Certification","CertificationRevocation","EquipmentManager","Equipment",
           "Invitation","Organization","session","account","verification","user" CASCADE
       `)
       break
