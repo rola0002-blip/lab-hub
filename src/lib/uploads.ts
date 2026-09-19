@@ -77,7 +77,8 @@ export async function copyUpload(srcPath: string): Promise<string> {
   return `/uploads/documents/${name}`
 }
 
-export async function readUpload(relPath: string[]): Promise<{ data: Buffer; mime: string } | null> {  const safe = relPath.map((p) => p.replace(/[^a-zA-Z0-9._-]/g, ''))
+export async function readUpload(relPath: string[]): Promise<{ data: Buffer; mime: string } | null> {
+  const safe = relPath.map((p) => p.replace(/[^a-zA-Z0-9._-]/g, ''))
   const full = path.join(uploadsDir(), ...safe)
   if (!full.startsWith(uploadsDir())) return null
   const ext = path.extname(full)

@@ -40,9 +40,12 @@ export async function uploadNewVersion(args: {
       include: { uploader: { select: { name: true } }, folder: { select: { name: true } } },
     })
   })
+  // Credit the ACTING user (uploader-or-admin), not the Document's original
+  // uploader — an admin versioning someone else's file must not misattribute.
+  const actor = await prisma.user.findUnique({ where: { id: args.uploaderId }, select: { name: true } })
   // §6.9 posture: posted, not pinged; awaited but non-fatal (announceToChannel
   // is internally try/caught) — same one-liner shape as createDocument.
-  await bot.announceToChannel(`File updated: ${name} (v${version}) — by ${updated.uploader.name}`, args.uploaderId)
+  await bot.announceToChannel(`File updated: ${name} (v${version}) — by ${actor?.name ?? 'unknown'}`, args.uploaderId)
   return toDto(updated)
 }
 

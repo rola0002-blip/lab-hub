@@ -12,6 +12,8 @@ process.env.UPLOADS_DIR = UPLOAD_DIR
 
 import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest'
 import { saveUpload } from '@/lib/uploads'
+import { prisma } from '@/lib/db'
+import { uploadNewVersion } from '@/features/documents/version-service'
 import { resetDb, makeUser, seedSystem } from '../factories'
 
 const mockUser = vi.hoisted(() => ({ current: null as null | { id: string; name: string; email: string; role: string } }))
@@ -64,6 +66,31 @@ describe('uploads route — internet-facing nosniff', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('Cache-Control')).toBe('private, no-store')
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')
+  })
+
+  it('serves HISTORICAL version bytes after the Document pointer moves to v2', async () => {
+    const m = await makeUser({ role: 'member' })
+    mockUser.current = { ...m, role: 'member' }
+    const v1 = new Uint8Array(32)
+    const up = await uploadReq(fileForm(new File([v1], 'report.pdf', { type: 'application/pdf' })))
+    expect(up.status).toBe(201)
+    const doc = await up.json()
+    // v2 via the same service the versions route calls; pointer moves off v1.
+    const v2 = new Uint8Array(64)
+    const v2Path = await saveUpload(new File([v2], 'report-v2.pdf', { type: 'application/pdf' }), 'documents')
+    await uploadNewVersion({ documentId: doc.id, uploaderId: m.id, role: 'member', name: 'report-v2.pdf', path: v2Path, mime: 'application/pdf', size: v2.length })
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: doc.id } })).path).toBe(v2Path)
+    // v1's path has no Document row anymore — the DocumentVersion snapshot must
+    // still recover the filename and stream the bytes (any-session, no-store).
+    const res = await serveReq(doc.path)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store')
+    expect(res.headers.get('Content-Disposition')).toContain('report.pdf')
+    expect(new Uint8Array(await res.arrayBuffer()).length).toBe(v1.length)
+    // Still row-gated: a documents path with neither a Document nor a Version
+    // row (an abandoned upload) keeps 404ing.
+    const orphan = await saveUpload(new File([new Uint8Array(8)], 'orphan.pdf', { type: 'application/pdf' }), 'documents')
+    expect((await serveReq(orphan)).status).toBe(404)
   })
 
   it('leaves the public SP1 kinds public — the new gate must not widen to logo/equipment', async () => {

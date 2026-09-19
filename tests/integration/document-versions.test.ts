@@ -12,6 +12,7 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest'
 import { prisma } from '@/lib/db'
 import { resetDb, makeUser, seedSystem } from '../factories'
 import { uploadsDir } from '@/lib/uploads'
+import { COLOSSUS_BOT_ID, LAB_UPDATES_CHANNEL_ID } from '@/features/bot'
 import { createDocument, deleteDocument } from '@/features/documents/document-service'
 import { PolicyError } from '@/features/documents/documents-policy'
 import { uploadNewVersion, listVersions, restoreVersion } from '@/features/documents/version-service'
@@ -86,6 +87,18 @@ describe('document versions', () => {
     const admin = await makeUser({ role: 'admin' })
     const dto = await uploadNewVersion({ documentId: doc.id, uploaderId: admin.id, role: 'admin', name: 'x.pdf', path: '/uploads/documents/c.pdf', mime: 'application/pdf', size: 1 })
     expect(dto.latestVersion).toBe(2)
+  })
+
+  it('announce credits the ACTING user, not the Document\'s original uploader', async () => {
+    const { u, doc } = await seedDoc()
+    await writeFile(onDisk('/uploads/documents/d.pdf'), Buffer.alloc(5))
+    // An admin versions the member's file — the credit must be the admin's.
+    const admin = await makeUser({ role: 'admin', name: 'Ada Admin' })
+    await uploadNewVersion({ documentId: doc.id, uploaderId: admin.id, role: 'admin', name: 'SOP.pdf', path: '/uploads/documents/d.pdf', mime: 'application/pdf', size: 5 })
+    // uploadNewVersion awaits the announce, so the row has landed by return.
+    const post = await prisma.message.findFirst({ where: { conversationId: LAB_UPDATES_CHANNEL_ID, userId: COLOSSUS_BOT_ID }, orderBy: { createdAt: 'desc' } })
+    expect(post?.body).toContain('File updated: SOP.pdf (v2) — by Ada Admin')
+    expect(post?.body).not.toContain(u.name)
   })
 
   it('deleteDocument unlinks every version file, not just the latest', async () => {
