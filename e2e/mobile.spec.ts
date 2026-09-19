@@ -1,6 +1,6 @@
 import { test, expect, type Browser, type Locator, type Page } from '@playwright/test'
 import { TZDate } from '@date-fns/tz'
-import { format } from 'date-fns'
+import { addDays, format } from 'date-fns'
 import { db, wipe, runWizard, signIn, ADMIN, createMemberViaInvite, acceptInvite, waitForHydration } from './helpers'
 import { ROW_PX_DAY, rangeToRows, rowsToRange } from '@/features/booking/grid'
 
@@ -685,8 +685,20 @@ test('issue rows carry the project eyebrow below md', async ({ browser }) => {
 
 // ── W12-C: session log-on from the phone day view ─────────────────────────────
 // Unlike the T5 tests (which seed a future slot and navigate ?week=&day= to it),
-// this seeds a slot straddling now on TODAY — so the plain goto lands on the
-// current week and the day view opens on today's column, where the block lives.
+// this seeds a slot straddling now, because the log-on window is
+// [startsAt−15m, endsAt] (booking/session.ts). The old now−30m→now+60m seed was
+// wall-clock-dependent: the day column renders only the 07:00–23:00 band
+// (grid.ts), so runs outside roughly 06:30–22:00 org time never mounted the
+// block and the tap timed out (flake reproduced on main at ~00:10 SGT).
+// Clock-independent shape: the block starts 30m ago (well inside the log-on
+// window) and ends 9h ahead, so its tail always reaches deep into a renderable
+// band. The viewed day is today unless the org-tz hour is ≥ 23 — then today's
+// remaining band is thinner than the 30-minute head, so TOMORROW is the view
+// with the fat slice: the 9h tail clears tomorrow's 07:00 band start by
+// ≥ 60min (with 8h it could clear it by zero at exactly 23:00, mounting no
+// button at all). Every wall clock shows at least one full 44px day row of
+// block; the explicit ?week=&day= makes the opened column deterministic
+// instead of relying on the today-in-week fallback.
 test('session log-on from the day view (phone)', async ({ browser }) => {
   test.setTimeout(90_000)
   const page = await phonePage(browser)
@@ -694,11 +706,14 @@ test('session log-on from the day view (phone)', async ({ browser }) => {
   const eq = await db.equipment.create({ data: { name: 'Sputter', approvalPolicy: 'NONE' } })
   await signIn(page, ADMIN.email, ADMIN.password)
   const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  const { timezone } = await db.organization.findFirstOrThrow()
   await db.booking.create({ data: {
     userId: me.id, equipmentId: eq.id, status: 'CONFIRMED', purpose: 'mobile session',
-    startsAt: new Date(Date.now() - 30 * 60_000), endsAt: new Date(Date.now() + 60 * 60_000),
+    startsAt: new Date(Date.now() - 30 * 60_000), endsAt: new Date(Date.now() + 9 * 60 * 60_000),
   } })
-  await page.goto(`/booking/${eq.id}`) // current week — the in-window block is today
+  const tzNow = new TZDate(new Date(), timezone)
+  const viewDay = tzNow.getHours() >= 23 ? addDays(tzNow, 1) : tzNow
+  await page.goto(`/booking/${eq.id}?week=${format(viewDay, 'yyyy-MM-dd')}&day=${(viewDay.getDay() + 6) % 7}`)
   await waitForHydration(page)
   await expect(dayColumn(page)).toHaveCount(1)
   await main(page).getByRole('button', { name: /Roland/ }).click()
