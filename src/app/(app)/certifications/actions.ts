@@ -1,8 +1,10 @@
 'use server'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { Prisma } from '@prisma/client'
 import { requireUser } from '@/lib/session'
 import { grantCertification, revokeCertification, revokeTrainingRecord } from '@/features/certifications/service'
+import { createTrainingRequest, decideTrainingRequest } from '@/features/certifications/training-request-service'
 import { PolicyError } from '@/features/certifications/policy'
 
 // W12-B: a Server Action is an RPC endpoint — zod-guard the wire args so a forged
@@ -69,4 +71,66 @@ export async function revokeTrainingRecordAction(recordId: string, reason: strin
   }
   revalidatePath('/certifications')
   return { ok: true }
+}
+
+// v0.32 Task 7: training requests (the Task 6 service, thin-wrapped). Wire guards
+// follow grantSchema; the service still owns permission and dedupe. P2002 is the
+// partial unique index on PENDING (userId, equipmentId) firing on the check-then-
+// insert race — the same message the service's own pre-check returns.
+const requestSchema = z.object({
+  equipmentId: z.string().min(1),
+  note: z.string().max(500, 'Notes are limited to 500 characters.').default(''),
+})
+const decideSchema = z.object({
+  requestId: z.string().min(1),
+  decision: z.enum(['grant', 'decline']),
+  reason: z.string().max(500, 'Reasons are limited to 500 characters.').optional(),
+  trainedOn: z.string().date('Training date must be a valid date.').optional(),
+})
+
+export async function createTrainingRequestAction(equipmentId: string, note: string): Promise<{ ok: boolean; message?: string }> {
+  const parsed = requestSchema.safeParse({ equipmentId, note })
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? 'Invalid training request.' }
+  const me = await requireUser()
+  let r: { ok: boolean; message?: string }
+  try {
+    r = await createTrainingRequest({ userId: me.id, equipmentId: parsed.data.equipmentId, note: parsed.data.note })
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      r = { ok: false, message: 'You already have an open training request for this instrument.' }
+    } else {
+      return { ok: false, message: 'Could not send — check your connection and try again.' }
+    }
+  }
+  if (r.ok) {
+    revalidatePath('/certifications')
+    revalidatePath(`/booking/${parsed.data.equipmentId}`)
+    revalidatePath('/booking')
+  }
+  return r
+}
+
+export async function decideTrainingRequestAction(
+  requestId: string, decision: 'grant' | 'decline', reason?: string, trainedOn?: string,
+): Promise<{ ok: boolean; message?: string }> {
+  const parsed = decideSchema.safeParse({ requestId, decision, reason, trainedOn })
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? 'Invalid decision.' }
+  const me = await requireUser()
+  let r: { ok: boolean; message?: string }
+  try {
+    r = await decideTrainingRequest({
+      requestId: parsed.data.requestId, byId: me.id, decision: parsed.data.decision,
+      reason: parsed.data.reason, trainedOn: parsed.data.trainedOn,
+    })
+  } catch {
+    return { ok: false, message: 'Could not save — check your connection and try again.' }
+  }
+  if (r.ok) {
+    revalidatePath('/certifications')
+    // The decision changes this instrument's surfaces for both parties; the
+    // equipment page route is dynamic-segmented, so bust every instance of it.
+    revalidatePath('/booking/[equipmentId]', 'page')
+    revalidatePath('/booking')
+  }
+  return r
 }

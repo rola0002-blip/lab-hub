@@ -7,13 +7,16 @@ type Props = {
   equipmentId: string; timezone: string; allowRecurring: boolean
   equipmentName: string; equipmentLocation: string; retired: boolean
   band: Band; maxDurationMinutes: number
+  // v0.32: computed by the server page (cert-gated + uncertified member/admin) —
+  // the dialog's certification_required banner offers the ask only when true.
+  allowTrainingRequest?: boolean
 }
 
 // The keyboard- and pointer-reachable way into the booking dialog at every width:
 // no drag, no tap-and-drag, just a button that opens the (now fully editable)
 // dialog on the next free half hour. It owns its OWN dialog mount, independent of
 // the schedule's drag/draft mounts — only one is ever open in practice.
-export default function NewBookingButton({ equipmentId, timezone, allowRecurring, equipmentName, equipmentLocation, retired, band, maxDurationMinutes }: Props) {
+export default function NewBookingButton({ equipmentId, timezone, allowRecurring, equipmentName, equipmentLocation, retired, band, maxDurationMinutes, allowTrainingRequest }: Props) {
   const [range, setRange] = useState<{ start: Date; end: Date } | null>(null)
 
   // Retired instruments take no new bookings (the schedule says so in words), so
@@ -36,7 +39,8 @@ export default function NewBookingButton({ equipmentId, timezone, allowRecurring
       {range && (
         <BookingDialog equipmentId={equipmentId} timezone={timezone} allowRecurring={allowRecurring}
           equipmentName={equipmentName} equipmentLocation={equipmentLocation} band={band} maxDurationMinutes={maxDurationMinutes}
-          initialStart={range.start} initialEnd={range.end} onClose={() => setRange(null)} />
+          initialStart={range.start} initialEnd={range.end} onClose={() => setRange(null)}
+          allowTrainingRequest={allowTrainingRequest} />
       )}
     </>
   )

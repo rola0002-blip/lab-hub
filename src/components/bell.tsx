@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   Bell as BellIcon, BellPlus, Check, Hash, AtSign, MessageSquare,
   CalendarClock, CalendarCheck, CalendarX, UserPlus, CircleCheck, ClipboardCheck, Megaphone,
-  Smartphone, X,
+  GraduationCap, Smartphone, X,
   type LucideIcon,
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
@@ -42,6 +42,10 @@ const LABEL: Record<string, string> = {
   project_update_prompt: 'Project update due',
   feedback_new: 'New feedback',
   feedback_decided: 'Feedback update',
+  // v0.32 training requests: managers/admins on a new open request, the requester
+  // on a decision (Task 6's notification lane — the Task 7 fold-in).
+  training_request: 'Training request',
+  training_decided: 'Training decision',
 }
 
 // Per-type glyph for the actor square when there's no person avatar to show
@@ -64,6 +68,8 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   project_update_prompt: ClipboardCheck,
   feedback_new: Megaphone,
   feedback_decided: Megaphone,
+  training_request: GraduationCap,
+  training_decided: GraduationCap,
 }
 
 let audioCtx: AudioContext | null = null

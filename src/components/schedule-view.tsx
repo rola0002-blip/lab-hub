@@ -32,6 +32,9 @@ type Props = {
   // Only the day bar's week-crossing links ever mint it; absent → today when the
   // viewed week contains today, else the first day.
   initialDay?: number
+  // v0.32: server-computed (cert-gated + uncertified member/admin) — threaded to
+  // the booking dialog's certification_required banner.
+  allowTrainingRequest?: boolean
 }
 
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6]
@@ -55,7 +58,7 @@ function canSessionSlot(s: CalSlot, canManage: boolean): boolean {
   return s.kind === 'booking' && (s.own || canManage) && s.status === 'CONFIRMED' && !s.sessionEndedAt
 }
 
-export default function ScheduleView({ equipmentId, timezone, weekStartISO, slots, canManage, allowRecurring, retired, equipmentName, equipmentLocation, band, maxDurationMinutes, initialDay }: Props) {
+export default function ScheduleView({ equipmentId, timezone, weekStartISO, slots, canManage, allowRecurring, retired, equipmentName, equipmentLocation, band, maxDurationMinutes, initialDay, allowTrainingRequest }: Props) {
   const weekStart = useMemo(() => new TZDate(new Date(weekStartISO), timezone), [weekStartISO, timezone])
   const rows = bandRows(band)
   // md=768 is the ONLY layout breakpoint and (pointer: coarse) the ONLY gesture
@@ -251,6 +254,7 @@ export default function ScheduleView({ equipmentId, timezone, weekStartISO, slot
         <BookingDialog equipmentId={equipmentId} timezone={timezone} allowRecurring={allowRecurring}
           equipmentName={equipmentName} equipmentLocation={equipmentLocation} band={band} maxDurationMinutes={maxDurationMinutes}
           initialStart={dialog.start} initialEnd={dialog.end} onClose={() => setDialog(null)}
+          allowTrainingRequest={allowTrainingRequest}
           // Success retires the draft; CANCEL deliberately keeps it, so the user can
           // adjust the handles and try again. (A drag-opened dialog has none to clear.)
           onBooked={() => setDraft(null)} />

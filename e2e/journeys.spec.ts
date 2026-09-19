@@ -151,6 +151,9 @@ test('certification gate blocks, then unlocks after granting', async ({ page }) 
   await expect(dialog).toBeVisible()
   await dialog.getByRole('button', { name: 'Save' }).click()
   await expect(page.locator('table input[type=checkbox]').first()).toBeChecked()
+  // v0.32: history lives behind its own tab — the grant left the matrix showing,
+  // so step to the History tab for the ledger assertions below.
+  await page.getByRole('tab', { name: 'History' }).click()
   // The training history table lands beneath the matrix.
   await expect(page.getByRole('heading', { name: 'Training history' })).toBeVisible()
   const history = page.locator('section', { has: page.getByRole('heading', { name: 'Training history' }) })
@@ -165,6 +168,8 @@ test('certification gate blocks, then unlocks after granting', async ({ page }) 
   // CONTROLLED box stays checked until the action round-trip), an empty reason keeps
   // Revoke disabled, and after revoking: the box unchecks, booking blocks again, and
   // the unified ledger records the revocation with its reason.
+  // Back to the Matrix tab — the checkbox leg below lives there (v0.32 tabs).
+  await page.getByRole('tab', { name: 'Matrix' }).click()
   await page.locator('table input[type=checkbox]').first().click()
   const revokeDialog = page.getByRole('dialog', { name: /Revoke certification/ })
   await expect(revokeDialog).toBeVisible()
@@ -177,6 +182,8 @@ test('certification gate blocks, then unlocks after granting', async ({ page }) 
     data: { equipmentId: eq.id, startsAt: starts, endsAt: new Date(+starts + 3_600_000), purpose: 'x' },
   })
   expect(blockedAgain.status()).toBe(422)
+  // The ledger assertions read the History tab again (v0.32 tabs).
+  await page.getByRole('tab', { name: 'History' }).click()
   await expect(history.getByText('Certification revoked — failed the safety refresher')).toBeVisible()
 
   // The training record itself is still active (cert-only revoke) — its row carries

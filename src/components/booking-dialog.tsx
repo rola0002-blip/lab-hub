@@ -6,6 +6,7 @@ import { addDays, format } from 'date-fns'
 import { Modal } from '@/components/ui/modal'
 import { toast } from '@/components/ui/toast'
 import { AddToCalendar } from '@/components/calendar/add-to-calendar'
+import RequestTrainingButton from '@/components/booking/request-training-button'
 import { wallTimeExists } from '@/lib/wall-time'
 import { type Band, bandRows, rangeToRows, rowLabel, rowsToRange } from '@/features/booking/grid'
 
@@ -21,6 +22,10 @@ type Props = {
   // Optional: entry paths that own a draft selection clear it here once the
   // booking lands. The calendar's drag mount has nothing to clear and omits it.
   onBooked?: () => void
+  // v0.32: the server page's cert-gate projection (cert-gated instrument,
+  // uncertified member/admin). The certification_required banner offers the ask
+  // only when true — guests never see it (the service refuses them anyway).
+  allowTrainingRequest?: boolean
 }
 type Verdict = { kind: 'instant' } | { kind: 'approval'; why: string } | { kind: 'blocked'; reason: string; message: string }
 
@@ -47,7 +52,7 @@ const optionExists = (dateStr: string, row: number, band: Band, timezone: string
 
 const FIELD = 'mt-1 block rounded-md border border-border bg-surface px-3 py-2'
 
-export default function BookingDialog({ equipmentId, timezone, allowRecurring, equipmentName, equipmentLocation, initialStart, initialEnd, band, maxDurationMinutes, onClose, onBooked }: Props) {
+export default function BookingDialog({ equipmentId, timezone, allowRecurring, equipmentName, equipmentLocation, initialStart, initialEnd, band, maxDurationMinutes, onClose, onBooked, allowTrainingRequest }: Props) {
   const router = useRouter()
   const [purpose, setPurpose] = useState('')
   const [recurring, setRecurring] = useState(false)
@@ -208,11 +213,21 @@ export default function BookingDialog({ equipmentId, timezone, allowRecurring, e
         )}
 
         {verdict && (
-          <p className={`mt-3 rounded-md p-2 text-sm text-default ${verdict.kind === 'blocked' ? 'bg-[var(--color-danger)]/10' : verdict.kind === 'approval' ? 'bg-[var(--color-warning)]/12' : 'bg-[var(--color-success)]/12'}`}>
-            {verdict.kind === 'instant' && 'This booking will confirm instantly.'}
-            {verdict.kind === 'approval' && (verdict.why === 'guest_policy' ? 'Guests need approval on this instrument.' : 'This instrument requires approval for every booking.')}
-            {verdict.kind === 'blocked' && verdict.message}
-          </p>
+          <div className={`mt-3 rounded-md p-2 text-sm text-default ${verdict.kind === 'blocked' ? 'bg-[var(--color-danger)]/10' : verdict.kind === 'approval' ? 'bg-[var(--color-warning)]/12' : 'bg-[var(--color-success)]/12'}`}>
+            <p>
+              {verdict.kind === 'instant' && 'This booking will confirm instantly.'}
+              {verdict.kind === 'approval' && (verdict.why === 'guest_policy' ? 'Guests need approval on this instrument.' : 'This instrument requires approval for every booking.')}
+              {verdict.kind === 'blocked' && verdict.message}
+            </p>
+            {/* The certification gate is the one block with a constructive exit:
+                ask for training without leaving the dialog. Nested modal over this
+                one — Escape/close lands back here with the range still drafted. */}
+            {verdict.kind === 'blocked' && verdict.reason === 'certification_required' && allowTrainingRequest && (
+              <div className="mt-2">
+                <RequestTrainingButton equipmentId={equipmentId} equipmentName={equipmentName} tone="accent" />
+              </div>
+            )}
+          </div>
         )}
         {error && <p className="mt-2 text-sm text-[var(--text-danger)]">{error}</p>}
         {conflicts.length > 0 && (

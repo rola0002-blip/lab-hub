@@ -46,11 +46,17 @@ describe('notificationHref', () => {
     expect(notificationHref({ type: 'feedback_decided', payload: { feedbackId: 'f1', status: 'PLANNED', message: 'Your feedback was marked Planned' } })).toBe('/feedback')
   })
 
+  it('routes both training rows to /certifications (v0.32 — message-only payloads)', () => {
+    expect(notificationHref({ type: 'training_request', payload: { message: 'Noor requested training on CVD Furnace' } })).toBe('/certifications')
+    expect(notificationHref({ type: 'training_decided', payload: { message: 'Training granted: you are now certified on CVD Furnace.' } })).toBe('/certifications')
+  })
+
   it('never lets a message-only payload fall into the issue or chat branches', () => {
     // feedback payloads carry `message` but no identifier/conversationId; if an earlier
     // branch ever started matching on `message`, these rows would link to a bogus route.
     expect(notificationHref({ type: 'feedback_new', payload: { message: 'm' } })).toBe('/feedback')
     expect(notificationHref({ type: 'feedback_decided', payload: {} })).toBe('/feedback')
+    expect(notificationHref({ type: 'training_request', payload: { message: 'm' } })).toBe('/certifications')
   })
 
   it('returns null when nothing resolves', () => {
