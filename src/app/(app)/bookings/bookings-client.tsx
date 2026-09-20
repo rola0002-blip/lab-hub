@@ -5,6 +5,7 @@ import { CalendarCheck, Clock } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Modal } from '@/components/ui/modal'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { BOOKING_VARIANT } from '@/features/booking/chip'
 import { SESSION_LATE_MS } from '@/features/booking/session'
 import { AddToCalendar } from '@/components/calendar/add-to-calendar'
@@ -26,9 +27,8 @@ const SESSION_BTN = 'rounded px-1 py-1.5 whitespace-nowrap text-[var(--text-acce
 function Row({ b, upcoming, onErr }: { b: Item; upcoming: boolean; onErr: (m: string) => void }) {
   const [pending, start] = useTransition()
   const [noteOpen, setNoteOpen] = useState<{ mode: 'save' | 'end' } | null>(null)
+  const [confirmScope, setConfirmScope] = useState<'one' | 'future' | null>(null)
   function cancel(scope: 'one' | 'future') {
-    const q = scope === 'future' ? 'Cancel this and all future occurrences?' : 'Cancel this booking?'
-    if (!confirm(q)) return
     start(async () => { const r = await cancelMyBookingAction(b.id, scope); if (!r.ok) onErr(r.message ?? 'Failed') })
   }
   return (
@@ -69,14 +69,22 @@ function Row({ b, upcoming, onErr }: { b: Item; upcoming: boolean; onErr: (m: st
         <Badge variant={BOOKING_VARIANT[b.status as keyof typeof BOOKING_VARIANT]}>{b.status.toLowerCase()}</Badge>
         {b.cancellable && (
           <>
-            <button type="button" disabled={pending} onClick={() => cancel('one')} className={CANCEL_BTN}>Cancel</button>
-            {b.recurring && <button type="button" disabled={pending} onClick={() => cancel('future')} className={CANCEL_BTN}>Cancel series</button>}
+            <button type="button" disabled={pending} onClick={() => setConfirmScope('one')} className={CANCEL_BTN}>Cancel</button>
+            {b.recurring && <button type="button" disabled={pending} onClick={() => setConfirmScope('future')} className={CANCEL_BTN}>Cancel series</button>}
           </>
         )}
       </span>
       {/* Modal stays open on failure (slot-details' contract): the error surfaces via
           the page-level msg and the typed note is preserved. */}
       {noteOpen && <SessionNoteModal bookingId={b.id} mode={noteOpen.mode} initial={b.sessionNote} onDone={() => setNoteOpen(null)} onErr={onErr} />}
+      <ConfirmDialog
+        open={confirmScope !== null}
+        danger
+        title={confirmScope === 'future' ? 'Cancel this and all future occurrences?' : 'Cancel this booking?'}
+        confirmLabel={confirmScope === 'future' ? 'Cancel series' : 'Cancel booking'}
+        cancelLabel="Keep booking"
+        onClose={() => setConfirmScope(null)}
+        onConfirm={() => cancel(confirmScope ?? 'one')} />
     </li>
   )
 }
@@ -118,7 +126,7 @@ function SessionNoteModal({ bookingId, mode, initial, onDone, onErr }: {
   )
 }
 
-export default function BookingsClient({ upcoming, past }: { upcoming: Item[]; past: Item[] }) {
+export default function BookingsClient({ upcoming, past, pastMoreHref }: { upcoming: Item[]; past: Item[]; pastMoreHref?: string }) {
   const [msg, setMsg] = useState<string | null>(null)
   return (
     <div className="mt-6 space-y-8">
@@ -147,6 +155,11 @@ export default function BookingsClient({ upcoming, past }: { upcoming: Item[]; p
           <EmptyState icon={Clock} title="No history yet" hint="Your past and closed bookings will collect here over time." />
         ) : (
           <ul className="mt-2 divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface shadow-xs">{past.map((b) => <Row key={b.id} b={b} upcoming={false} onErr={setMsg} />)}</ul>
+        )}
+        {/* Server-driven pagination (the page computes the href): shown only
+            when the fetch returned a full page — a short page IS the list's end. */}
+        {pastMoreHref && (
+          <Link href={pastMoreHref} className="mt-2 inline-block text-sm font-medium text-[var(--text-accent)] hover:underline">Load more</Link>
         )}
       </section>
     </div>

@@ -11,12 +11,21 @@ function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : 'Invalid input'
 }
 
+// The form shape of equipmentSchema plus the cross-field window check. Kept
+// here (not on equipmentSchema itself) because a refined object can no longer
+// `.omit()`/`.partial()`, which the service's own parse paths still need.
+const equipmentFormSchema = equipmentSchema.omit({ photoPath: true }).refine(
+  (v) => v.accessStartMinutes <= v.accessEndMinutes,
+  { message: 'The bookable window cannot end before it starts.' },
+)
+
 function parseForm(fd: FormData) {
-  return equipmentSchema.omit({ photoPath: true }).parse({
+  return equipmentFormSchema.parse({
     name: fd.get('name'), description: fd.get('description') ?? '', location: fd.get('location') ?? '',
     advanceBookingDays: fd.get('advanceBookingDays'), maxDurationMinutes: fd.get('maxDurationMinutes'),
     certificationRequired: fd.get('certificationRequired') === 'on',
     approvalPolicy: fd.get('approvalPolicy'), allowRecurring: fd.get('allowRecurring') === 'on',
+    accessStartMinutes: fd.get('accessStartMinutes'), accessEndMinutes: fd.get('accessEndMinutes'),
   })
 }
 

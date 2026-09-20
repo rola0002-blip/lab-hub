@@ -80,10 +80,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
     // Recover the human filename (on-disk basename is a UUID) and 404 unknown
     // paths. Documents and project-update attachments keep the same posture: the
     // row is the authority — bytes on disk with no row (an abandoned upload) are
-    // never streamed.
+    // never streamed. For documents the pointer moves on every version upload,
+    // so a HISTORICAL path no longer has a Document row — fall back to the
+    // DocumentVersion snapshot (same visibility: any session, same headers).
     const publicPath = '/uploads/' + path.join('/')
     const name = isDocument
-      ? (await prisma.document.findFirst({ where: { path: publicPath }, select: { name: true } }))?.name
+      ? ((await prisma.document.findFirst({ where: { path: publicPath }, select: { name: true } }))?.name
+          ?? (await prisma.documentVersion.findFirst({ where: { path: publicPath }, select: { name: true } }))?.name)
       : (await prisma.projectUpdateAttachment.findFirst({ where: { path: publicPath }, select: { name: true } }))?.name
     if (!name) return deny('Not found', 404)
     // pdf + images view inline in a new tab; office files download. Either way the

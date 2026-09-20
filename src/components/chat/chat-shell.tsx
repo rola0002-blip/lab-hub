@@ -25,9 +25,10 @@ export function ChatShell({ list, children }: { list: React.ReactNode; children:
   // the bottom of the calc'd pane ends up under the keys. When
   // useVisualViewportHeight reports a keyboard, pin the pane to what is left of
   // the VISUAL viewport: from its own MEASURED top (the safe-area inset above has
-  // already displaced it — the 80px chrome literal below must never be assumed
-  // here) down to the visual bottom, less the 1rem that <main>'s p-4 contributes
-  // underneath (the keyboard covers the home-indicator inset, so no env() term).
+  // already displaced it — the chrome arithmetic in the className below must
+  // never be assumed here) down to the visual bottom, less the 1rem that
+  // <main>'s p-4 contributes underneath (the keyboard covers the
+  // home-indicator inset, so no env() term).
   // Written straight onto the node: the div carries no `style` prop, so React
   // never fights the assignment and this stays clear of setState-in-effect.
   // Removing the property hands the height back to the Tailwind calc.
@@ -51,16 +52,18 @@ export function ChatShell({ list, children }: { list: React.ReactNode; children:
   }, [])
 
   return (
-    // Height = viewport minus the app chrome ABOVE and BELOW this pane, which is
-    // ((app)/layout.tsx) the h-12 header plus <main>'s padding: 48 + 2×16 = 5rem
-    // below md, 48 + 2×24 = 6rem at md+ (one flat 7rem over-subtracted both). The
-    // env() terms are that same layout's safe-area padding — #app-content's
-    // pt-[env(safe-area-inset-top)] and <main>'s pb-[calc(1rem+env(…-bottom))] —
-    // which are 0 everywhere except the notched standalone PWA, exactly where
-    // dropping them would overrun the screen. Keep all four in step.
+    // Height = viewport minus the app chrome ABOVE and BELOW this pane
+    // ((app)/layout.tsx): the header via the --app-header-h token defined in
+    // globals.css (the header's own height; change it there), plus <main>'s
+    // padding — p-4 → 2×1rem below md, p-6 → 2×1.5rem at md+ (one flat 7rem
+    // over-subtraction used to cover both). The env() terms are that same
+    // layout's safe-area padding — #app-content's pt-[env(safe-area-inset-top)]
+    // and <main>'s pb-[calc(1rem+env(…-bottom))] — which are 0 everywhere
+    // except the notched standalone PWA, exactly where dropping them would
+    // overrun the screen. Keep every term accounted for.
     <div
       ref={ref}
-      className="flex h-[calc(100dvh-5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] gap-0 overflow-hidden rounded-xl border border-border md:h-[calc(100dvh-6rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))]"
+      className="flex h-[calc(100dvh-var(--app-header-h)-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] gap-0 overflow-hidden rounded-xl border border-border md:h-[calc(100dvh-var(--app-header-h)-3rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))]"
     >
       <aside
         aria-label="Conversations"

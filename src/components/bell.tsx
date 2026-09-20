@@ -1,11 +1,11 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   Bell as BellIcon, BellPlus, Check, Hash, AtSign, MessageSquare,
   CalendarClock, CalendarCheck, CalendarX, UserPlus, CircleCheck, ClipboardCheck, Megaphone,
-  Smartphone, X,
+  GraduationCap, Smartphone, X,
   type LucideIcon,
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
@@ -13,7 +13,8 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { renderBody } from '@/features/chat/mentions'
 import { humanTime } from '@/lib/humanize'
 import { notificationHref } from '@/lib/notification-href'
-import { shouldChime, shouldPingFromMessage, PingThrottle, alertRendering } from '@/lib/chime'
+import { shouldChime, shouldPingFromMessage, decideAlert } from '@/lib/chime'
+import { popupPref } from '@/lib/popup-pref'
 import { useNotificationStatus } from './hooks/use-notification-state'
 import { NotificationWizard } from './notification-wizard'
 import { useInstallPrompt } from './hooks/use-install-prompt'
@@ -42,6 +43,10 @@ const LABEL: Record<string, string> = {
   project_update_prompt: 'Project update due',
   feedback_new: 'New feedback',
   feedback_decided: 'Feedback update',
+  // v0.32 training requests: managers/admins on a new open request, the requester
+  // on a decision (Task 6's notification lane — the Task 7 fold-in).
+  training_request: 'Training request',
+  training_decided: 'Training decision',
 }
 
 // Per-type glyph for the actor square when there's no person avatar to show
@@ -64,6 +69,8 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   project_update_prompt: ClipboardCheck,
   feedback_new: Megaphone,
   feedback_decided: Megaphone,
+  training_request: GraduationCap,
+  training_decided: GraduationCap,
 }
 
 let audioCtx: AudioContext | null = null
@@ -167,46 +174,60 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
   }, [])
   const watermark = useRef<string | null>(null)
   // The open conversation (route-derived — the store deliberately does not know
-  // it; /chat/<cid> is the only place a conversation is "open").
+  // it; /chat/<cid> is the only place a conversation is "open"). The SSE msg
+  // handler below reads it live from this render's closure (useEvents re-reads
+  // the closure every render), so no ref mirror is needed anymore.
   const pathname = usePathname()
   const openCid = pathname.match(/^\/chat\/([^/]+)/)?.[1] ?? null
-  // `load` is memoized with [] deps — mirror the live open-conversation into a
-  // ref it can read at fetch time (the soundsRef idiom).
-  const openCidRef = useRef<string | null>(null)
-  useEffect(() => { openCidRef.current = openCid }, [openCid])
-  const throttle = useRef(new PingThrottle(3000))
+  // Task 9: popup clicks navigate to the conversation. Bell had no router
+  // (pathname was enough until now); the App Router's useRouter is
+  // referentially stable, so the funnel's useCallback just lists it — soft
+  // nav keeps the SSE subscription and chat store alive, unlike a
+  // window.location.assign full reload.
+  const router = useRouter()
 
-  // Both chime paths funnel here: throttle (one ping per burst, no backlog),
-  // then WHERE the alert renders (alertRendering): in the desktop shell every
-  // alert becomes an OS-sounded native toast (the shell bridges Notification
-  // natively and attaches the OS sound) and the in-page chime stays silent —
-  // exactly one sound. Browsers/PWA keep the WebAudio chime. The shell toast
-  // renders regardless of the sound toggle — `silent` carries the toggle —
-  // while in browsers sounds-off still means total silence. `__TAURI__`
-  // exists only in the Tauri webviews, and the app never requests direct
-  // Notification permission in browsers (push opt-in goes through the service
-  // worker), so a 'granted' permission in a normal browser means a push
-  // subscription whose toasts the SW already shows — gating on the shell
-  // marker prevents a second toast from here.
-  const ping = useCallback((hit?: Item, msgAlert?: { title: string; body: string; tag: string }) => {
-    if (!throttle.current.canPing()) return
-    const { chime, toast } = alertRendering('__TAURI__' in window)
+  // The single alert funnel (Task 8): EVERY qualifying message runs this —
+  // no burst throttle. WHERE the alert renders (decideAlert): in the desktop
+  // shell every alert becomes an OS-sounded native toast (the shell bridges
+  // Notification natively and attaches the OS sound) and the in-page chime
+  // stays silent — exactly one sound. Browsers/PWA keep the WebAudio chime
+  // plus (Task 9) a SILENT browser OS popup — silent because the chime is
+  // the sound there; no double audio. The popup is per-device optional
+  // (labhub.popups) and needs the plain Notification permission the wizard's
+  // Browser popups step grants. The shell toast renders regardless of the
+  // sound toggle — `silent` carries the toggle — while in browsers sounds-off
+  // still means total silence. `__TAURI__` exists only in the Tauri
+  // webviews, and the app never requests direct Notification permission in
+  // browsers outside that wizard step, so a 'granted' permission in a normal
+  // browser means either the wizard step or a push subscription whose toasts
+  // the SW already shows — gating the popup arm on the shell marker
+  // prevents a second toast from here in-shell.
+  const alertFromMessage = useCallback((msgAlert: { title: string; body: string; tag: string }) => {
+    const { chime, toast, popup } = decideAlert(true, '__TAURI__' in window)
     if (toast && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       try {
-        const title = msgAlert?.title ?? (hit ? LABEL[hit.type] ?? hit.type : 'LabHub')
-        const body = msgAlert?.body ?? (hit && typeof hit.payload?.message === 'string' ? hit.payload.message : '')
-        const tag = msgAlert?.tag ?? hit?.payload?.conversationId
         // silent: respects the per-device sound toggle — the shell's OS
         // toast sound is the sound (the chime never runs here).
-        const opts: NotificationOptions = { body, silent: !soundsRef.current }
-        if (tag) opts.tag = tag
-        const t = new Notification(title, opts)
+        const opts: NotificationOptions = { body: msgAlert.body, silent: !soundsRef.current }
+        opts.tag = msgAlert.tag
+        const t = new Notification(msgAlert.title, opts)
         t.onclick = () => window.focus()
       } catch { /* best-effort */ }
       return
     }
+    if (popup && popupPref() && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      try {
+        // silent: the WebAudio chime below is the sound in browsers — the
+        // popup must not double it. tag: same-conversation messages replace
+        // the popup instead of stacking.
+        const opts: NotificationOptions = { body: msgAlert.body.slice(0, 100), silent: true }
+        opts.tag = msgAlert.tag
+        const t = new Notification(msgAlert.title, opts)
+        t.onclick = () => { window.focus(); router.push(`/chat/${msgAlert.tag}`) }
+      } catch { /* some platforms throw on construction — the chime still covers the alert */ }
+    }
     if (chime && soundsRef.current) playChime()
-  }, [])
+  }, [router])
 
   const load = useCallback(async () => {
     try {
@@ -214,17 +235,13 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
       if (!r.ok) return
       const d = await r.json()
       setUnread(d.unread); setItems(d.items)
-      const r2 = shouldChime(watermark.current, d.items.map((i: Item) => ({ id: i.id, type: i.type, createdAt: i.createdAt })))
-      watermark.current = r2.watermark
-      if (r2.chime) {
-        const hit = d.items.find((i: Item) => i.id === r2.hits[0].id)
-        // Focus suppression (D7): no ping — and no toast — for the conversation
-        // open in a focused window; you are already reading it.
-        const hitCid = hit?.payload?.conversationId
-        if (!(hitCid && hitCid === openCidRef.current && document.hasFocus())) ping(hit)
-      }
+      // Task 8: the 30 s poll is a badge refresher ONLY — the watermark
+      // advances silently and nothing chimes/toasts here. The SSE msg path is
+      // the single alert source, so a message that rode both paths can never
+      // double-ding.
+      watermark.current = shouldChime(watermark.current, d.items.map((i: Item) => ({ id: i.id, type: i.type, createdAt: i.createdAt }))).watermark
     } catch { /* transient network error; next poll retries */ }
-  }, [ping])
+  }, [])
 
   useEffect(() => {
     // Fetch-on-mount: load() is async and only setStates after an awaited network
@@ -235,8 +252,9 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
     return () => clearInterval(t)
   }, [load])
 
-  // Slack-like coverage (D5): every inbound `msg` in an unmuted, non-open
-  // conversation pings. useEvents re-reads this closure every render, so the
+  // Slack-like coverage (D5, Task 8): every inbound `msg` in an unmuted,
+  // non-open conversation alerts — no burst throttle, so each qualifying
+  // message funnels. useEvents re-reads this closure every render, so the
   // store conversations / selfId / openCid are live. The `msg` event carries
   // only {cid, mid}, so the message is fetched (the MessagePane precedent) —
   // skipped entirely when the open+focused conversation would suppress anyway.
@@ -266,7 +284,7 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
         const names = new Map(users.map((u) => [u.id, u.name]))
         const bodyText = renderBody(d.message.body || '(attachment)', names).slice(0, 120)
         const body = `${senderName}: ${bodyText}`
-        ping(undefined, { title, body, tag: cid })
+        alertFromMessage({ title, body, tag: cid })
       }
     })
   })

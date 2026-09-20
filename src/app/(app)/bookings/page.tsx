@@ -4,9 +4,15 @@ import { requireSetup } from '@/lib/org'
 import { formatRange } from '@/lib/time'
 import BookingsClient from './bookings-client'
 
-export default async function MyBookingsPage() {
+export default async function MyBookingsPage({ searchParams }: { searchParams: Promise<{ past?: string }> }) {
   const me = await requireUser()
   const org = await requireSetup()
+  // Past-list page size via ?past=<n>: default 30, the Load more link steps it
+  // by +30, hard cap 365 (a year of history is the ceiling by design). Garbage
+  // and out-of-range values clamp back onto that ladder — pure server state,
+  // no client pagination.
+  const sp = await searchParams
+  const pastN = Math.min(Math.max(Number.parseInt(sp.past ?? '30', 10) || 30, 30), 365)
   const now = new Date()
   const [upcoming, past] = await Promise.all([
     // W12-C: an ACTIVE session (started, not ended) stays in Upcoming until it is
@@ -30,7 +36,7 @@ export default async function MyBookingsPage() {
           { OR: [{ endsAt: { lt: now } }, { status: { in: ['REJECTED', 'CANCELLED', 'EXPIRED'] } }] },
           { OR: [{ sessionStartedAt: null }, { sessionEndedAt: { not: null } }] },
         ] },
-      include: { equipment: { select: { name: true, location: true } } }, orderBy: { startsAt: 'desc' }, take: 30,
+      include: { equipment: { select: { name: true, location: true } } }, orderBy: { startsAt: 'desc' }, take: pastN,
     }),
   ])
   const shape = (b: (typeof upcoming)[number]) => ({
@@ -48,7 +54,8 @@ export default async function MyBookingsPage() {
     <div>
       <p className="text-sm font-medium text-subtle">02 — My bookings</p>
       <h1 className="mt-1 text-2xl font-semibold text-default">My bookings</h1>
-      <BookingsClient upcoming={upcoming.map(shape)} past={past.map(shape)} />
+      <BookingsClient upcoming={upcoming.map(shape)} past={past.map(shape)}
+        pastMoreHref={past.length === pastN && pastN < 365 ? `/bookings?past=${Math.min(pastN + 30, 365)}` : undefined} />
     </div>
   )
 }

@@ -4,11 +4,14 @@ import { prisma } from '@/lib/db'
 import { requireUser } from '@/lib/session'
 import { requireSetup } from '@/lib/org'
 import { isManagerOf } from '@/features/equipment/service'
+import { isCertified } from '@/features/certifications/service'
 import { dayAnchor } from '@/lib/tz'
 import { addDays, format, startOfWeek } from 'date-fns'
+import { bandFor } from '@/features/booking/grid'
 import ScheduleView, { type CalSlot } from '@/components/schedule-view'
 import { Avatar } from '@/components/ui/avatar'
 import NewBookingButton from '@/components/booking/new-booking-button'
+import RequestTrainingButton from '@/components/booking/request-training-button'
 import MaintenanceDialogButton from './maintenance-dialog'
 
 export default async function EquipmentPage({ params, searchParams }: {
@@ -38,13 +41,14 @@ export default async function EquipmentPage({ params, searchParams }: {
   const weekStart = startOfWeek(anchor, { weekStartsOn: 1 })
   const weekEnd = addDays(weekStart, 7)
 
-  const [bookings, maintenance, canManage] = await Promise.all([
+  const [bookings, maintenance, canManage, certified] = await Promise.all([
     prisma.booking.findMany({
       where: { equipmentId, status: { in: ['PENDING', 'CONFIRMED'] }, startsAt: { lt: weekEnd }, endsAt: { gt: weekStart } },
       include: { user: { select: { id: true, name: true } } },
     }),
     prisma.maintenanceWindow.findMany({ where: { equipmentId, startsAt: { lt: weekEnd }, endsAt: { gt: weekStart } } }),
     isManagerOf(me.id, equipmentId),
+    isCertified(me.id, equipmentId),
   ])
 
   const slots: CalSlot[] = [
@@ -65,6 +69,16 @@ export default async function EquipmentPage({ params, searchParams }: {
   const next = format(addDays(weekStart, 7), 'yyyy-MM-dd')
   const weekStartISO = new Date(+weekStart).toISOString()
   const retired = eq.status === 'RETIRED'
+  // The rendering band: the equipment's access window, expanded over the week's
+  // bookings so a legacy off-band row (or an overnight run) is never invisible.
+  const band = bandFor(eq, bookings, org.timezone)
+  const fullDay = eq.accessStartMinutes === 0 && eq.accessEndMinutes >= 1439
+  const hm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+  // The "Request training" affordance lives exactly where the certification rule
+  // bites: cert-gated, ACTIVE, and the viewer is an uncertified member/admin.
+  // Guests cannot ask (the service refuses them) and the certified have nothing
+  // to ask for, so neither sees the button — on this page or in the dialog below.
+  const askTraining = eq.certificationRequired && !retired && me.role !== 'guest' && !certified
 
   return (
     <div>
@@ -84,7 +98,8 @@ export default async function EquipmentPage({ params, searchParams }: {
             <a href={`/api/equipment/${equipmentId}/export`} className="rounded-md border border-border px-2 py-1 text-default transition-colors hover:bg-hover">Export records</a>
           )}
           <NewBookingButton equipmentId={equipmentId} timezone={org.timezone} allowRecurring={eq.allowRecurring}
-            equipmentName={eq.name} equipmentLocation={eq.location} retired={retired} />
+            equipmentName={eq.name} equipmentLocation={eq.location} retired={retired}
+            band={band} maxDurationMinutes={eq.maxDurationMinutes} allowTrainingRequest={askTraining} />
         </div>
       </div>
 
@@ -99,13 +114,15 @@ export default async function EquipmentPage({ params, searchParams }: {
             equipmentId={equipmentId} timezone={org.timezone} weekStartISO={weekStartISO}
             slots={slots} canManage={canManage} selfId={me.id}
             allowRecurring={eq.allowRecurring} retired={retired}
-            equipmentName={eq.name} equipmentLocation={eq.location} initialDay={initialDay} />
+            equipmentName={eq.name} equipmentLocation={eq.location} initialDay={initialDay}
+            band={band} maxDurationMinutes={eq.maxDurationMinutes} allowTrainingRequest={askTraining} />
         </div>
         <aside className="w-full shrink-0 rounded-xl border border-border bg-surface p-4 text-sm shadow-xs md:w-64">
           <h2 className="font-medium text-default">Policy</h2>
           <ul className="mt-2 space-y-1 text-muted">
             <li>Book up to <strong className="text-default">{eq.advanceBookingDays} days</strong> ahead</li>
             <li>Max <strong className="text-default">{eq.maxDurationMinutes / 60} h</strong> per booking</li>
+            {!fullDay && <li>Bookable <strong className="text-default">{hm(eq.accessStartMinutes)}–{hm(eq.accessEndMinutes)}</strong> daily</li>}
             <li>{eq.certificationRequired ? 'Certification required' : 'No certification needed'}</li>
             <li>Approval: <strong className="text-default">{eq.approvalPolicy === 'NONE' ? 'instant for everyone' : eq.approvalPolicy === 'GUESTS' ? 'guests need approval' : 'everyone needs approval'}</strong></li>
             <li>{eq.allowRecurring ? 'Recurring bookings allowed' : 'No recurring bookings'}</li>
@@ -122,6 +139,11 @@ export default async function EquipmentPage({ params, searchParams }: {
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+          {askTraining && (
+            <div className="mt-3">
+              <RequestTrainingButton equipmentId={equipmentId} equipmentName={eq.name} />
             </div>
           )}
           {eq.description && <p className="mt-3 text-muted">{eq.description}</p>}

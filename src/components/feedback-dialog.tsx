@@ -130,8 +130,9 @@ function Composer({ version, pagePath }: { version: string; pagePath: string }) 
 
         <label className="block text-sm font-medium text-default">
           Details
-          {/* No autoFocus: Modal's useFocusTrap lands focus on its Close button after
-              mount, so the attribute never held — it only implied a lie about focus. */}
+          {/* No autoFocus: the Modal's trap lands initial focus on the dialog's
+              HEADING ("Give feedback") — the right opening announcement for a
+              form whose first control is a pick, not a text field. */}
           <textarea
             required maxLength={4000} rows={5} value={body}
             onChange={(e) => setBody(e.target.value)}

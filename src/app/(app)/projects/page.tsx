@@ -12,6 +12,7 @@ import { ProjectsGrid, PROJECT_GRID_CLASS } from '@/components/issues/projects-g
 import { ProjectFilterBar } from '@/components/issues/project-filter-bar'
 import { NewProjectButton } from '@/components/issues/project-composer'
 import { EmptyState } from '@/components/ui/empty-state'
+import { PageHeader } from '@/components/page-header'
 
 export default async function ProjectsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const user = await requireUser()
@@ -39,10 +40,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   const filtered = Boolean(f.health || f.attention)
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold text-default">Projects</h1>
-        {user.role !== 'guest' && <NewProjectButton users={users} folders={folders} />}
-      </div>
+      <PageHeader eyebrow="Projects" title="Projects" actions={user.role !== 'guest' ? <NewProjectButton users={users} folders={folders} /> : undefined} />
       <ProjectFilterBar />
       {/* "No projects yet" is a statement about the WHOLE lab, so it is gated on
           `projects`, not on the review slice — a lab whose projects are all completed

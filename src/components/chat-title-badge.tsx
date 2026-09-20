@@ -16,12 +16,19 @@ export function ChatTitleBadge() {
   const { conversations } = useChat()
   const base = useRef<string | null>(null)
   useEffect(() => {
-    // Capture the server-rendered title once; it is the restore target.
-    if (base.current === null) base.current = document.title
+    // Capture the base (server-rendered) title; it is the restore target.
+    // Falsy check, not null: an empty capture means the title hasn't landed
+    // yet, so we retry the capture on later runs until it does.
+    if (!base.current) base.current = document.title
     const n = sumUnread(conversations)
-    document.title = n > 0 ? `(${n}) ${base.current}` : base.current
     // Same n drives the installed-PWA launcher badge (no-op where unsupported).
     applyAppBadge(n)
+    // A streaming shell (loading.tsx) can hydrate before the document's
+    // <title> commits — an empty capture is not a base to prefix or restore.
+    // Skip the write; the capture above retries on the next store change, by
+    // which time the title has landed — writing '' here would blank the tab.
+    if (!base.current) return
+    document.title = n > 0 ? `(${n}) ${base.current}` : base.current
   }, [conversations])
   return null
 }

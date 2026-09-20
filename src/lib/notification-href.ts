@@ -13,6 +13,9 @@
 //  - feedback_*     → { feedbackId, message }        → /feedback (v0.13). The route is
 //    role-adaptive (admin queue / own submissions) and has no per-item anchor, so the
 //    id rides along for the future without being resolved here.
+//  - training_*     → { message } only (no id)       → /certifications (v0.32). Both the
+//    manager's new-request row and the requester's decision row land on the page that
+//    carries the queue and the matrix.
 
 export type NotificationLike = { type: string; payload?: Record<string, string> | null }
 
@@ -31,5 +34,9 @@ export function notificationHref(n: NotificationLike): string | null {
   // Feedback rows carry a feedbackId the page does not deep-link to: both the admin's
   // "new feedback" bell and the author's decision bell land on the one /feedback route.
   if (n.type.startsWith('feedback_')) return '/feedback'
+  // v0.32 training rows carry { message } only (no id): the manager's "request"
+  // bell lands on the Certifications queue, and so does the requester's decision
+  // bell (the matrix is the page's default tab; the queue is one tap away).
+  if (n.type.startsWith('training_')) return '/certifications'
   return null
 }

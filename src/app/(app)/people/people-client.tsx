@@ -2,6 +2,7 @@
 import { useState, useTransition } from 'react'
 import { inviteAction, revokeInviteAction, resendInviteAction, setRoleAction, deactivateAction, reactivateAction } from './actions'
 import { LocalTime } from '@/components/local-time'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from '@/components/ui/toast'
 
 type U = { id: string; name: string; email: string; role: string; banned: boolean; title: string | null; timezone: string | null }
@@ -21,6 +22,9 @@ export default function PeopleClient({ users, invitations, isAdmin, selfId }: { 
   // success (the refreshed prop governs) and reset to the prop on failure, so a
   // draft can never mask a later server-side change by another admin.
   const [roleDraft, setRoleDraft] = useState<Record<string, string>>({})
+  // v0.32 Task 11: the deactivate confirm (was native confirm) — the pending
+  // user is held here so the dialog's copy can name them.
+  const [confirmDeactivate, setConfirmDeactivate] = useState<U | null>(null)
   // navigator.clipboard is a SECURE-CONTEXT API — it is `undefined` on the plain-HTTP LAN
   // beta (the same non-secure context that dorms the service worker, spec §5.2), so the write
   // below throws there and we fall back to the toast. The accept URL is therefore ALSO rendered
@@ -125,7 +129,7 @@ export default function PeopleClient({ users, invitations, isAdmin, selfId }: { 
                   </select>
                   {u.banned
                     ? <button type="button" onClick={() => start(() => reactivateAction(u.id))} className={ACTION_BTN + ' text-[var(--text-accent)]'}>Reactivate</button>
-                    : <button type="button" onClick={() => { if (confirm(`Deactivate ${u.name}? Their sessions end and future bookings are cancelled.`)) start(async () => { const r = await deactivateAction(u.id); if (!r.ok) toast(r.message ?? 'Deactivate failed') }) }} className={ACTION_BTN + ' text-[var(--text-danger)]'}>Deactivate</button>}
+                    : <button type="button" onClick={() => setConfirmDeactivate(u)} className={ACTION_BTN + ' text-[var(--text-danger)]'}>Deactivate</button>}
                 </span>
               ) : (
                 <span className="rounded-full bg-active px-2 py-0.5 text-xs uppercase tracking-wide text-muted">{u.role}</span>
@@ -134,6 +138,18 @@ export default function PeopleClient({ users, invitations, isAdmin, selfId }: { 
           ))}
         </ul>
       </section>
+
+      <ConfirmDialog open={confirmDeactivate !== null} danger
+        title={confirmDeactivate ? `Deactivate ${confirmDeactivate.name}?` : ''}
+        body="Their sessions end and future bookings are cancelled."
+        confirmLabel="Deactivate"
+        onClose={() => setConfirmDeactivate(null)}
+        onConfirm={() => start(async () => {
+          const u = confirmDeactivate
+          if (!u) return
+          const r = await deactivateAction(u.id)
+          if (!r.ok) toast(r.message ?? 'Deactivate failed')
+        })} />
     </div>
   )
 }

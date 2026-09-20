@@ -60,6 +60,10 @@ test('member books instantly via API-backed dialog flow', async ({ page }) => {
   // grows past the starting row.
   const cols = page.locator('div.relative.border-l')
   const col = cols.nth(2)
+  // The route streams in behind its loading skeleton (v0.32) and boundingBox()
+  // does not retry — gate on the real calendar column or a mid-skeleton probe
+  // returns null and `box.x` throws.
+  await expect(col).toBeVisible()
   const box = (await col.boundingBox())!
   await page.mouse.move(box.x + box.width / 2, box.y + 120)
   await page.mouse.down()
@@ -151,6 +155,9 @@ test('certification gate blocks, then unlocks after granting', async ({ page }) 
   await expect(dialog).toBeVisible()
   await dialog.getByRole('button', { name: 'Save' }).click()
   await expect(page.locator('table input[type=checkbox]').first()).toBeChecked()
+  // v0.32: history lives behind its own tab — the grant left the matrix showing,
+  // so step to the History tab for the ledger assertions below.
+  await page.getByRole('tab', { name: 'History' }).click()
   // The training history table lands beneath the matrix.
   await expect(page.getByRole('heading', { name: 'Training history' })).toBeVisible()
   const history = page.locator('section', { has: page.getByRole('heading', { name: 'Training history' }) })
@@ -165,6 +172,8 @@ test('certification gate blocks, then unlocks after granting', async ({ page }) 
   // CONTROLLED box stays checked until the action round-trip), an empty reason keeps
   // Revoke disabled, and after revoking: the box unchecks, booking blocks again, and
   // the unified ledger records the revocation with its reason.
+  // Back to the Matrix tab — the checkbox leg below lives there (v0.32 tabs).
+  await page.getByRole('tab', { name: 'Matrix' }).click()
   await page.locator('table input[type=checkbox]').first().click()
   const revokeDialog = page.getByRole('dialog', { name: /Revoke certification/ })
   await expect(revokeDialog).toBeVisible()
@@ -177,6 +186,8 @@ test('certification gate blocks, then unlocks after granting', async ({ page }) 
     data: { equipmentId: eq.id, startsAt: starts, endsAt: new Date(+starts + 3_600_000), purpose: 'x' },
   })
   expect(blockedAgain.status()).toBe(422)
+  // The ledger assertions read the History tab again (v0.32 tabs).
+  await page.getByRole('tab', { name: 'History' }).click()
   await expect(history.getByText('Certification revoked — failed the safety refresher')).toBeVisible()
 
   // The training record itself is still active (cert-only revoke) — its row carries
@@ -273,8 +284,8 @@ test('member logs a session on a booking (log on → note → log off)', async (
 // branch keeps it in Upcoming (whatever the status) so Log off stays reachable;
 // Note disappears (its save path requires CONFIRMED server-side). startsAt +10m
 // sits inside the 15-minute early log-on window; endsAt +70m keeps log-off inside
-// its window. The Row cancel confirms via window.confirm — the dialog handler is
-// registered BEFORE the click (Playwright auto-dismisses unhandled dialogs).
+// its window. The Row cancel confirms via the styled ConfirmDialog (v0.32) — the
+// destructive arm lives INSIDE the dialog, scoped by its accessible name.
 test('cancel during an active session keeps the row closeable in Upcoming', async ({ page }) => {
   await runWizard(page)
   const eq = await db.equipment.create({ data: { name: 'Sputter', approvalPolicy: 'NONE' } })
@@ -290,8 +301,11 @@ test('cancel during an active session keeps the row closeable in Upcoming', asyn
   const row = upcoming.getByRole('listitem').filter({ hasText: 'Sputter' })
   await row.getByRole('button', { name: 'Log on' }).click()
   await expect(row.getByRole('button', { name: 'Log off' })).toBeVisible()
-  page.on('dialog', (d) => d.accept())
   await row.getByRole('button', { name: 'Cancel', exact: true }).click()
+  const confirm = page.getByRole('dialog', { name: 'Cancel this booking?' })
+  await expect(confirm).toBeVisible()
+  await confirm.getByRole('button', { name: 'Cancel booking' }).click()
+  await expect(confirm).toHaveCount(0)
   await expect(row.getByText('cancelled')).toBeVisible() // row REMAINS in Upcoming, now cancelled
   await expect(row.getByRole('button', { name: 'Log off' })).toBeVisible()
   await expect(row.getByRole('button', { name: 'Note' })).toHaveCount(0)

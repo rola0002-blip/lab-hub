@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/db'
 import { requireUser } from '@/lib/session'
 import { acceptInviteUrl } from '@/features/invitations/service'
+import { PageHeader } from '@/components/page-header'
 import PeopleClient from './people-client'
 
 export default async function PeoplePage() {
@@ -14,8 +15,7 @@ export default async function PeoplePage() {
   const isAdmin = user.role === 'admin'
   return (
     <div>
-      <p className="text-sm font-medium text-subtle">02 — People</p>
-      <h1 className="mt-1 text-2xl font-semibold text-default">People</h1>
+      <PageHeader eyebrow="Directory" title="People" />
       {/* Invite tokens embed in the accept URL; the pending-invitations UI is admin-only,
           so only admins receive the URLs — non-admins get [] and the token never enters
           their RSC payload (/people is member-reachable, not admin-gated at the route). */}

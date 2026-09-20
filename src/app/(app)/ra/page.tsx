@@ -2,6 +2,7 @@ import { requireUser } from '@/lib/session'
 import { getOrg } from '@/lib/org'
 import { canReviewRa } from '@/features/ra/ra-policy'
 import { raOptions, listMyRaAcknowledgments, listAllRaAcknowledgments } from '@/features/ra/ra-service'
+import { PageHeader } from '@/components/page-header'
 import { RaClient } from './ra-client'
 
 // Role-adaptive (the /feedback pattern): the records table is fetched ONLY for
@@ -19,8 +20,7 @@ export default async function RaPage() {
   ])
   return (
     <div>
-      <p className="text-sm font-medium text-subtle">Workspace</p>
-      <h1 className="mt-1 text-2xl font-semibold text-default">RA acknowledgments</h1>
+      <PageHeader eyebrow="Workspace" title="RA acknowledgments" />
       <RaClient name={me.name} options={options} mine={mine} all={all} tz={tz} />
     </div>
   )

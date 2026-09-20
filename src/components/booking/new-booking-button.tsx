@@ -1,18 +1,22 @@
 'use client'
 import { useState } from 'react'
 import BookingDialog from '@/components/booking-dialog'
-import { defaultDialogRange, rowsToRange } from '@/features/booking/grid'
+import { type Band, defaultDialogRange, rowsToRange } from '@/features/booking/grid'
 
 type Props = {
   equipmentId: string; timezone: string; allowRecurring: boolean
   equipmentName: string; equipmentLocation: string; retired: boolean
+  band: Band; maxDurationMinutes: number
+  // v0.32: computed by the server page (cert-gated + uncertified member/admin) —
+  // the dialog's certification_required banner offers the ask only when true.
+  allowTrainingRequest?: boolean
 }
 
 // The keyboard- and pointer-reachable way into the booking dialog at every width:
 // no drag, no tap-and-drag, just a button that opens the (now fully editable)
 // dialog on the next free half hour. It owns its OWN dialog mount, independent of
 // the schedule's drag/draft mounts — only one is ever open in practice.
-export default function NewBookingButton({ equipmentId, timezone, allowRecurring, equipmentName, equipmentLocation, retired }: Props) {
+export default function NewBookingButton({ equipmentId, timezone, allowRecurring, equipmentName, equipmentLocation, retired, band, maxDurationMinutes, allowTrainingRequest }: Props) {
   const [range, setRange] = useState<{ start: Date; end: Date } | null>(null)
 
   // Retired instruments take no new bookings (the schedule says so in words), so
@@ -22,8 +26,8 @@ export default function NewBookingButton({ equipmentId, timezone, allowRecurring
   function open() {
     // Resolved at click time, not at render: a page left open past the hour must
     // still offer the next free slot, not the one it rendered with.
-    const { dateStr, startRow, endRow } = defaultDialogRange(new Date(), timezone)
-    setRange(rowsToRange(dateStr, startRow, endRow, timezone))
+    const { dateStr, startRow, endRow } = defaultDialogRange(new Date(), timezone, band)
+    setRange(rowsToRange(dateStr, startRow, endRow, timezone, band))
   }
 
   return (
@@ -34,8 +38,9 @@ export default function NewBookingButton({ equipmentId, timezone, allowRecurring
       </button>
       {range && (
         <BookingDialog equipmentId={equipmentId} timezone={timezone} allowRecurring={allowRecurring}
-          equipmentName={equipmentName} equipmentLocation={equipmentLocation}
-          initialStart={range.start} initialEnd={range.end} onClose={() => setRange(null)} />
+          equipmentName={equipmentName} equipmentLocation={equipmentLocation} band={band} maxDurationMinutes={maxDurationMinutes}
+          initialStart={range.start} initialEnd={range.end} onClose={() => setRange(null)}
+          allowTrainingRequest={allowTrainingRequest} />
       )}
     </>
   )

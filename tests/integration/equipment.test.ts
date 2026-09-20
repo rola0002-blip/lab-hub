@@ -7,8 +7,10 @@ describe('equipment service', () => {
   beforeEach(resetDb)
 
   it('creates with policy defaults and updates policy knobs', async () => {
-    const eq = await createEquipment({ name: 'CVD Furnace', description: '', location: 'Lab A', advanceBookingDays: 14, maxDurationMinutes: 480, certificationRequired: true, approvalPolicy: 'GUESTS', allowRecurring: false })
+    const eq = await createEquipment({ name: 'CVD Furnace', description: '', location: 'Lab A', advanceBookingDays: 14, maxDurationMinutes: 480, certificationRequired: true, approvalPolicy: 'GUESTS', allowRecurring: false, accessStartMinutes: 0, accessEndMinutes: 1439 })
     expect(eq.certificationRequired).toBe(true)
+    expect(eq.accessStartMinutes).toBe(0)
+    expect(eq.accessEndMinutes).toBe(1439)
     const up = await updateEquipment(eq.id, { maxDurationMinutes: 240 })
     expect(up.maxDurationMinutes).toBe(240)
   })

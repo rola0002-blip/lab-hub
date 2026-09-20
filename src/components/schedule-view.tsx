@@ -9,7 +9,7 @@ import SlotDetailsModal from '@/components/booking/slot-details-modal'
 import { useMediaQuery } from '@/components/hooks/use-media-query'
 import { formatRange } from '@/lib/time'
 import {
-  END_HOUR, ROWS, ROW_PX_DAY, ROW_PX_WEEK, START_HOUR,
+  type Band, bandRows, ROW_PX_DAY, ROW_PX_WEEK,
   type Draft, moveDraft, resizeDraft, rowToDate, rowsToRange, seedDraft, slotRect,
 } from '@/features/booking/grid'
 
@@ -24,10 +24,17 @@ type Props = {
   equipmentId: string; timezone: string; weekStartISO: string
   slots: CalSlot[]; canManage: boolean; selfId: string; allowRecurring: boolean; retired: boolean
   equipmentName: string; equipmentLocation: string
+  // The rendering band (grid.ts bandFor): the equipment's access window, already
+  // expanded server-side to include any off-band bookings — plus the duration
+  // cap the dialog's overnight To-extension measures against.
+  band: Band; maxDurationMinutes: number
   // Which day the phone day view opens on (0 = Monday, the week's first column).
   // Only the day bar's week-crossing links ever mint it; absent → today when the
   // viewed week contains today, else the first day.
   initialDay?: number
+  // v0.32: server-computed (cert-gated + uncertified member/admin) — threaded to
+  // the booking dialog's certification_required banner.
+  allowTrainingRequest?: boolean
 }
 
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6]
@@ -51,8 +58,9 @@ function canSessionSlot(s: CalSlot, canManage: boolean): boolean {
   return s.kind === 'booking' && (s.own || canManage) && s.status === 'CONFIRMED' && !s.sessionEndedAt
 }
 
-export default function ScheduleView({ equipmentId, timezone, weekStartISO, slots, canManage, allowRecurring, retired, equipmentName, equipmentLocation, initialDay }: Props) {
+export default function ScheduleView({ equipmentId, timezone, weekStartISO, slots, canManage, allowRecurring, retired, equipmentName, equipmentLocation, band, maxDurationMinutes, initialDay, allowTrainingRequest }: Props) {
   const weekStart = useMemo(() => new TZDate(new Date(weekStartISO), timezone), [weekStartISO, timezone])
+  const rows = bandRows(band)
   // md=768 is the ONLY layout breakpoint and (pointer: coarse) the ONLY gesture
   // predicate: width never gates the gesture (an iPad keeps the week grid AND the
   // touch gesture), pointer type never gates layout. Both hooks are SSR-false, so
@@ -86,16 +94,19 @@ export default function ScheduleView({ equipmentId, timezone, weekStartISO, slot
   const visibleDays = narrow ? [dayIndex] : ALL_DAYS
 
   const rowDate = useCallback(
-    (day: number, row: number): Date => rowToDate(weekStart, day, row, timezone),
-    [weekStart, timezone],
+    (day: number, row: number): Date => rowToDate(weekStart, day, row, timezone, band),
+    [weekStart, timezone, band],
   )
 
   const finishDrag = useCallback(() => {
     if (!drag || retired) return setDrag(null)
     const [a, b] = [Math.min(drag.from, drag.to), Math.max(drag.from, drag.to) + 1]
-    setDialog({ start: rowDate(drag.day, a), end: rowDate(drag.day, b) })
+    setDialog({ start: rowToDate(weekStart, drag.day, a, timezone, band), end: rowToDate(weekStart, drag.day, b, timezone, band) })
     setDrag(null)
-  }, [drag, retired, rowDate])
+    // The two setters are listed for the React Compiler, which (since the band
+    // threading) infers them as dependencies; they are stable state setters, so
+    // the memo never re-fires on their account.
+  }, [drag, retired, weekStart, timezone, band, setDialog, setDrag])
 
   // Document-level backstop: a pointer released/cancelled outside the grid (above the
   // header, off-window, or a touch pointercancel) never reaches a cell, so own drag
@@ -163,21 +174,21 @@ export default function ScheduleView({ equipmentId, timezone, weekStartISO, slot
           )
         })}
         {/* time gutter */}
-        <div className="relative" style={{ height: ROWS * rowPx }}>
-          {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => (
+        <div className="relative" style={{ height: rows * rowPx }}>
+          {Array.from({ length: band.endHour - band.startHour }, (_, i) => (
             <span key={i} className="absolute right-1 text-[10px] text-subtle" style={{ top: i * 2 * rowPx - 6 }}>
-              {String(START_HOUR + i).padStart(2, '0')}:00
+              {String(band.startHour + i).padStart(2, '0')}:00
             </span>
           ))}
         </div>
         {visibleDays.map((day) => {
           // Hoisted once per column: slotRect takes the day bounds as arguments.
           const dayStart = rowDate(day, 0)
-          const dayEnd = rowDate(day, ROWS)
+          const dayEnd = rowDate(day, rows)
           return (
-            <div key={day} data-day-col={day} className="relative border-l border-border" style={{ height: ROWS * rowPx }}
+            <div key={day} data-day-col={day} className="relative border-l border-border" style={{ height: rows * rowPx }}
               onPointerLeave={coarse ? undefined : () => drag && finishDrag()}>
-              {Array.from({ length: ROWS }, (_, row) => {
+              {Array.from({ length: rows }, (_, row) => {
                 const inDrag = drag?.day === day && row >= Math.min(drag.from, drag.to) && row <= Math.max(drag.from, drag.to)
                 return (
                   <div key={row}
@@ -190,7 +201,7 @@ export default function ScheduleView({ equipmentId, timezone, weekStartISO, slot
                     // and the document backstop stays unarmed.
                     onPointerDown={coarse ? undefined : () => !retired && setDrag({ day, from: row, to: row })}
                     onPointerEnter={coarse ? undefined : () => drag?.day === day && setDrag({ ...drag, to: row })}
-                    onClick={coarse ? () => !retired && setDraft(seedDraft(day, row)) : undefined}
+                    onClick={coarse ? () => !retired && setDraft(seedDraft(day, row, band)) : undefined}
                   />
                 )
               })}
@@ -228,10 +239,10 @@ export default function ScheduleView({ equipmentId, timezone, weekStartISO, slot
                   block only reports rows. Nothing here completes on pointer release —
                   Book is an explicit press. */}
               {coarse && draft?.day === day && (
-                <DraftBlock draft={draft} rowPx={rowPx}
-                  onResize={(edge, row) => setDraft((d) => (d ? resizeDraft(d, edge, row) : d))}
-                  onMove={(deltaRows) => setDraft((d) => (d ? moveDraft(d, deltaRows) : d))}
-                  onBook={() => setDialog(rowsToRange(dayKeys[draft.day], draft.startRow, draft.endRow, timezone))}
+                <DraftBlock draft={draft} rowPx={rowPx} band={band}
+                  onResize={(edge, row) => setDraft((d) => (d ? resizeDraft(d, edge, row, band) : d))}
+                  onMove={(deltaRows) => setDraft((d) => (d ? moveDraft(d, deltaRows, band) : d))}
+                  onBook={() => setDialog(rowsToRange(dayKeys[draft.day], draft.startRow, draft.endRow, timezone, band))}
                   onDiscard={() => setDraft(null)} />
               )}
             </div>
@@ -241,8 +252,9 @@ export default function ScheduleView({ equipmentId, timezone, weekStartISO, slot
       {retired && <p className="p-2 text-sm text-muted">This instrument is retired — no new bookings.</p>}
       {dialog && (
         <BookingDialog equipmentId={equipmentId} timezone={timezone} allowRecurring={allowRecurring}
-          equipmentName={equipmentName} equipmentLocation={equipmentLocation}
+          equipmentName={equipmentName} equipmentLocation={equipmentLocation} band={band} maxDurationMinutes={maxDurationMinutes}
           initialStart={dialog.start} initialEnd={dialog.end} onClose={() => setDialog(null)}
+          allowTrainingRequest={allowTrainingRequest}
           // Success retires the draft; CANCEL deliberately keeps it, so the user can
           // adjust the handles and try again. (A drag-opened dialog has none to clear.)
           onBooked={() => setDraft(null)} />

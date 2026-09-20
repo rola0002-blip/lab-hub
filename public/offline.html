@@ -6,21 +6,40 @@
   <title>LabHub — offline</title>
   <style>
     /* Self-contained: no external assets — this page must render from the SW
-       precache with zero network. Colors mirror the app canvas (globals.css). */
+       precache with zero network. Colors mirror the app canvas (globals.css):
+       light :root tokens by default, the dark [data-theme="dark"] values under
+       prefers-color-scheme. The page cannot read the app's data-theme (the SW
+       serves it before any app script runs), so the OS preference is the only
+       signal — the same split the pre-paint boot script resolves per paint. */
+    :root {
+      --off-canvas:#ffffff; --off-text:#1d1c1d; --off-muted:#616160;
+      /* accent is teal-700, not the app's light --accent teal-600: the button
+         label is normal-size text (16px/600), so the pair must clear AA 4.5:1 —
+         white on teal-600 is only ~3.7:1 (the app gates that pair at the 3:1
+         non-text bar); white on teal-700 is ~5.5:1 (globals' own sidebar note).
+         Ring/icon stay teal-600 like --ring-focus: non-text, 3:1 bar. */
+      --off-accent:#0f766e; --off-accent-on:#ffffff; --off-ring:#0d9488; --off-icon:#0d9488;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --off-canvas:#1a1d21; --off-text:#e7e9ea; --off-muted:#9ca3af;
+        --off-accent:#14b8a6; --off-accent-on:#06231f; --off-ring:#5eead4; --off-icon:#0d9488;
+      }
+    }
     body { margin: 0; min-height: 100dvh; display: flex; align-items: center; justify-content: center;
-      background: #1a1d21; color: #e7e9ea; font: 16px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--off-canvas); color: var(--off-text); font: 16px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       padding: 2rem 1.5rem calc(2rem + env(safe-area-inset-bottom)); box-sizing: border-box; text-align: center; }
     .card h1 { font-size: 1.25rem; margin: 0 0 .5rem; }
-    .card p { margin: 0 0 1.25rem; color: #9ca3af; }
-    button { background: #14b8a6; color: #06231f; border: 0; border-radius: .5rem; padding: .625rem 1.25rem;
+    .card p { margin: 0 0 1.25rem; color: var(--off-muted); }
+    button { background: var(--off-accent); color: var(--off-accent-on); border: 0; border-radius: .5rem; padding: .625rem 1.25rem;
       font: inherit; font-weight: 600; cursor: pointer; }
-    button:focus-visible { outline: 2px solid #5eead4; outline-offset: 2px; }
-    svg { width: 40px; height: 40px; margin-bottom: 1rem; opacity: .9; }
+    button:focus-visible { outline: 2px solid var(--off-ring); outline-offset: 2px; }
+    svg { width: 40px; height: 40px; margin-bottom: 1rem; opacity: .9; stroke: var(--off-icon); }
   </style>
 </head>
 <body>
   <div class="card">
-    <svg viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="1.5" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" aria-hidden="true">
       <path stroke-linecap="round" stroke-linejoin="round" d="M3 7h8m4 0h6M3 17h6m4 0h8M14 4v6M10 14v6" />
     </svg>
     <h1>You're offline</h1>

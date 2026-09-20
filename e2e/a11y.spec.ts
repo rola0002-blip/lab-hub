@@ -3,7 +3,12 @@ import AxeBuilder from '@axe-core/playwright'
 import { TZDate } from '@date-fns/tz'
 import { format } from 'date-fns'
 import { wipe, runWizard, signIn, ADMIN, createIssueViaUI, createMemberViaInvite, acceptInvite, db } from './helpers'
-import { ROW_PX_DAY, rowsToRange } from '@/features/booking/grid'
+import { ROW_PX_DAY, rowsToRange, type Band } from '@/features/booking/grid'
+
+// v0.32.0: the schedule renders the equipment's ACCESS WINDOW (grid.ts bandFor);
+// the audited instrument pins the legacy 07:00–23:00 window so `SLOT_ROWS`'s
+// "comfortably inside the band" reasoning below keeps holding verbatim.
+const BAND: Band = { startHour: 7, endHour: 23 }
 
 // axe-core accessibility floor. For each core surface — the sign-in page, the
 // dashboard, a channel view, an open modal (the ⌘K command palette), and the
@@ -56,7 +61,7 @@ const SLOT_ROWS = [6, 8] as const // 10:00–11:00
 async function futureSlot() {
   const org = await db.organization.findFirstOrThrow()
   const dateStr = format(new TZDate(new Date(Date.now() + 8 * 86_400_000), org.timezone), 'yyyy-MM-dd')
-  const { start, end } = rowsToRange(dateStr, SLOT_ROWS[0], SLOT_ROWS[1], org.timezone)
+  const { start, end } = rowsToRange(dateStr, SLOT_ROWS[0], SLOT_ROWS[1], org.timezone, BAND)
   return { dateStr, start, end, day: (new TZDate(start, org.timezone).getDay() + 6) % 7 }
 }
 
@@ -168,6 +173,28 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
   await expect(page.getByRole('heading', { name: 'Welcome, Roland' }).first()).toBeVisible()
   await auditBothThemes(page, 'dashboard')
 
+  // Task 12 — the Menu keyboard model (plan F5.6 basics): opening moves focus
+  // to the first item, arrows cycle with wrap, Home/End jump, and Enter picks
+  // (a focused menuitem <button> click). Driven on the header's user menu; the
+  // menu closes per pick — no Escape anywhere in this sequence (the doctrine:
+  // menus close per pick / by re-focusing a field, never a global Escape).
+  await page.getByRole('button', { name: 'Your account' }).click()
+  const profileItem = page.getByRole('menuitem', { name: 'Profile' })
+  const signOutItem = page.getByRole('menuitem', { name: 'Sign out' })
+  await expect(profileItem).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await expect(signOutItem).toBeFocused()
+  await page.keyboard.press('ArrowDown') // wraps past the end back to the top
+  await expect(profileItem).toBeFocused()
+  await page.keyboard.press('End')
+  await expect(signOutItem).toBeFocused()
+  await page.keyboard.press('Home')
+  await expect(profileItem).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('menu')).toHaveCount(0)
+  await page.waitForURL('**/profile')
+  await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible()
+
   // A populated channel view (message + composer + hover toolbar reachable).
   await createChannel(page, 'a11y')
   const box = page.getByPlaceholder('Write a message…')
@@ -217,7 +244,7 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
   // schedule audit. /bookings lists every future booking regardless of week, so moving
   // the slot from +1 d to +8 d leaves this audit's shape untouched.
   const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
-  const eqA11y = await db.equipment.create({ data: { name: 'a11y furnace', approvalPolicy: 'NONE' } })
+  const eqA11y = await db.equipment.create({ data: { name: 'a11y furnace', approvalPolicy: 'NONE', accessStartMinutes: 420, accessEndMinutes: 1380 } })
   const slotA11y = await futureSlot()
   await db.booking.create({ data: { userId: me.id, equipmentId: eqA11y.id, status: 'CONFIRMED', purpose: 'a11y run', startsAt: slotA11y.start, endsAt: slotA11y.end } })
   await page.goto('/bookings')
@@ -268,7 +295,10 @@ test('app surfaces: no serious/critical axe violations, both themes', async ({ b
   await createIssueViaUI(page, 'A11y issue')
 
   await page.goto('/issues')
-  await expect(page.getByText('A11y issue')).toBeVisible()
+  // Rooted at <main>: dev SSR's hidden streamed-tree duplicate (div#S:0, body
+  // level) can still hold the just-resolved list row alongside the live one —
+  // a bare getByText strict-fails on the pair (the project-modal precedent below).
+  await expect(page.getByRole('main').getByText('A11y issue')).toBeVisible()
   await auditBothThemes(page, 'issues-list')
 
   await page.getByRole('button', { name: 'Board' }).click()
@@ -418,7 +448,7 @@ test('phone surfaces: no serious/critical axe violations, both themes', async ({
   // The booker is ADMIN.name = 'Roland', a SINGLE-WORD display name: the avatar
   // determinism note above makes that load-bearing for every account in this file.
   const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
-  const eq = await db.equipment.create({ data: { name: 'a11y furnace', approvalPolicy: 'NONE' } })
+  const eq = await db.equipment.create({ data: { name: 'a11y furnace', approvalPolicy: 'NONE', accessStartMinutes: 420, accessEndMinutes: 1380 } })
   const slot = await futureSlot()
   await db.booking.create({ data: { userId: me.id, equipmentId: eq.id, status: 'CONFIRMED', purpose: 'a11y phone run', startsAt: slot.start, endsAt: slot.end } })
   await db.issue.create({ data: { title: 'A11y phone issue', creatorId: me.id, status: 'TODO', rank: 'a0' } })

@@ -1,0 +1,82 @@
+import 'server-only'
+import { prisma } from '@/lib/db'
+import { notify } from '@/lib/notify'
+import * as bot from '@/features/bot'
+import { isManagerOf } from '@/features/equipment/service'
+import { isCertified, grantCertification } from './service'
+import { orgToday } from '@/features/issues/due'
+import { PolicyError } from './policy'
+
+// v0.32 Task 6: certification training requests. An uncertified member asks the
+// managers of an instrument for training; a manager (or admin) decides. Every
+// entry point returns { ok, message? } — the create/decide UI (Task 7) renders
+// the message verbatim. Guests cannot ask; certified members have nothing to ask.
+
+export type RequestRow = {
+  id: string; userId: string; userName: string; equipmentId: string; equipmentName: string
+  note: string | null; createdAt: Date
+}
+
+export async function createTrainingRequest(args: { userId: string; equipmentId: string; note?: string }): Promise<{ ok: boolean; message?: string }> {
+  const [user, eq] = await Promise.all([
+    prisma.user.findUnique({ where: { id: args.userId } }),
+    prisma.equipment.findUnique({ where: { id: args.equipmentId } }),
+  ])
+  if (!user || user.role === 'guest' || user.banned) return { ok: false, message: 'Members can request training.' }
+  if (!eq || !eq.certificationRequired) return { ok: false, message: 'This instrument does not require certification.' }
+  if (await isCertified(args.userId, args.equipmentId)) return { ok: false, message: 'You are already certified on this instrument.' }
+  const existing = await prisma.trainingRequest.findFirst({ where: { userId: args.userId, equipmentId: args.equipmentId, status: 'PENDING' } })
+  if (existing) return { ok: false, message: 'You already have an open training request for this instrument.' }
+  await prisma.trainingRequest.create({ data: { userId: args.userId, equipmentId: args.equipmentId, note: args.note?.slice(0, 500) } })
+  // Notify managers + admins (the booking-pending fan-out pattern): bell row +
+  // suppressed bot DM, one notification lane per person.
+  const managers = await prisma.equipmentManager.findMany({ where: { equipmentId: args.equipmentId }, select: { userId: true } })
+  const admins = await prisma.user.findMany({ where: { role: 'admin', banned: false, isSystem: false }, select: { id: true } })
+  const targets = [...new Set([...managers.map((m) => m.userId), ...admins.map((a) => a.id)])]
+  await Promise.all(targets.map((id) =>
+    notify(id, 'training_request', { message: `${user.name} requested training on ${eq.name}${args.note ? ` — "${args.note.slice(0, 120)}"` : ''}` })))
+  await Promise.all(targets.map((id) =>
+    bot.dmUser(id, `${user.name} requested training on ${eq.name}. Review it under Certifications → Requests.`, { suppress: true })))
+  return { ok: true }
+}
+
+export async function listPendingRequests(forUserId: string): Promise<RequestRow[]> {
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: forUserId } })
+  const rows = await prisma.trainingRequest.findMany({
+    where: { status: 'PENDING', ...(user.role !== 'admin' ? { equipment: { managers: { some: { userId: forUserId } } } } : {}) },
+    include: { user: { select: { name: true } }, equipment: { select: { name: true } } },
+    orderBy: { createdAt: 'asc' },
+  })
+  return rows.map((r) => ({ id: r.id, userId: r.userId, userName: r.user.name, equipmentId: r.equipmentId, equipmentName: r.equipment.name, note: r.note, createdAt: r.createdAt }))
+}
+
+export async function decideTrainingRequest(args: { requestId: string; byId: string; decision: 'grant' | 'decline'; reason?: string; trainedOn?: string }): Promise<{ ok: boolean; message?: string }> {
+  const req = await prisma.trainingRequest.findUnique({ where: { id: args.requestId }, include: { equipment: { select: { name: true } }, user: { select: { name: true } } } })
+  if (!req || req.status !== 'PENDING') return { ok: false, message: 'This request is no longer pending.' }
+  if (!(await isManagerOf(args.byId, req.equipmentId))) return { ok: false, message: 'Only equipment managers can decide this request.' }
+  if (args.decision === 'decline' && !args.reason?.trim()) return { ok: false, message: 'A reason is required to decline.' }
+  if (args.decision === 'grant') {
+    try {
+      // org-tz today (NOT UTC): grantCertification compares against orgToday, and
+      // for an org west of UTC a UTC date can be "tomorrow" — the default must
+      // always clear the future-date rule.
+      const org = await prisma.organization.findFirstOrThrow()
+      const trainedOn = args.trainedOn ?? orgToday(new Date(), org.timezone)
+      await grantCertification({ userId: req.userId, equipmentId: req.equipmentId, grantedById: args.byId, trainedOn })
+    } catch (e) {
+      // A caller-supplied trainedOn can still fail grantCertification's checks
+      // (future date) — surface the policy message instead of throwing past the
+      // { ok, message } contract.
+      if (e instanceof PolicyError) return { ok: false, message: e.message }
+      throw e
+    }
+    await prisma.trainingRequest.update({ where: { id: req.id }, data: { status: 'GRANTED', decidedById: args.byId, decidedAt: new Date() } })
+    await notify(req.userId, 'training_decided', { message: `Training granted: you are now certified on ${req.equipment.name}.` })
+    await bot.dmUser(req.userId, `You are now certified on ${req.equipment.name}.`, { suppress: true })
+  } else {
+    await prisma.trainingRequest.update({ where: { id: req.id }, data: { status: 'DECLINED', decidedById: args.byId, decidedAt: new Date(), rejectionReason: args.reason!.trim() } })
+    await notify(req.userId, 'training_decided', { message: `Training request for ${req.equipment.name} declined — ${args.reason!.trim()}` })
+    await bot.dmUser(req.userId, `Training request for ${req.equipment.name} declined: ${args.reason!.trim()}`, { suppress: true })
+  }
+  return { ok: true }
+}

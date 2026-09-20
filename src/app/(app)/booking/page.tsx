@@ -10,6 +10,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
+import RequestTrainingButton from '@/components/booking/request-training-button'
 
 // Local to this page — the /projects grid's spacing differs, so PROJECT_GRID_CLASS
 // is deliberately NOT reused here.
@@ -74,11 +75,14 @@ async function EquipmentGrid() {
         <section>
           <h2 className={HEADING_CLASS}>Needs certification</h2>
           {/* The policy block's own words (booking/policy.ts:37), now with the people
-              to ask named on the cards below. */}
+              to ask named on the cards below. Members/admins also get the direct ask
+              (the Request training button) — guests can only talk to a manager, the
+              service refuses them. */}
           <p className="mt-1 text-sm text-muted">Ask an equipment manager to certify you.</p>
           <div className={GRID_CLASS}>
             {sections.certification.map((eq) => (
-              <EquipmentCard key={eq.id} eq={eq} chip={statusChip(chipArgs(eq))} managers={eq.managers} />
+              <EquipmentCard key={eq.id} eq={eq} chip={statusChip(chipArgs(eq))} managers={eq.managers}
+                ask={me.role !== 'guest'} />
             ))}
           </div>
         </section>
@@ -93,20 +97,25 @@ async function EquipmentGrid() {
   )
 }
 
-function EquipmentCard({ eq, chip, managers }: { eq: CatalogueItem; chip: Chip; managers?: CatalogueItem['managers'] }) {
+function EquipmentCard({ eq, chip, managers, ask }: { eq: CatalogueItem; chip: Chip; managers?: CatalogueItem['managers']; ask?: boolean }) {
   return (
-    <Link href={`/booking/${eq.id}`}
-      className={`rounded-xl border border-border bg-surface p-4 shadow-xs transition-colors hover:border-border-strong ${eq.status === 'RETIRED' ? 'opacity-50' : ''}`}>
-      {eq.photoPath
-        ? <Image src={eq.photoPath} alt={eq.name} width={400} height={200} unoptimized className="h-32 w-full rounded-lg object-cover" />
-        : <div className="flex h-32 w-full items-center justify-center rounded-lg bg-surface-sunken text-3xl">🔬</div>}
-      <div className="mt-3 flex items-start justify-between gap-2">
-        <div>
-          <h3 className="font-medium text-default">{eq.name}</h3>
-          {eq.location && <p className="text-sm text-muted">{eq.location}</p>}
+    // A DIV wrapper, not the Link itself: the certification cards carry a
+    // "Request training" button, and a button inside an anchor is invalid
+    // (nested interactive) — so the card chrome stays here and the Link covers
+    // the navigable content above the button.
+    <div className={`rounded-xl border border-border bg-surface p-4 shadow-xs transition-colors hover:border-border-strong ${eq.status === 'RETIRED' ? 'opacity-50' : ''}`}>
+      <Link href={`/booking/${eq.id}`} className="block">
+        {eq.photoPath
+          ? <Image src={eq.photoPath} alt={eq.name} width={400} height={200} unoptimized className="h-32 w-full rounded-lg object-cover" />
+          : <div className="flex h-32 w-full items-center justify-center rounded-lg bg-surface-sunken text-3xl">🔬</div>}
+        <div className="mt-3 flex items-start justify-between gap-2">
+          <div>
+            <h3 className="font-medium text-default">{eq.name}</h3>
+            {eq.location && <p className="text-sm text-muted">{eq.location}</p>}
+          </div>
+          <span className="shrink-0"><Badge variant={CHIP_VARIANT[chip.tone]}>{chip.label}</Badge></span>
         </div>
-        <span className="shrink-0"><Badge variant={CHIP_VARIANT[chip.tone]}>{chip.label}</Badge></span>
-      </div>
+      </Link>
       {/* Nothing at all when the instrument has no managers — no fabricated contact. */}
       {managers && managers.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
@@ -117,7 +126,12 @@ function EquipmentCard({ eq, chip, managers }: { eq: CatalogueItem; chip: Chip; 
           ))}
         </div>
       )}
-    </Link>
+      {ask && (
+        <div className="mt-3">
+          <RequestTrainingButton equipmentId={eq.id} equipmentName={eq.name} />
+        </div>
+      )}
+    </div>
   )
 }
 

@@ -65,7 +65,8 @@ const BASE = {
     textDefault: hex('#1d1c1d'),                       // --text-default (neutral-900)
     textMuted: hex('#616160'),                         // --text-muted   (neutral-600)
     textSubtle: hex('#71706e'),                        // --text-subtle  (nudged for AA)
-    textDanger: hex('#e01e5a'),                        // --text-danger  (= --color-danger)
+    textDanger: hex('#d91d57'),                        // --text-danger  (darkened from --color-danger for AA on bg-hover)
+    hoverBg: hex('#f8f8f7'),                           // --bg-hover (neutral-50) — danger/destructive row actions sit on it
     textOverdue: hex('#b91c1c'),                       // --text-overdue  (red-700)
     textDueToday: hex('#b45309'),                      // --text-due-today (amber-700)
     sidebarMuted: over(WHITE, 0.55, SIDEBAR_BG.light), // --sidebar-muted rgb(255 255 255/.55)
@@ -89,6 +90,7 @@ const BASE = {
     textMuted: hex('#ababad'),
     textSubtle: hex('#8d8f92'),                        // --text-subtle (dark)
     textDanger: hex('#ff6b81'),                        // --text-danger (dark, lightened)
+    hoverBg: hex('#22262b'),                           // --bg-hover (dark)
     textOverdue: hex('#f87171'),                       // --text-overdue (dark, lifted)
     textDueToday: hex('#fbbf24'),                      // --text-due-today (dark, lifted)
     sidebarMuted: over(WHITE, 0.50, SIDEBAR_BG.dark),  // rgb(255 255 255/.50)
@@ -126,6 +128,9 @@ for (const theme of ['light', 'dark']) {
   check(theme, 'text-muted / canvas', b.textMuted, canvas, AA_TEXT)
   check(theme, 'text-subtle / canvas', b.textSubtle, canvas, AA_TEXT)
   check(theme, 'text-danger / canvas', b.textDanger, canvas, AA_TEXT)
+  // v0.32: danger-as-text row/menu actions sit on the hover fill (bookings rows,
+  // people/RA rows, menus) — the pair that motivated darkening the light value.
+  check(theme, 'text-danger / bg-hover', b.textDanger, b.hoverBg, AA_TEXT)
   // Due-date legibility tokens (v0.9.5) — real text on the canvas, so the 4.5:1 AA bar.
   check(theme, 'text-overdue / canvas', b.textOverdue, canvas, AA_TEXT)
   check(theme, 'text-due-today / canvas', b.textDueToday, canvas, AA_TEXT)

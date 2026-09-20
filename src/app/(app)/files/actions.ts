@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/session'
 import { PolicyError } from '@/features/documents/documents-policy'
 import * as docs from '@/features/documents/document-service'
+import { restoreVersion } from '@/features/documents/version-service'
 
 type Result = { ok: true } | { ok: false; message: string }
 
@@ -34,4 +35,11 @@ export async function moveDocumentAction(id: string, folderId: string | null): P
 export async function deleteDocumentAction(id: string): Promise<Result> {
   const u = await requireUser()
   try { await docs.deleteDocument({ userId: u.id, role: u.role, id }); revalidatePath('/files'); return { ok: true } } catch (e) { return fail(e) }
+}
+// Thin wrapper over version-service.restoreVersion (uploader-or-admin gate +
+// linear-history copy live there; the service also unlinks the copy if the
+// version insert fails).
+export async function restoreVersionAction(versionId: string): Promise<Result> {
+  const u = await requireUser()
+  try { await restoreVersion({ versionId, userId: u.id, role: u.role }); revalidatePath('/files'); return { ok: true } } catch (e) { return fail(e) }
 }

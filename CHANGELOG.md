@@ -6,6 +6,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Per-equipment daily access windows. Each instrument names the hours it
+  is bookable in the lab's timezone (admin form: half-hour "Bookable
+  from/until" selects plus a 24 hours checkbox; new instruments default
+  to the full day). The schedule grid and booking dialog follow the
+  window, an off-window slot is blocked with the window named, and a
+  24-hour window admits overnight runs — a booking may cross midnight,
+  the grid opens to the full day, and the run's tail renders on its end
+  day. Legacy bookings stored outside a since-narrowed window are never
+  invisible: the rendered band expands to include them.
+- File versioning in Files. "Upload new version…" on a row appends to a
+  strictly linear history (restore also appends — nothing is ever
+  rewound), a History drawer lists every version newest-first with
+  uploader and org-time date, each version's bytes download through the
+  normal uploads gate, rows past v1 wear a version chip, the bot
+  announces each update crediting the acting uploader, and deleting a
+  file removes every version's bytes (the confirmation names the count).
+  Existing files were backfilled with a v1 snapshot.
+- Training requests. An uncertified member can ask for training right
+  where the certification rule bites: a Request training button on the
+  instrument page and catalogue card, and inside the booking dialog when
+  certification is what blocks the slot (optional note; one open request
+  per person per instrument; guests must talk to a manager). Managers
+  and admins get a bell row and a silent bot DM and decide under
+  Certifications → Requests — Grant flows through the same certification
+  grant as the matrix (trainer + training date land in the ledger), a
+  decline requires a reason, and the requester is notified either way.
+- Every-message browser alerts with OS popups. Every qualifying message
+  in an unmuted conversation alerts the moment it lands — no burst
+  throttle — with the realtime SSE stream as the single sound source
+  (the bell's poll only refreshes the badge). Browser tabs and the PWA
+  can also raise a native OS popup per message via the Notification API:
+  a "Browser popups" step in the setup wizard grants the permission, a
+  per-device "Message popups" switch on the profile page opts one
+  browser out, popups are tagged per conversation so a burst replaces
+  instead of stacking, they stay silent (the chime is the sound in
+  browsers), and clicking one opens the conversation. The desktop shell
+  is unchanged — its native toast carries the OS sound.
+- Route skeletons and in-shell error/not-found boundaries: loading
+  skeletons for the core surfaces, authed error and not-found pages that
+  render inside the app shell, and proper not-found pages for unknown
+  issues and projects.
+- A unified ConfirmDialog and PageHeader across surfaces, replacing the
+  per-surface ad-hoc copies.
+- A menu keyboard model: menus focus the first enabled item on open and
+  answer ArrowUp/ArrowDown (wrapping), Home, and End — deliberately no
+  typeahead.
+- My bookings' past list pages through a "Load more" link instead of
+  arriving in full.
+- The offline page renders light mode too, following the OS color
+  scheme.
+
+### Changed
+- Chat notifications are no longer burst-throttled: the 3-second
+  grouping is gone, so two qualifying messages a moment apart both
+  alert.
+- ConfirmDialog always closes after the action, success or failure —
+  failures surface as toasts instead of pinning the dialog open.
+
 ## [0.31.1] - 2026-09-19
 
 ### Security

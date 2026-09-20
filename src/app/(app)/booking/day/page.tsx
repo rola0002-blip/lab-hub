@@ -5,30 +5,51 @@ import { requireSetup } from '@/lib/org'
 import { TZDate } from '@date-fns/tz'
 import { dayAnchor } from '@/lib/tz'
 import { addDays, format } from 'date-fns'
+import { type Band, bandFor } from '@/features/booking/grid'
 
-const START_HOUR = 7, END_HOUR = 23, PX_PER_HOUR = 40
+const PX_PER_HOUR = 40
 
 export default async function DayViewPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
   await requireUser()
   const org = await requireSetup()
   const { date } = await searchParams
   const anchor = dayAnchor(date, org.timezone)
-  const dayStart = new Date(+new TZDate(anchor.getFullYear(), anchor.getMonth(), anchor.getDate(), START_HOUR, 0, org.timezone))
-  const dayEnd = new Date(+new TZDate(anchor.getFullYear(), anchor.getMonth(), anchor.getDate(), END_HOUR, 0, org.timezone))
+  // Query the FULL calendar day: the rendering band is derived from what the
+  // day's bookings turn out to be (bandFor), so the fetch window must be a
+  // superset of any band — which is always within [00:00, 24:00) of the day.
+  const calStart = new Date(+new TZDate(anchor.getFullYear(), anchor.getMonth(), anchor.getDate(), 0, 0, org.timezone))
+  const calEnd = new Date(+new TZDate(anchor.getFullYear(), anchor.getMonth(), anchor.getDate(), 24, 0, org.timezone))
 
   const equipment = await prisma.equipment.findMany({ where: { status: 'ACTIVE' }, orderBy: { name: 'asc' } })
   const [bookings, maintenance] = await Promise.all([
     prisma.booking.findMany({
-      where: { status: { in: ['PENDING', 'CONFIRMED'] }, startsAt: { lt: dayEnd }, endsAt: { gt: dayStart }, equipmentId: { in: equipment.map((e) => e.id) } },
+      where: { status: { in: ['PENDING', 'CONFIRMED'] }, startsAt: { lt: calEnd }, endsAt: { gt: calStart }, equipmentId: { in: equipment.map((e) => e.id) } },
       include: { user: { select: { name: true } } },
     }),
-    prisma.maintenanceWindow.findMany({ where: { startsAt: { lt: dayEnd }, endsAt: { gt: dayStart }, equipmentId: { in: equipment.map((e) => e.id) } } }),
+    prisma.maintenanceWindow.findMany({ where: { startsAt: { lt: calEnd }, endsAt: { gt: calStart }, equipmentId: { in: equipment.map((e) => e.id) } } }),
   ])
 
-  const height = (END_HOUR - START_HOUR) * PX_PER_HOUR
+  // Union band across equipment: each instrument's access window expanded by
+  // its own bookings (an overnight run forces 0..24, so its tail renders here).
+  const band: Band = equipment.reduce(
+    (b, eq) => {
+      const eb = bandFor(eq, bookings.filter((k) => k.equipmentId === eq.id), org.timezone)
+      return { startHour: Math.min(b.startHour, eb.startHour), endHour: Math.max(b.endHour, eb.endHour) }
+    },
+    { startHour: 24, endHour: 0 },
+  )
+  if (equipment.length === 0) {
+    band.startHour = 0
+    band.endHour = 24
+  }
+
+  const dayStart = new Date(+new TZDate(anchor.getFullYear(), anchor.getMonth(), anchor.getDate(), band.startHour, 0, org.timezone))
+  // rect() clamps against the band's own hour span, so no dayEnd is needed.
+
+  const height = (band.endHour - band.startHour) * PX_PER_HOUR
   const rect = (a: Date, b: Date) => {
     const top = Math.max((+a - +dayStart) / 3_600_000, 0) * PX_PER_HOUR
-    const bottom = Math.min((+b - +dayStart) / 3_600_000, END_HOUR - START_HOUR) * PX_PER_HOUR
+    const bottom = Math.min((+b - +dayStart) / 3_600_000, band.endHour - band.startHour) * PX_PER_HOUR
     return { top, height: Math.max(bottom - top, 8) }
   }
   const prev = format(addDays(anchor, -1), 'yyyy-MM-dd')
@@ -55,13 +76,13 @@ export default async function DayViewPage({ searchParams }: { searchParams: Prom
             <Link key={eq.id} href={`/booking/${eq.id}`} className="border-b border-l border-border p-2 text-center text-sm font-medium text-default transition-colors hover:text-[var(--text-accent)]">{eq.name}</Link>
           ))}
           <div className="sticky left-0 z-10 bg-surface" style={{ height }}>
-            {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => (
-              <span key={i} className="absolute right-1 text-[10px] text-subtle" style={{ top: i * PX_PER_HOUR - 6 }}>{String(START_HOUR + i).padStart(2, '0')}:00</span>
+            {Array.from({ length: band.endHour - band.startHour }, (_, i) => (
+              <span key={i} className="absolute right-1 text-[10px] text-subtle" style={{ top: i * PX_PER_HOUR - 6 }}>{String(band.startHour + i).padStart(2, '0')}:00</span>
             ))}
           </div>
           {equipment.map((eq) => (
             <div key={eq.id} className="relative border-l border-border" style={{ height }}>
-              {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => (
+              {Array.from({ length: band.endHour - band.startHour }, (_, i) => (
                 <div key={i} className="absolute inset-x-0 border-t border-border" style={{ top: i * PX_PER_HOUR }} />
               ))}
               {maintenance.filter((m) => m.equipmentId === eq.id).map((m) => {

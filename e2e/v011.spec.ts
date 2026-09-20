@@ -164,9 +164,12 @@ test('2: an issue is deleted from the ⋯ menu — the route 404s, its chat pill
   await expect(page).toHaveURL(/\/projects$/)
 
   // The identifier is never reissued (issue_number_seq has no setval), so the old link is
-  // a clean 404 and never a different issue.
-  const res = await page.goto(`/issues/${identifier}`)
-  expect(res?.status()).toBe(404)
+  // a clean 404 and never a different issue. v0.32: the route-level loading skeleton
+  // flushes the shell before the page's notFound() throws, so the document commits as
+  // HTTP 200 and the styled 404 streams in — assert the rendered boundary (rooted at
+  // main, so a leaked issue view can never satisfy it) instead of the status code.
+  await page.goto(`/issues/${identifier}`)
+  await expect(main(page).getByText('Not found', { exact: true })).toBeVisible()
 
   // The historical announce survives; its pill degrades to plain text, not a broken link.
   await page.goto(`/chat/${LAB_UPDATES_CHANNEL_ID}`)

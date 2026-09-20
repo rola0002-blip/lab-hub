@@ -11,6 +11,10 @@ export type { Toast, ToastAction, ToastOptions } from '@/lib/toast-store'
 // Mounted once in the app shell ((app)/layout.tsx). A thin React binding over the
 // pure toast store — all queue/timeout logic lives in src/lib/toast-store.ts. The
 // server snapshot is the same empty-on-init array, so hydration is stable.
+// The CONTAINER is the single polite live region: per-toast role="status" would
+// nest a second live region inside it, and some screen readers announce each
+// toast twice (nested-region double announcement). Toast nodes themselves carry
+// no role — the container's aria-live picks up every addition.
 export function ToastHost() {
   const toasts = useSyncExternalStore(toastStore.subscribe, toastStore.getSnapshot, toastStore.getSnapshot)
 
@@ -22,7 +26,6 @@ export function ToastHost() {
       {toasts.map((t) => (
         <div
           key={t.id}
-          role="status"
           className="pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-sm text-default shadow-menu motion-safe:animate-toast-in"
         >
           <span className="min-w-0 flex-1">{t.message}</span>

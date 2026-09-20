@@ -24,14 +24,27 @@ Full-text search spans every conversation
 you belong to. Delivery is realtime over one Server-Sent-Events stream per
 tab (no WebSockets), fanned out with Postgres `LISTEN`/`NOTIFY`. Chat
 notifications (Slack-like, 2026-09): every message in an unmuted
-conversation alerts — in-app chime plus desktop toast while a member is at
-a keyboard, and Web Push to every subscribed device once the member has
-been idle for 2 minutes (an open tab or the desktop app in the tray no
-longer silences the phone). A direct @mention still pierces mute. Push is
-squashed server-side to one buzz per conversation per minute and collapsed
-client-side by the service-worker tag. Bot posts never alert. Members
-enable phone push via the bell's "Set up notifications" wizard, which ends
-with a real test ping; the admin settings page shows who has push enabled.
+conversation alerts the moment it lands — in-app chime plus desktop toast
+while a member is at a keyboard, and Web Push to every subscribed device
+once the member has been idle for 2 minutes (an open tab or the desktop
+app in the tray no longer silences the phone). A direct @mention still
+pierces mute. Bot posts never alert. Since v0.32 there is no burst
+throttle: two qualifying messages a moment apart both alert, and the
+realtime SSE stream is the single sound source — the bell's 30-second poll
+only refreshes the badge count. Browser tabs and the PWA can also raise a
+native OS popup per incoming message through the browser's Notification
+API: the setup wizard's "Browser popups" step grants the permission (with
+a sample popup), a "Message popups" switch on the profile page opts this
+one browser out without touching the phone, and each popup is tagged per
+conversation so a burst replaces the last popup instead of stacking. In
+browsers the popup is silent — the chime is the sound there — and
+clicking it opens the conversation. The desktop shell is unchanged: its
+native toast carries the OS sound while the in-page chime stays silent,
+so every alert makes exactly one sound. Push is squashed server-side to
+one buzz per conversation per minute and collapsed client-side by the
+service-worker tag. Members enable phone push via the bell's "Set up
+notifications" wizard, which ends with a real test ping; the admin
+settings page shows who has push enabled.
 A 60-minute unread-chat digest email follows (at most one per hour;
 mentions, DMs, and thread replies — never bot messages).
 Membership is the single authorization rule: you only ever read, search, or
@@ -113,6 +126,32 @@ description, completed by hand, with the count on the project card — per-proje
 labels (names unique within their scope, global labels shared), pinned-project
 chips on My issues, and attachments on project updates.
 
+## Equipment booking
+
+Per-instrument booking policies — advance window, maximum duration,
+certification gating, approval (none / guests / everyone), recurring
+bookings, and maintenance windows — with overlap safety enforced by a
+Postgres exclusion constraint (`booking_no_overlap`); everything is
+stored UTC and rendered in the lab's timezone. Confirmed bookings can be
+logged on and off to record actual usage against booked time, and each
+instrument's full history exports to Excel.
+
+**Daily access windows (v0.32).** Each instrument names the hours it is
+bookable, in the lab's timezone: the admin equipment form carries
+"Bookable from" / "Bookable until" selects in half-hour steps plus a
+"24 hours" checkbox, and a fresh instrument defaults to the full day. The
+schedule grid renders exactly that window of half-hour rows, the booking
+dialog's time selects step through it, and a slot straying outside is
+blocked with the window named ("This instrument is bookable
+07:00–23:00 — overnight or 24-hour runs need the window set to 24
+hours"); equipment managers are exempt, as they are from the advance and
+duration caps. With a 24-hour window a booking may cross midnight: the
+grid opens to the full day, an overnight run's start-day slice reaches
+midnight while its tail renders on its end day, and the row labels wrap
+past 24:00. Bookings stored outside a since-narrowed window (legacy rows
+from the fixed 07:00–23:00 band era) are never invisible — the rendered
+band auto-expands to include every visible booking.
+
 ## Calendar sync & the LabHub Bot
 
 Read-only calendar integration: subscribe to a private per-user iCalendar feed of
@@ -137,8 +176,21 @@ create folders; a file is renamed, moved, or deleted by its uploader or an
 admin, and a folder by
 its creator or an admin (only when empty). PDFs and images open inline in a new tab,
 office files download (with the original, possibly non-ASCII, filename preserved).
-Each new upload is announced by the LabHub Bot in `#lab-updates`. Storage reuses
-the existing uploads volume and backup — no new services.
+Each new upload is announced by the LabHub Bot in `#lab-updates`.
+Storage reuses the existing uploads volume and backup — no new services.
+
+**Versioning (v0.32).** A file row's ⋯ menu gains "Upload new version…"
+(same type and 100 MB caps as a fresh upload), which appends to a
+strictly linear history — restoring an old version also appends, so
+nothing is ever rewound and every earlier version stays restorable.
+"History" opens a drawer listing the versions newest-first with uploader
+and org-time date, and each version's bytes download through the same
+uploads gate as the current file. Rows past v1 wear a `v3`-style chip,
+the bot announces each update crediting the acting uploader (an admin
+versioning someone else's file is named, not the original uploader), and
+deleting a file removes every version's bytes — the confirmation names
+the count. Existing files were backfilled with a v1 snapshot of their
+current bytes.
 
 ## RA acknowledgments
 
@@ -150,6 +202,28 @@ risk assessment). One acknowledgment per person per document. Admins see
 everyone's records and export them as CSV (`/api/ra/acknowledgments/csv`); a
 record outlives its document, keeping a snapshot of the name rather than a
 link, so deleting the file never erases the acknowledgment.
+
+## Certifications & training requests
+
+The certification matrix at `/certifications` decides who may book what:
+equipment managers and admins grant and revoke per instrument, every
+grant appends a training record to the ledger beneath the matrix (who
+was trained, by whom, on what date; revocations are kept with who
+annulled them and why), and the matrix feeds the booking policy's
+`certification_required` gate.
+
+**Training requests (v0.32).** An uncertified member asks for training
+right where the certification rule bites: a "Request training" button on
+the instrument's own page and its catalogue card, and inside the booking
+dialog when certification is exactly what blocks the slot — with an
+optional note, and one open request per person per instrument (guests
+cannot ask; they talk to a manager). The instrument's managers and the
+admins hear about it through a bell row and a silent bot DM, and the
+queue lives under Certifications → Requests. Grant flows through the
+same certification grant as the matrix — trainer and training date
+default to the deciding manager and today (org timezone) and land in the
+training ledger — while a decline requires a reason. The requester hears
+the decision through bell and bot DM either way.
 
 ## Web Push (optional)
 

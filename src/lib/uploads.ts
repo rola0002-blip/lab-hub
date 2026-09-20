@@ -1,5 +1,5 @@
 import 'server-only'
-import { mkdir, writeFile, readFile, rm } from 'node:fs/promises'
+import { mkdir, writeFile, readFile, rm, copyFile } from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 
@@ -58,6 +58,23 @@ export async function saveUpload(file: File, kind: UploadKind): Promise<string> 
   await mkdir(dir, { recursive: true })
   await writeFile(path.join(dir, name), Buffer.from(await file.arrayBuffer()))
   return `/uploads/${kind}/${name}`
+}
+
+// Copy an existing upload to a fresh documents path (version restore — the bytes
+// get a NEW object so history stays linear and the source snapshot is untouched).
+// Path minting mirrors saveUpload('documents'): uuid + the source's extension,
+// under uploadsDir()/documents. The source is a stored public path, sanitised and
+// confined to uploadsDir() exactly like removeUpload.
+export async function copyUpload(srcPath: string): Promise<string> {
+  const ext = path.extname(srcPath) || '.bin'
+  const name = `${randomUUID()}${ext}`
+  const dir = path.join(uploadsDir(), 'documents')
+  const rel = srcPath.replace(/^\/uploads\//, '').split('/').map((p) => p.replace(/[^a-zA-Z0-9._-]/g, ''))
+  const src = path.join(uploadsDir(), ...rel)
+  if (!src.startsWith(uploadsDir())) throw new Error('invalid_upload')
+  await mkdir(dir, { recursive: true })
+  await copyFile(src, path.join(dir, name))
+  return `/uploads/documents/${name}`
 }
 
 export async function readUpload(relPath: string[]): Promise<{ data: Buffer; mime: string } | null> {

@@ -3,11 +3,13 @@
 export const CHIME_TYPES = new Set(['message_mention', 'message_dm', 'message_thread_reply'])
 export type ChimeItem = { id: string; type: string; createdAt: string }
 
-// Returns the advanced watermark, whether to chime, and the rows that triggered
-// it (`hits`, in batch order — the poll delivers newest-first). First run (null
-// watermark) initializes WITHOUT chiming — opening the app must not ding.
-// `hits` feeds the desktop-shell notification bridge (SP11): the toast must
-// surface exactly the rows the chime did, so it rides the same decision.
+// Returns the advanced watermark, whether to chime, and the rows that would
+// have triggered it (`hits`, in batch order — the poll delivers newest-first).
+// First run (null watermark) initializes WITHOUT chiming — opening the app
+// must not ding. Since Task 8 the bell consumes ONLY the watermark: the 30 s
+// poll is a silent badge refresher (the SSE msg path is the single alert
+// source), so `chime`/`hits` describe what the OLD path would have chimed —
+// the contract is kept for the unit tests and any future consumer.
 export function shouldChime(watermark: string | null, items: ChimeItem[]): { chime: boolean; watermark: string; hits: ChimeItem[] } {
   let max = watermark
   const hits: ChimeItem[] = []
@@ -37,18 +39,6 @@ export function shouldPingFromMessage(
   return true
 }
 
-// One ping per burst: a hit inside the window is swallowed (NO queued backlog
-// ping — Slack dings once per burst, it does not replay the queue).
-export class PingThrottle {
-  private last = 0
-  constructor(private readonly minIntervalMs = 3000) {}
-  canPing(now = Date.now()): boolean {
-    if (now - this.last < this.minIntervalMs) return false
-    this.last = now
-    return true
-  }
-}
-
 // 2026-09 notifications: where the SOUND lives. In the desktop shell the
 // native toast carries an OS sound, so the in-page WebAudio chime is
 // suppressed (no double-ding); browsers/PWA keep the chime. Shell toasts
@@ -56,4 +46,18 @@ export class PingThrottle {
 // toast's `silent` flag rather than hiding the toast.
 export function alertRendering(inShell: boolean): { chime: boolean; toast: boolean } {
   return { chime: !inShell, toast: inShell }
+}
+
+// Task 8 (v0.32.0): the consolidated alert decision for ONE message. The SSE
+// msg path calls this for EVERY qualifying inbound message — the old 3 s
+// PingThrottle is gone ("whenever there are new messages"), so the decision
+// is pure and stateless: two qualifying messages 1 ms apart both alert.
+// `popup` (Task 9) is the browser OS-popup arm: on for browsers/PWA, never
+// in the desktop shell (the shell's own native toast is the popup there).
+// Permission + per-device pref are environment concerns — the funnel gates
+// on them at fire time, keeping this pure.
+export function decideAlert(msgQualifies: boolean, inShell: boolean): { chime: boolean; toast: boolean; popup: boolean } {
+  if (!msgQualifies) return { chime: false, toast: false, popup: false }
+  const { chime, toast } = alertRendering(inShell)
+  return { chime, toast, popup: !inShell }
 }

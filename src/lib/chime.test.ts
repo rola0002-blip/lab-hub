@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { shouldChime, shouldPingFromMessage, PingThrottle, alertRendering } from './chime'
+import { shouldChime, shouldPingFromMessage, alertRendering, decideAlert } from './chime'
 const item = (id: string, type: string, createdAt: string) => ({ id, type, createdAt })
 
 describe('shouldChime', () => {
@@ -65,33 +65,11 @@ describe('shouldPingFromMessage', () => {
   it('open but UNfocused conversation → ping (you are away from the window)', () => {
     expect(shouldPingFromMessage({ ...base, cid: 'c1' }, { ...opts, focused: false })).toBe(true)
   })
-})
-
-describe('PingThrottle', () => {
-  // `last` starts at 0, so tests drive an explicit clock offset well past the
-  // epoch (Date.now()-like), never t=0.
-  const t0 = 1_000_000
-
-  it('first canPing passes; an immediate second is swallowed', () => {
-    const t = new PingThrottle(3000)
-    expect(t.canPing(t0)).toBe(true)
-    expect(t.canPing(t0 + 100)).toBe(false)
-  })
-  it('still blocked at window-1ms; free again at window+1ms', () => {
-    const t = new PingThrottle(3000)
-    t.canPing(t0)
-    expect(t.canPing(t0 + 2999)).toBe(false)
-    expect(t.canPing(t0 + 3001)).toBe(true)
-  })
-  it('a swallowed ping does NOT re-arm the window (swallow leaves `last` alone)', () => {
-    // A hit at t0 arms the window; a hit at t0+1500 (0.5×window) is swallowed
-    // and must not slide the window — otherwise a burst that straddles the
-    // midpoint would mute the ping that follows the window.
-    const t = new PingThrottle(3000)
-    t.canPing(t0)
-    expect(t.canPing(t0 + 1500)).toBe(false)
-    // window is measured from the last EMITTED ping, not the swallowed hit
-    expect(t.canPing(t0 + 3001)).toBe(true)
+  it('every qualifying message alerts — no burst throttle', () => {
+    const m = { cid: 'c1', authorId: 'other', muted: false }
+    const opts = { openCid: null, focused: false, selfId: 'me' }
+    expect(shouldPingFromMessage(m, opts)).toBe(true)
+    expect(shouldPingFromMessage({ ...m }, opts)).toBe(true) // second message 1 ms later also pings
   })
 })
 
@@ -102,5 +80,32 @@ describe('alertRendering', () => {
 
   it('desktop shell: OS-sounded toast yes, in-page chime suppressed (no double-ding)', () => {
     expect(alertRendering(true)).toEqual({ chime: false, toast: true })
+  })
+})
+
+describe('decideAlert', () => {
+  it('non-qualifying message → no alert on any surface', () => {
+    expect(decideAlert(false, false)).toEqual({ chime: false, toast: false, popup: false })
+    expect(decideAlert(false, true)).toEqual({ chime: false, toast: false, popup: false })
+  })
+
+  it('qualifying, browser/PWA → chime + popup arm (permission/pref gate in the funnel)', () => {
+    expect(decideAlert(true, false)).toEqual({ chime: true, toast: false, popup: true })
+  })
+
+  it('qualifying, desktop shell → OS-sounded toast only (popup never fires in-shell)', () => {
+    expect(decideAlert(true, true)).toEqual({ chime: false, toast: true, popup: false })
+  })
+
+  it('two SSE messages within 3 s both alert — the old burst throttle is gone', () => {
+    // The bell funnel is a pure shouldPingFromMessage → decideAlert chain with
+    // no interval state anywhere: a second message 1 ms after the first gets
+    // the same alert decision the first did (PingThrottle swallowed it).
+    const m = { cid: 'c1', authorId: 'other', muted: false }
+    const opts = { openCid: null, focused: false, selfId: 'me' }
+    expect(decideAlert(shouldPingFromMessage(m, opts), false))
+      .toEqual({ chime: true, toast: false, popup: true })
+    expect(decideAlert(shouldPingFromMessage({ ...m }, opts), false))
+      .toEqual({ chime: true, toast: false, popup: true })
   })
 })

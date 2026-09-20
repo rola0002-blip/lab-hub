@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Modal } from '@/components/ui/modal'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Badge } from '@/components/ui/badge'
 import { toast } from '@/components/ui/toast'
 import { formatRange } from '@/lib/time'
@@ -32,9 +33,9 @@ export default function SlotDetailsModal({ slot, timezone, canCancel, canSession
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState(slot.sessionNote ?? '')
+  const [confirming, setConfirming] = useState(false)
 
   async function cancel() {
-    if (!window.confirm('Cancel this booking?')) return
     setBusy(true)
     try {
       const r = await cancelMyBookingAction(slot.id, 'one')
@@ -93,7 +94,8 @@ export default function SlotDetailsModal({ slot, timezone, canCancel, canSession
   }
 
   return (
-    <Modal title={slot.kind === 'maintenance' ? 'Maintenance' : 'Booking details'} onClose={onClose}>
+    <>
+      <Modal title={slot.kind === 'maintenance' ? 'Maintenance' : 'Booking details'} onClose={onClose}>
       <div className="space-y-3">
         <p className="text-sm font-medium text-default">{slot.label}</p>
         <p className="text-sm text-muted">{formatRange(new Date(slot.startsAt), new Date(slot.endsAt), timezone)}</p>
@@ -142,13 +144,21 @@ export default function SlotDetailsModal({ slot, timezone, canCancel, canSession
                 FILL: --text-danger is the theme-flipped AA-on-canvas token, while
                 --color-danger is a fill that would not carry white text at 4.5:1.
                 min-h-11 is the 44px touch bar (§4.3). */}
-            <button type="button" disabled={busy} onClick={cancel}
+            <button type="button" disabled={busy} onClick={() => setConfirming(true)}
               className="min-h-11 rounded-md border border-[var(--text-danger)]/40 px-4 text-sm font-medium text-[var(--text-danger)] transition-colors hover:bg-hover active:bg-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] disabled:opacity-50">
               {busy ? 'Cancelling…' : 'Cancel booking'}
             </button>
           </div>
         )}
       </div>
-    </Modal>
+      </Modal>
+      {/* The cancel confirm (v0.32 Task 11) — a sibling Modal, so it layers over
+          the details dialog rather than nesting inside its content flow. Escape
+          while it is open closes both modals (the known nested-Modal behaviour);
+          dismissing via the buttons below is the scoped path. */}
+      <ConfirmDialog open={confirming} danger title="Cancel this booking?"
+        confirmLabel="Cancel booking" cancelLabel="Keep booking"
+        onClose={() => setConfirming(false)} onConfirm={cancel} />
+    </>
   )
 }

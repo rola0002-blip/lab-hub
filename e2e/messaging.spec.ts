@@ -185,9 +185,11 @@ test('4: guest isolation, then live add', async ({ browser }) => {
   // the guest has no channel LINK named "lab" rather than the old "#lab" text.
   await expect(pageG.getByRole('link', { name: 'lab' })).toHaveCount(0)
 
-  // Direct URL to a channel the guest is not a member of → app 404
+  // Direct URL to a channel the guest is not a member of → the styled in-shell
+  // 404 (v0.32: (app)/not-found.tsx renders "Not found" inside the app shell —
+  // the old assertion pinned Next's bare "This page could not be found." copy).
   await pageG.goto('/chat/' + cid)
-  await expect(pageG.getByText('This page could not be found')).toBeVisible()
+  await expect(pageG.getByText('Not found', { exact: true })).toBeVisible()
 
   // Search for channel content the guest cannot access → no hits (membership-scoped)
   await pageG.goto('/chat')

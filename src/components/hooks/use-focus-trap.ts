@@ -3,13 +3,20 @@ import { useEffect, type RefObject } from 'react'
 
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select,textarea,[tabindex]:not([tabindex="-1"])'
 
-export function useFocusTrap(ref: RefObject<HTMLElement | null>, active: boolean) {
+export function useFocusTrap(ref: RefObject<HTMLElement | null>, active: boolean, initial?: RefObject<HTMLElement | null>) {
   useEffect(() => {
     if (!active || !ref.current) return
     const node = ref.current
     const prev = document.activeElement as HTMLElement | null
-    const first = node.querySelector<HTMLElement>(FOCUSABLE)
-    ;(first ?? node).focus()
+    // Initial focus, in priority order: an element that already claimed it
+    // (React applies autoFocus during commit, BEFORE this effect — a composer
+    // modal's title field keeps focus), else the caller's preferred element
+    // (Modal passes its tabIndex -1 heading so the dialog opens with its name
+    // announced), else the first focusable descendant, else the container.
+    if (!node.contains(document.activeElement)) {
+      const first = initial?.current ?? node.querySelector<HTMLElement>(FOCUSABLE)
+      ;(first ?? node).focus()
+    }
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Tab') return
       const items = Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.offsetParent !== null)
@@ -25,5 +32,5 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, active: boolean
     // guard just makes that explicit — focus then stays where the browser put
     // it (body), never a dead reference.
     return () => { node.removeEventListener('keydown', onKey); if (prev?.isConnected) prev.focus() }
-  }, [ref, active])
+  }, [ref, active, initial])
 }
