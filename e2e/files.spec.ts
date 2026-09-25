@@ -1,5 +1,5 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
-import { wipe, seedSystem, runWizard, signIn, waitForHydration, ADMIN, createMemberViaInvite, acceptInvite } from './helpers'
+import { wipe, seedSystem, runWizard, signIn, waitForHydration, ADMIN, createMemberViaInvite, acceptInvite, db } from './helpers'
 
 // Per-context client IP so better-auth's per-IP sign-in/up rate limit never trips
 // (mirrors the sp5/a11y/messaging/redesign suites). Band 10.50.x is unused by the
@@ -279,4 +279,136 @@ test('"No folder" unlinks the folder (it submits null, never an empty string)', 
   await page.goto('/files')
   await expect(page.getByRole('link', { name: 'Protocols' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'CVD recipe.pdf' })).toBeVisible()
+})
+
+// ── wave 18 — sortable columns + tick-to-export zip ──────────────────────────
+test('columns sort the listing; folder sort groups folders together', async ({ browser }) => {
+  const page = await newPage(browser)
+  await signIn(page, ADMIN.email, ADMIN.password)
+
+  // Seed folders + docs straight into the DB (sorting never reads bytes), with
+  // staggered createdAt so the default service order (createdAt desc) and the
+  // in-folder orders are both deterministic. The timestamps sit a month in the
+  // past, safely UNDER every real upload above, which keeps their relative
+  // order fixed without touching them.
+  const admin = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  const chemical = await db.documentFolder.create({ data: { name: 'chemical list', createdById: admin.id } })
+  const alpha = await db.documentFolder.create({ data: { name: 'alpha protocols', createdById: admin.id } })
+  const t0 = Date.now() - 30 * 24 * 60 * 60 * 1000
+  const seed = (name: string, folderId: string | null, minutes: number) =>
+    db.document.create({ data: { name, folderId, path: `/uploads/documents/e2e-sort-${minutes}.pdf`, mime: 'application/pdf', size: 1024, uploaderId: admin.id, createdAt: new Date(t0 + minutes * 60 * 1000) } })
+  await seed('chem hydrozene.pdf', chemical.id, 0)
+  await seed('chem piranha.pdf', chemical.id, 600)
+  await seed('alpha sputter.pdf', alpha.id, 1200)
+  await seed('sort root.pdf', null, 1800)
+
+  await page.goto('/files')
+  await waitForHydration(page)
+  // Row names in listed order: the listing's ONE <a> per row is the doc link.
+  // Rooted at <main> (the mobile.spec rule: CSS locators must skip the hidden
+  // SSR duplicate of the streamed tree that role locators ignore for free).
+  const order = () => page.getByRole('main').locator('section ul li a').allTextContents()
+  // Service order = createdAt desc across the whole serial chain so far:
+  // CVD recipe.pdf (test 7) > member notes.pdf (test 5) > graphene SOP.pdf
+  // (test 1) > the four seeded rows, newest first.
+  const SERVICE = ['CVD recipe.pdf', 'member notes.pdf', 'graphene SOP.pdf', 'sort root.pdf', 'alpha sputter.pdf', 'chem piranha.pdf', 'chem hydrozene.pdf']
+  await expect.poll(order).toEqual(SERVICE)
+
+  // 1st click: asc. Root (no folder) clusters FIRST, and the sort is stable
+  // within a cluster (service order survives as the tiebreak).
+  const folderSort = page.getByRole('button', { name: 'Sort by folder' })
+  await folderSort.click()
+  await expect(folderSort).toHaveAccessibleName(/ascending \(active\)/)
+  await expect.poll(order).toEqual([
+    'member notes.pdf', 'graphene SOP.pdf', 'sort root.pdf', // root cluster
+    'alpha sputter.pdf',                                      // 'alpha protocols'
+    'chem piranha.pdf', 'chem hydrozene.pdf',                 // 'chemical list'
+    'CVD recipe.pdf',                                         // 'Protocols'
+  ])
+  // 2nd click: desc — the CLUSTERS mirror, but a negated comparator still
+  // returns 0 for equal folder keys, and Array.sort is stable: rows inside a
+  // cluster keep the service order (createdAt desc) in both directions.
+  await folderSort.click()
+  await expect(folderSort).toHaveAccessibleName(/descending \(active\)/)
+  await expect.poll(order).toEqual([
+    'CVD recipe.pdf',
+    'chem piranha.pdf', 'chem hydrozene.pdf',
+    'alpha sputter.pdf',
+    'member notes.pdf', 'graphene SOP.pdf', 'sort root.pdf',
+  ])
+  // 3rd click: tri-state back to the service order.
+  await folderSort.click()
+  await expect(folderSort).toHaveAccessibleName(/^Sort by folder, ascending$/)
+  await expect.poll(order).toEqual(SERVICE)
+
+  await db.document.deleteMany({ where: { name: { in: ['chem hydrozene.pdf', 'chem piranha.pdf', 'alpha sputter.pdf', 'sort root.pdf'] } } })
+  await db.documentFolder.deleteMany({ where: { name: { in: ['chemical list', 'alpha protocols'] } } })
+})
+
+test('tick two files and export them as a zip download', async ({ browser }) => {
+  const page = await newPage(browser)
+  await signIn(page, ADMIN.email, ADMIN.password)
+  await page.goto('/files')
+  await waitForHydration(page)
+  // Both uploads at root in one multi-file pick (the hidden input is `multiple`).
+  await page.locator('input[type=file]').first().setInputFiles([
+    { name: 'export-a.pdf', mimeType: 'application/pdf', buffer: PDF },
+    { name: 'export-b.pdf', mimeType: 'application/pdf', buffer: PDF },
+  ])
+  await expect(page.getByRole('link', { name: 'export-a.pdf' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'export-b.pdf' })).toBeVisible()
+
+  // Root files → checkbox labels carry no folder suffix.
+  await page.getByRole('checkbox', { name: 'Select export-a.pdf' }).check()
+  await page.getByRole('checkbox', { name: 'Select export-b.pdf' }).check()
+  const exportTwo = page.getByRole('button', { name: 'Export (2)' })
+  await expect(exportTwo).toBeEnabled()
+
+  // The button navigates an anchor with `download`, so the zip arrives as a
+  // real download; the same session then GETs the URL and checks the zip
+  // magic bytes (PK\x03\x04 — the writer is STORED-entry, byte-testable).
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    exportTwo.click(),
+  ])
+  expect(download.url()).toContain('/api/documents/export')
+  const res = await page.request.get(download.url())
+  expect(res.ok()).toBeTruthy()
+  expect(res.headers()['content-type']).toBe('application/zip')
+  // APIResponse.body() → Buffer (no arrayBuffer(); this is not fetch).
+  expect((await res.body()).subarray(0, 4).toString('latin1')).toBe('PK\x03\x04')
+
+  // Unticking walks the label back down: (2) → (1) → the bare, disabled Export.
+  await page.getByRole('checkbox', { name: 'Select export-b.pdf' }).uncheck()
+  await expect(page.getByRole('button', { name: 'Export (1)' })).toBeEnabled()
+  await page.getByRole('checkbox', { name: 'Select export-a.pdf' }).uncheck()
+  await expect(page.getByRole('button', { name: 'Export', exact: true })).toBeDisabled()
+
+  await db.document.deleteMany({ where: { name: { in: ['export-a.pdf', 'export-b.pdf'] } } })
+})
+
+test('a guest can tick and export (read-any posture)', async ({ browser }) => {
+  const gp = await newPage(browser)
+  await signIn(gp, 'guest@lab.test', 'Str0ngPass!123') // invited + accepted by the guest test above
+  await gp.goto('/files')
+  await waitForHydration(gp)
+  // graphene SOP.pdf (test 1's real upload — bytes on disk) is the export
+  // source: the zip builder SKIPS rows whose stored file is gone and 404s an
+  // empty set, so a db-seeded row without bytes would not download at all.
+  const tick = gp.getByRole('checkbox', { name: 'Select graphene SOP.pdf' })
+  await expect(tick).toBeVisible()
+  // Idle at zero ticks: visible to guests, but disabled (not hidden).
+  await expect(gp.getByRole('button', { name: 'Export', exact: true })).toBeDisabled()
+  await tick.check()
+  const exportOne = gp.getByRole('button', { name: 'Export (1)' })
+  await expect(exportOne).toBeEnabled()
+  const [download] = await Promise.all([
+    gp.waitForEvent('download'),
+    exportOne.click(),
+  ])
+  expect(download.url()).toContain('/api/documents/export')
+  const res = await gp.request.get(download.url())
+  expect(res.ok()).toBeTruthy()
+  expect(res.headers()['content-type']).toBe('application/zip')
+  expect((await res.body()).subarray(0, 4).toString('latin1')).toBe('PK\x03\x04')
 })
