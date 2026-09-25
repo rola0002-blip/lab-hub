@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-09-25
+
 ### Added
 - Sortable Files columns. Every column of the /files listing — name, folder,
   size, uploader, created — now sorts: a first click sorts ascending, a
