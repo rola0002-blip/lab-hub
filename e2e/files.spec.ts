@@ -108,7 +108,9 @@ test('a guest sees the Files nav + table but no upload or row-menu affordances',
   // `exact` disambiguates the sidebar nav "Files" from the folder rail's "All files".
   await expect(gp.getByRole('link', { name: 'Files', exact: true })).toBeVisible()  // nav visible to guests
   await expect(gp.getByRole('link', { name: 'graphene SOP.pdf' })).toBeVisible()     // can browse + download
-  await expect(gp.getByRole('button', { name: 'Upload' })).toHaveCount(0)            // no upload affordance
+  // `exact` (wave 18): substring matching also hits the listing header's
+  // "Sort by uploader, ascending" button — the real Upload button's name is exactly "Upload".
+  await expect(gp.getByRole('button', { name: 'Upload', exact: true })).toHaveCount(0) // no upload affordance
   await expect(gp.getByRole('button', { name: /actions/ })).toHaveCount(0)           // no row/folder menu
   await expect(gp.getByRole('button', { name: 'New folder' })).toHaveCount(0)        // no folder creation
   await guestCtx.close()
@@ -201,7 +203,9 @@ test('a project links a Files folder and shows that folder on its page', async (
   // it is — it is the control that proves the card lists the FOLDER, not every file.
   await page.goto('/files')
   await page.getByRole('button', { name: 'New folder' }).click()
-  await page.getByLabel('Name').fill('Protocols')
+  // `exact` (wave 18): substring matching also hits the listing header's
+  // "Sort by name, ascending" button — the modal's label is exactly "Name".
+  await page.getByLabel('Name', { exact: true }).fill('Protocols')
   await page.getByRole('button', { name: 'Save' }).click()
   await page.getByRole('link', { name: 'Protocols' }).click()
   await expect(page).toHaveURL(/\/files\?folder=/)

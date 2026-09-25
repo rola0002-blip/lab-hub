@@ -18,6 +18,7 @@ export default async function FilesPage({ searchParams }: { searchParams: Promis
     id: d.id, name: d.name, path: d.path, mime: d.mime, size: d.size,
     uploaderId: d.uploaderId, uploaderName: d.uploaderName, created: formatDateTime(d.createdAt, tz), folderId: d.folderId, folderName: d.folderName,
     latestVersion: d.latestVersion, // v0.32: drives the row's vN chip
+    createdAtIso: d.createdAt.toISOString(), // wave 18: sortable raw value — the formatted `created` mis-sorts
   }))
   return (
     <div>
