@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { FileText, FileImage, FileSpreadsheet, FileArchive, File as FileIcon, Folder, FolderPlus, Upload, Search, MoreHorizontal, ExternalLink } from 'lucide-react'
+import { FileText, FileImage, FileSpreadsheet, FileArchive, File as FileIcon, Folder, FolderPlus, Upload, Search, MoreHorizontal, ExternalLink, ArrowUp, ArrowDown, Download } from 'lucide-react'
 import { Menu } from '@/components/ui/menu'
 import { Modal } from '@/components/ui/modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { toast } from '@/lib/toast-store'
 import type { Role } from '@/lib/session'
 import { canUpload, canDeleteDocument, canModifyDocument, canManageFolder } from '@/features/documents/documents-policy'
+import { sortDocuments, nextSortState, type SortState } from '@/features/documents/sort'
 import {
   createFolderAction, renameFolderAction, deleteFolderAction,
   renameDocumentAction, moveDocumentAction, deleteDocumentAction,
@@ -17,7 +18,7 @@ import {
 import { VersionHistoryDrawer } from './version-history-drawer'
 
 type FolderVM = { id: string; name: string; createdById: string }
-type DocVM = { id: string; name: string; path: string; mime: string; size: number; uploaderId: string; uploaderName: string; created: string; folderId: string | null; folderName: string | null; latestVersion: number }
+type DocVM = { id: string; name: string; path: string; mime: string; size: number; uploaderId: string; uploaderName: string; created: string; folderId: string | null; folderName: string | null; latestVersion: number; createdAtIso: string }
 type SearchHit = { id: string; name: string; path: string; mime: string }
 type Dialog =
   | { kind: 'newfolder' } | { kind: 'renamefolder'; id: string; name: string }
@@ -58,6 +59,39 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
   const [confirmDelete, setConfirmDelete] = useState<DocVM | null>(null)
   const [confirmFolder, setConfirmFolder] = useState<FolderVM | null>(null)
   const versionFileRef = useRef<HTMLInputElement>(null)
+  // Wave 18: tri-state column sort (client-side, ephemeral — not persisted, not
+  // auto-cleared; the tri-state third click restores service order) + tick-to-export
+  // selection. Both disabled while searching (hits carry no size/folder data).
+  const [sortState, setSortState] = useState<SortState>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  // Ticks survive folder navigation by design — export sends every ticked id; the server skips ids deleted since render.
+  const searching = hits !== null
+  const listed = searching ? [] : documents
+  const shown = sortDocuments(listed, sortState)
+  const allListed = listed.length > 0 && listed.every((d) => selected.has(d.id))
+  const someListed = listed.some((d) => selected.has(d.id))
+  const toggle = (id: string) => setSelected((s) => {
+    const next = new Set(s)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+  const toggleAll = () => setSelected((s) => {
+    const next = new Set(s)
+    if (allListed) listed.forEach((d) => next.delete(d.id)); else listed.forEach((d) => next.add(d.id))
+    return next
+  })
+  // Anchor-with-download navigation (not fetch-blob) — the desktop-shell-safe
+  // download path; application/zip never renders inline.
+  function exportSelected() {
+    if (selected.size === 0) return
+    const a = document.createElement('a')
+    a.href = `/api/documents/export?ids=${encodeURIComponent([...selected].join(','))}`
+    a.download = ''
+    document.body.appendChild(a); a.click(); a.remove()
+  }
+  // React has no `indeterminate` prop — sync it imperatively on the live element.
+  const selectAllRef = useRef<HTMLInputElement>(null)
+  useEffect(() => { if (selectAllRef.current) selectAllRef.current.indeterminate = someListed && !allListed }, [someListed, allListed])
   const current = folders.find((f) => f.id === currentFolderId) ?? null
 
   // The version input mounts on menu pick; open the OS picker from this effect
@@ -147,8 +181,8 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
   const chip = 'flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]'
   const chipState = (selected: boolean) => selected ? 'bg-selected font-medium text-[var(--text-accent)]' : 'text-default hover:bg-hover'
   const rows: DocVM[] = hits
-    ? hits.map((h) => ({ id: h.id, name: h.name, path: h.path, mime: h.mime, size: 0, uploaderId: '', uploaderName: '', created: '', folderId: null, folderName: null, latestVersion: 1 }))
-    : documents
+    ? hits.map((h) => ({ id: h.id, name: h.name, path: h.path, mime: h.mime, size: 0, uploaderId: '', uploaderName: '', created: '', folderId: null, folderName: null, latestVersion: 1, createdAtIso: '' }))
+    : shown
 
   return (
     <div className="mt-4 grid gap-4 lg:grid-cols-[13rem_1fr]">
@@ -214,6 +248,11 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-muted transition-colors hover:bg-hover hover:text-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
             <ExternalLink size={15} aria-hidden />
           </button>
+          {/* Wave 18: zip-export of the ticked selection — all roles (guests included). */}
+          <button type="button" onClick={exportSelected} disabled={selected.size === 0 || searching}
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-sm text-default transition-colors hover:bg-hover disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">
+            <Download size={15} aria-hidden /> Export{selected.size > 0 ? ` (${selected.size})` : ''}
+          </button>
           {mayUpload && (
             <>
               <input ref={fileRef} type="file" multiple hidden onChange={(e) => e.target.files && uploadFiles(e.target.files)} />
@@ -244,7 +283,7 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
           </div>
         )}
 
-        {/* Table (or search results across all folders). The listing <ul> deliberately
+        {/* Table (or search results across all folders). The listing card deliberately
             carries NO `overflow-hidden`: menu.tsx positions each row's action popover
             absolutely and treats every clipping ancestor as a hard bound, so a clipped
             listing caps the popover to the (short) list's own height — a one-row list
@@ -258,40 +297,77 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
               hint={hits ? 'Try a different filename.' : mayUpload ? 'Upload a file or drag one into the drop zone above.' : 'Files uploaded by your lab will appear here.'} />
           </div>
         ) : (
-          <ul className="mt-3 divide-y divide-border rounded-xl border border-border bg-surface shadow-xs">
-            {rows.map((d) => (
-              <li key={d.id} className="flex items-center gap-3 px-3 py-2 text-sm">
-                <TypeIcon mime={d.mime} />
-                {/* pdf/image open inline in a new tab; office files download — the serving
-                    route sets Content-Disposition, so a single anchor handles both. */}
-                {/* `py-1` lifts the row's primary link to a ~26px tap target (the row's
-                    action Menu trigger is already 28px, ICON_TRIGGER's h-7). */}
-                <a href={d.path} target="_blank" rel="noreferrer"
-                  className="min-w-0 flex-1 truncate py-1 text-default hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">{d.name}</a>
-                {/* v0.32: version chip only once history exists (the certifications-badge shape). */}
-                {!hits && d.latestVersion > 1 && (
-                  <span className="inline-flex shrink-0 items-center rounded-full border border-border px-1.5 py-0.5 text-2xs text-subtle">v{d.latestVersion}</span>
+          <div className="mt-3 rounded-xl border border-border bg-surface shadow-xs">
+            {!searching && (
+              <div className="flex items-center gap-3 border-b border-border px-3 py-2">
+                {/* header cells mirror the row cells' widths/breakpoints so the columns align */}
+                <input ref={selectAllRef} type="checkbox" checked={allListed} onChange={toggleAll} disabled={documents.length === 0}
+                  aria-label="Select all files"
+                  className="h-4 w-4 shrink-0 rounded border-border accent-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
+                <span aria-hidden className="w-4 shrink-0" />
+                <SortButton label="Name" className="min-w-0 flex-1"
+                  active={sortState?.key === 'name'} dir={sortState?.key === 'name' ? sortState.dir : undefined}
+                  onClick={() => setSortState((s) => nextSortState(s, 'name'))} />
+                <SortButton label="Folder" className="hidden w-32 sm:flex"
+                  active={sortState?.key === 'folder'} dir={sortState?.key === 'folder' ? sortState.dir : undefined}
+                  onClick={() => setSortState((s) => nextSortState(s, 'folder'))} />
+                <SortButton label="Size" className="hidden w-16 justify-end sm:flex"
+                  active={sortState?.key === 'size'} dir={sortState?.key === 'size' ? sortState.dir : undefined}
+                  onClick={() => setSortState((s) => nextSortState(s, 'size'))} />
+                <SortButton label="Uploader" className="hidden w-40 md:flex"
+                  active={sortState?.key === 'uploader'} dir={sortState?.key === 'uploader' ? sortState.dir : undefined}
+                  onClick={() => setSortState((s) => nextSortState(s, 'uploader'))} />
+                <SortButton label="Created" className="hidden w-44 lg:flex"
+                  active={sortState?.key === 'created'} dir={sortState?.key === 'created' ? sortState.dir : undefined}
+                  onClick={() => setSortState((s) => nextSortState(s, 'created'))} />
+                {/* Spacer holding the header's trailing column open wherever rows render their action Menu (ICON_TRIGGER w-7). */}
+                {documents.some((d) => mayUpload || canDeleteDocument(role, d.uploaderId, selfId)) && (
+                  <span aria-hidden className="w-7 shrink-0" />
                 )}
-                {/* SP8 §3.1: the unscoped listing mixes folders, so the row names its folder ('—' at root). */}
-                {!hits && <span className="hidden w-32 shrink-0 truncate text-subtle sm:block">{d.folderName ?? '—'}</span>}
-                {!hits && <span className="hidden w-16 shrink-0 text-right tabular-nums text-subtle sm:block">{fmtSize(d.size)}</span>}
-                {!hits && <span className="hidden w-40 shrink-0 truncate text-muted md:block">{d.uploaderName}</span>}
-                {!hits && <span className="hidden w-44 shrink-0 truncate text-subtle lg:block">{d.created}</span>}
-                {!hits && (mayUpload || canDeleteDocument(role, d.uploaderId, selfId)) && (
-                  <Menu label={`File ${d.name} actions`} button={<MoreHorizontal size={16} aria-hidden />} items={[
-                    ...(mayUpload && canModifyDocument(role, d.uploaderId, selfId) ? [
-                      { label: 'Rename', onSelect: () => openDialog({ kind: 'renamedoc', id: d.id, name: d.name }) },
-                      { label: 'Move…', onSelect: () => openDialog({ kind: 'movedoc', id: d.id, name: d.name, folderId: d.folderId }) },
-                      { label: 'Upload new version…', onSelect: () => setVersionPick({ doc: d, n: Date.now() }) },
-                    ] : []),
-                    { label: 'History', onSelect: () => setHistoryFor(d) },
-                    { label: 'Download', onSelect: () => window.open(d.path, '_blank', 'noopener') },
-                    ...(canDeleteDocument(role, d.uploaderId, selfId) ? [{ label: 'Delete', danger: true, onSelect: () => setConfirmDelete(d) }] : []),
-                  ]} />
-                )}
-              </li>
-            ))}
-          </ul>
+              </div>
+            )}
+            <ul className="divide-y divide-border">
+              {rows.map((d) => (
+                <li key={d.id} className="flex items-center gap-3 px-3 py-2 text-sm">
+                  {!hits && (
+                    <input type="checkbox" checked={selected.has(d.id)} onChange={() => toggle(d.id)}
+                      aria-label={`Select ${d.name}${d.folderName ? ` (${d.folderName})` : ''}`}
+                      className="h-4 w-4 shrink-0 rounded border-border accent-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
+                  )}
+                  <TypeIcon mime={d.mime} />
+                  {/* pdf/image open inline in a new tab; office files download — the serving
+                      route sets Content-Disposition, so a single anchor handles both. */}
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  {/* `py-1` lifts the row's primary link to a ~26px tap target (the row's
+                      action Menu trigger is already 28px, ICON_TRIGGER's h-7). */}
+                  <a href={d.path} target="_blank" rel="noreferrer"
+                    className="min-w-0 flex-1 truncate py-1 text-default hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">{d.name}</a>
+                  {/* v0.32: version chip only once history exists (the certifications-badge shape). */}
+                  {!hits && d.latestVersion > 1 && (
+                    <span className="inline-flex shrink-0 items-center rounded-full border border-border px-1.5 py-0.5 text-2xs text-subtle">v{d.latestVersion}</span>
+                  )}
+                </div>
+                  {/* SP8 §3.1: the unscoped listing mixes folders, so the row names its folder ('—' at root). */}
+                  {!hits && <span className="hidden w-32 shrink-0 truncate text-subtle sm:block">{d.folderName ?? '—'}</span>}
+                  {!hits && <span className="hidden w-16 shrink-0 text-right tabular-nums text-subtle sm:block">{fmtSize(d.size)}</span>}
+                  {!hits && <span className="hidden w-40 shrink-0 truncate text-muted md:block">{d.uploaderName}</span>}
+                  {!hits && <span className="hidden w-44 shrink-0 truncate text-subtle lg:block">{d.created}</span>}
+                  {!hits && (mayUpload || canDeleteDocument(role, d.uploaderId, selfId)) && (
+                    <Menu label={`File ${d.name} actions`} button={<MoreHorizontal size={16} aria-hidden />} items={[
+                      ...(mayUpload && canModifyDocument(role, d.uploaderId, selfId) ? [
+                        { label: 'Rename', onSelect: () => openDialog({ kind: 'renamedoc', id: d.id, name: d.name }) },
+                        { label: 'Move…', onSelect: () => openDialog({ kind: 'movedoc', id: d.id, name: d.name, folderId: d.folderId }) },
+                        { label: 'Upload new version…', onSelect: () => setVersionPick({ doc: d, n: Date.now() }) },
+                      ] : []),
+                      { label: 'History', onSelect: () => setHistoryFor(d) },
+                      { label: 'Download', onSelect: () => window.open(d.path, '_blank', 'noopener') },
+                      ...(canDeleteDocument(role, d.uploaderId, selfId) ? [{ label: 'Delete', danger: true, onSelect: () => setConfirmDelete(d) }] : []),
+                    ]} />
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </section>
 
@@ -349,5 +425,18 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
         </Modal>
       )}
     </div>
+  )
+}
+
+function SortButton({ label, onClick, active, dir, className }: {
+  label: string; onClick: () => void; active: boolean; dir?: 'asc' | 'desc'; className?: string
+}) {
+  const state = active && dir === 'asc' ? ', ascending (active)' : active && dir === 'desc' ? ', descending (active)' : ', ascending'
+  return (
+    <button type="button" onClick={onClick} aria-label={`Sort by ${label.toLowerCase()}${state}`}
+      className={`flex items-center gap-1 text-2xs font-medium text-subtle transition-colors hover:text-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] ${className ?? ''}`}>
+      {label}
+      {active && (dir === 'asc' ? <ArrowUp size={12} aria-hidden /> : <ArrowDown size={12} aria-hidden />)}
+    </button>
   )
 }

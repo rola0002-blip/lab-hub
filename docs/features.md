@@ -192,6 +192,15 @@ deleting a file removes every version's bytes — the confirmation names
 the count. Existing files were backfilled with a v1 snapshot of their
 current bytes.
 
+**Sorting and export.** The listing's columns — name, folder, size, uploader,
+created — sort the table with a tri-state click: ascending, descending, then
+back to the default newest-first order (client-side and ephemeral, never
+persisted). Ticking rows arms an `Export (n)` button that downloads the
+selection as a zip whose entries keep their folder structure (`folder/name.ext`,
+duplicates deduplicated with a ` (2)` suffix); any signed-in role can export,
+each file ships its current version only, and one export is capped at 100
+files or 1 GB.
+
 ## RA acknowledgments
 
 A compliance record at `/ra` (nav row "RA", in the Workspace section): members

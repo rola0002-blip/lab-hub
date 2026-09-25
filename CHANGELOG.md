@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Sortable Files columns. Every column of the /files listing — name, folder,
+  size, uploader, created — now sorts: a first click sorts ascending, a
+  second descending, and a third returns to the default newest-first order
+  (the sort is client-side and ephemeral, never persisted).
+- Bulk zip export from Files. Ticking rows arms an `Export (n)` button that
+  downloads the selection as one zip; entries keep their folder structure
+  (`folder/name.ext`, duplicate names deduplicated with a ` (2)` suffix),
+  each file ships its current version only, any signed-in role can export
+  (guests included — the same read posture as downloads), and an export is
+  capped at 100 files or 1 GB.
+
 ## [0.32.0] - 2026-09-20
 
 ### Added
