@@ -38,6 +38,9 @@ describe('nudgeNameWidth', () => {
   it('nudging below the floor resets to null (the keyboard double-click)', () => {
     expect(nudgeNameWidth(250, -24)).toBeNull()
   })
+  it('landing exactly on the floor stays 240 (only strictly-below resets)', () => {
+    expect(nudgeNameWidth(264, -24)).toBe(240)
+  })
   it('nudging past the ceiling clamps', () => {
     expect(nudgeNameWidth(710, 24)).toBe(720)
   })

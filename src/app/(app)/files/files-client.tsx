@@ -378,7 +378,7 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
                     gated, never the layout); Arrow keys nudge ±24, ArrowLeft past the
                     floor or a double-click resets to the default column. */}
                 {finePointer && (
-                  <button type="button" aria-label="Resize name column (double-click to reset)"
+                  <button type="button" aria-label="Resize name column (drag or arrow keys; double-click or left arrow past the minimum to reset)"
                     onPointerDown={beginResize} onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize}
                     onDoubleClick={() => setNameWidth(null)}
                     onKeyDown={(e) => {

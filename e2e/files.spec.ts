@@ -464,6 +464,23 @@ test('name column drag-resizes, persists across reloads, and resets', async ({ b
   })
   await expect.poll(() => anchor.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1)
 
+  // 3.5 While the width is STORED (post-drag, pre-reset) the card carries
+  //     overflow-x-auto, making it a clip ancestor for menu.tsx's popover —
+  //     accepted in this user-chosen state, capped to the CARD bounds (tall
+  //     here). The row menu must still open at natural height — at least two
+  //     items' worth, never the 1px sliver of the v0.10.0 regression — and a
+  //     real click must land on an item. 'History' is the harmless pick: it
+  //     opens the read-only version drawer, closable without side effects.
+  await page.getByRole('button', { name: `File ${LONG} actions` }).click()
+  const menu = page.getByRole('menu')
+  await expect(menu).toBeVisible()
+  await expect.poll(() => menu.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(64)
+  await page.getByRole('menuitem', { name: 'History' }).click()
+  const drawer = page.getByRole('dialog', { name: 'Version history' })
+  await expect(drawer).toBeVisible()
+  await drawer.getByRole('button', { name: 'Close version history' }).click()
+  await expect(drawer).toHaveCount(0)
+
   // 4. The width survives a reload (localStorage, not component state) — same
   //    context, so the session cookie carries the sign-in through the reload.
   await page.reload()
