@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **RA acknowledgments** — tick multiple risk assessments and record them all in one
+  submit (matric number entered once); already-acknowledged RAs show as ticked and locked.
+- **Files** — drag the Name column wider to read long file names (desktop pointers);
+  the width is remembered per browser and double-click resets it. File names also show
+  a full-name tooltip.
+
 ## [0.33.0] - 2026-09-25
 
 ### Added

@@ -97,9 +97,11 @@ desktop app.
   milestones, labels, weekly update prompts, LabHub Bot digests. A new
   issue raised from a project page is pre-assigned to the project's lead.
 - **Files** — shared document library with 100 MB uploads and search. Sort
-  the listing by any column and export ticked files as a zip.
+  the listing by any column and export ticked files as a zip. Widen the name
+  column by dragging it.
 - **RA acknowledgments** — members and guests record reading a risk
-  assessment from Files' "RA" folder; admins review records and export CSV.
+  assessment, several at once in a single submit, from Files' "RA" folder;
+  admins review records and export CSV.
   A wrongly-added acknowledgement can be revoked (your own rows; any row for
   admins) and re-acknowledged afterwards.
 - **Platform** — roles (admin/member/guest), invitations, light/dark + 10
