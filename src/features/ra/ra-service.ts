@@ -55,8 +55,7 @@ export async function raOptions(user: SessionUser): Promise<{
   return { folderExists: true, documents, acknowledgedDocumentIds: mine.map((m) => m.documentId) }
 }
 
-// Wave 19: bulk submit — tick N RAs, one matric, one call. Replaces the single-doc
-// fn (the checkbox UI is its only caller). Same silent-by-design posture.
+// Wave 19: bulk submit — the /ra checkbox UI (next commit) is its only caller; the legacy select client is migrated with it. Same silent-by-design posture.
 export async function submitRaAcknowledgments(
   user: SessionUser, input: { documentIds: string[]; matricNumber: string },
 ): Promise<{ recorded: number }> {

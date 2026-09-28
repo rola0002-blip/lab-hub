@@ -12,7 +12,7 @@ type Result = { ok: true } | { ok: false; message: string }
 // payload degrades to {ok:false,message}, never a PrismaClientValidationError
 // 500 (the certifications-actions idiom).
 const submitSchema = z.object({
-  documentIds: z.array(z.string().min(1)).min(1).max(100),
+  documentIds: z.array(z.string().min(1)).min(1, 'Pick at least one RA document.').max(100, 'Pick at most 100 RA documents.'),
   matricNumber: z.string().min(1).max(32),
 })
 

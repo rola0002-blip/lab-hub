@@ -63,6 +63,16 @@ describe('ra-service', () => {
     expect(await prisma.raAcknowledgment.count({ where: { documentId: docB.id, userId: m.id } })).toBe(1) // exactly one new row for B
   })
 
+  it('dedupes a repeated id within one payload — the Set is what the length-equality existence check depends on', async () => {
+    const m = await makeUser({ role: 'member' })
+    const folder = await makeDocumentFolder({ name: 'RA' })
+    const docA = await makeDocument(m.id, { folderId: folder.id, name: 'a.pdf' })
+
+    const { recorded } = await submitRaAcknowledgments(su(m), { documentIds: [docA.id, docA.id], matricNumber: 'A0123456X' })
+    expect(recorded).toBe(1)
+    expect(await prisma.raAcknowledgment.count({ where: { userId: m.id } })).toBe(1) // exactly ONE row, not two
+  })
+
   it('rejects a document living in a DIFFERENT folder mixed with a real one — nothing lands', async () => {
     const m = await makeUser({ role: 'member' })
     const folder = await makeDocumentFolder({ name: 'RA' })
@@ -107,6 +117,8 @@ describe('ra-service', () => {
     await expect(submitRaAcknowledgments(su(m), { documentIds: 42 as unknown as string[], matricNumber: 'X' }))
       .rejects.toMatchObject({ code: 'invalid', message: 'Invalid acknowledgment.' })
     await expect(submitRaAcknowledgments(su(m), { documentIds: ['x', 42 as unknown as string], matricNumber: 'X' }))
+      .rejects.toMatchObject({ code: 'invalid', message: 'Invalid acknowledgment.' })
+    await expect(submitRaAcknowledgments(su(m), { documentIds: ['x'], matricNumber: 42 as unknown as string }))
       .rejects.toMatchObject({ code: 'invalid', message: 'Invalid acknowledgment.' })
   })
 

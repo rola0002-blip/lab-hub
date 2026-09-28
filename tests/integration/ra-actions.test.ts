@@ -66,6 +66,15 @@ describe('RA server actions', () => {
     expect(await prisma.raAcknowledgment.count()).toBe(0)
   })
 
+  it('submitRaAction: 101 ids degrade to the at-most-100 message, never a rejected promise', async () => {
+    const member = await makeUser({ role: 'member' })
+    await makeDocumentFolder({ name: 'RA' })
+    signIn(member)
+    expect(await submitRaAction(Array.from({ length: 101 }, (_, i) => `d${i}`), 'A1'))
+      .toEqual({ ok: false, message: 'Pick at most 100 RA documents.' })
+    expect(await prisma.raAcknowledgment.count()).toBe(0)
+  })
+
   describe('revokeRaAction', () => {
     it('returns ok:true and deletes the row for the author', async () => {
       const m = await makeUser({ role: 'member' })
