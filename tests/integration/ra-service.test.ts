@@ -4,7 +4,7 @@ import { resetDb, makeUser, makeDocumentFolder, makeDocument, makeRaAcknowledgme
 import type { SessionUser } from '@/lib/session'
 import { PolicyError } from '@/features/ra/ra-policy'
 import {
-  raOptions, submitRaAcknowledgment, listMyRaAcknowledgments, listAllRaAcknowledgments, revokeRaAcknowledgment,
+  raOptions, submitRaAcknowledgments, listMyRaAcknowledgments, listAllRaAcknowledgments, revokeRaAcknowledgment,
 } from '@/features/ra/ra-service'
 
 const su = (u: { id: string; name: string; email: string; role: string }): SessionUser =>
@@ -20,57 +20,71 @@ describe('ra-service', () => {
     await resetDb()
   })
 
-  it('submitRaAcknowledgment stores the row with a documentName snapshot, trimmed matric, ISO createdAt and author identity', async () => {
+  it('submitRaAcknowledgments records every ticked RA in one call: trimmed shared matric + documentName snapshots', async () => {
     const m = await makeUser({ role: 'member', name: 'Roland' })
     const folder = await makeDocumentFolder({ name: 'RA' })
-    const doc = await makeDocument(m.id, { folderId: folder.id, name: 'sop-2026.pdf' })
+    const d1 = await makeDocument(m.id, { folderId: folder.id, name: 'sop-2026.pdf' })
+    const d2 = await makeDocument(m.id, { folderId: folder.id, name: 'laser-ra.pdf' })
 
-    const dto = await submitRaAcknowledgment(su(m), { documentId: doc.id, matricNumber: '  A0123456X  ' })
-    expect(dto.documentId).toBe(doc.id)
-    expect(dto.documentName).toBe('sop-2026.pdf')            // snapshot at submit
-    expect(dto.matricNumber).toBe('A0123456X')               // trimmed
-    expect(dto.createdAt).toBe(new Date(dto.createdAt).toISOString()) // ISO string, MessageDto convention
-    expect(dto.author).toEqual({ id: m.id, name: 'Roland', email: m.email })
-
-    const row = await prisma.raAcknowledgment.findUniqueOrThrow({ where: { id: dto.id } })
-    expect(row.userId).toBe(m.id)
-    expect(row.documentName).toBe('sop-2026.pdf')
-    expect(row.matricNumber).toBe('A0123456X')
+    const { recorded } = await submitRaAcknowledgments(su(m), { documentIds: [d1.id, d2.id], matricNumber: '  A0123456X  ' })
+    expect(recorded).toBe(2)
+    const rows = await prisma.raAcknowledgment.findMany({ where: { userId: m.id } })
+    expect(rows).toHaveLength(2)
+    for (const row of rows) {
+      expect(row.matricNumber).toBe('A0123456X') // trimmed, shared across the batch
+      expect(row.userId).toBe(m.id)
+    }
+    expect(rows.map((r) => r.documentId).sort()).toEqual([d1.id, d2.id].sort())
+    // each row snapshotted its own document's name at submit
+    const byDoc = new Map(rows.map((r) => [r.documentId, r.documentName]))
+    expect(byDoc.get(d1.id)).toBe('sop-2026.pdf')
+    expect(byDoc.get(d2.id)).toBe('laser-ra.pdf')
   })
 
   it('lets a guest submit (external students doing the lab work)', async () => {
     const g = await makeUser({ role: 'guest' })
     const folder = await makeDocumentFolder({ name: 'RA' })
     const doc = await makeDocument(g.id, { folderId: folder.id })
-    const dto = await submitRaAcknowledgment(su(g), { documentId: doc.id, matricNumber: 'B9876543Z' })
-    expect(dto.author.id).toBe(g.id)
+    const { recorded } = await submitRaAcknowledgments(su(g), { documentIds: [doc.id], matricNumber: 'B9876543Z' })
+    expect(recorded).toBe(1)
     expect(await prisma.raAcknowledgment.count()).toBe(1)
   })
 
-  it('rejects a duplicate (userId, documentId) with a typed PolicyError, never a raw P2002', async () => {
+  it('skips already-acknowledged docs instead of erroring — the batch lands what is new', async () => {
     const m = await makeUser({ role: 'member' })
     const folder = await makeDocumentFolder({ name: 'RA' })
-    const doc = await makeDocument(m.id, { folderId: folder.id })
-    await makeRaAcknowledgment(m.id, doc.id)
-    await expect(submitRaAcknowledgment(su(m), { documentId: doc.id, matricNumber: 'A0123456X' }))
-      .rejects.toMatchObject({ code: 'invalid', message: 'You have already acknowledged this RA.' })
-    expect(await prisma.raAcknowledgment.count()).toBe(1) // nothing persisted
+    const docA = await makeDocument(m.id, { folderId: folder.id, name: 'a.pdf' })
+    const docB = await makeDocument(m.id, { folderId: folder.id, name: 'b.pdf' })
+    await makeRaAcknowledgment(m.id, docA.id)
+
+    const { recorded } = await submitRaAcknowledgments(su(m), { documentIds: [docA.id, docB.id], matricNumber: 'A0123456X' })
+    expect(recorded).toBe(1) // only B landed, no throw
+    expect(await prisma.raAcknowledgment.count({ where: { documentId: docA.id, userId: m.id } })).toBe(1) // still exactly one for A
+    expect(await prisma.raAcknowledgment.count({ where: { documentId: docB.id, userId: m.id } })).toBe(1) // exactly one new row for B
   })
 
-  it('rejects a document living in a DIFFERENT folder', async () => {
+  it('rejects a document living in a DIFFERENT folder mixed with a real one — nothing lands', async () => {
     const m = await makeUser({ role: 'member' })
-    await makeDocumentFolder({ name: 'RA' })
+    const folder = await makeDocumentFolder({ name: 'RA' })
+    const real = await makeDocument(m.id, { folderId: folder.id })
     const other = await makeDocumentFolder({ name: 'other' })
-    const doc = await makeDocument(m.id, { folderId: other.id })
-    await expect(submitRaAcknowledgment(su(m), { documentId: doc.id, matricNumber: 'A0123456X' }))
-      .rejects.toMatchObject({ code: 'invalid', message: 'Pick an RA document from the list.' })
+    const foreign = await makeDocument(m.id, { folderId: other.id })
+    await expect(submitRaAcknowledgments(su(m), { documentIds: [real.id, foreign.id], matricNumber: 'A0123456X' }))
+      .rejects.toMatchObject({ code: 'invalid', message: 'Pick RA documents from the list.' })
     expect(await prisma.raAcknowledgment.count()).toBe(0)
   })
 
   it('rejects everything when no RA folder exists yet', async () => {
     const m = await makeUser({ role: 'member' })
-    await expect(submitRaAcknowledgment(su(m), { documentId: 'anything', matricNumber: 'A0123456X' }))
+    await expect(submitRaAcknowledgments(su(m), { documentIds: ['anything'], matricNumber: 'A0123456X' }))
       .rejects.toMatchObject({ code: 'invalid', message: 'No RA folder exists yet — an admin creates it in Files.' })
+  })
+
+  it('rejects an empty selection', async () => {
+    const m = await makeUser({ role: 'member' })
+    await makeDocumentFolder({ name: 'RA' })
+    await expect(submitRaAcknowledgments(su(m), { documentIds: [], matricNumber: 'A0123456X' }))
+      .rejects.toMatchObject({ code: 'invalid', message: 'Pick at least one RA document.' })
   })
 
   it('rejects a matric that is empty after trim or over 32 characters', async () => {
@@ -78,9 +92,9 @@ describe('ra-service', () => {
     const folder = await makeDocumentFolder({ name: 'RA' })
     const doc = await makeDocument(m.id, { folderId: folder.id })
     const msg = 'Enter your matriculation number (at most 32 characters).'
-    await expect(submitRaAcknowledgment(su(m), { documentId: doc.id, matricNumber: '   ' }))
+    await expect(submitRaAcknowledgments(su(m), { documentIds: [doc.id], matricNumber: '   ' }))
       .rejects.toMatchObject({ code: 'invalid', message: msg })
-    await expect(submitRaAcknowledgment(su(m), { documentId: doc.id, matricNumber: 'A'.repeat(33) }))
+    await expect(submitRaAcknowledgments(su(m), { documentIds: [doc.id], matricNumber: 'A'.repeat(33) }))
       .rejects.toMatchObject({ code: 'invalid', message: msg })
     expect(await prisma.raAcknowledgment.count()).toBe(0)
   })
@@ -88,9 +102,11 @@ describe('ra-service', () => {
   it('degrades forged non-string input to a PolicyError, not a TypeError', async () => {
     const m = await makeUser({ role: 'member' })
     await makeDocumentFolder({ name: 'RA' })
-    await expect(submitRaAcknowledgment(su(m), { documentId: 42 as unknown as string, matricNumber: 'X' }))
+    await expect(submitRaAcknowledgments(su(m), { documentIds: 42 as unknown as string[], matricNumber: 'X' }))
       .rejects.toThrow(PolicyError)
-    await expect(submitRaAcknowledgment(su(m), { documentId: 42 as unknown as string, matricNumber: 'X' }))
+    await expect(submitRaAcknowledgments(su(m), { documentIds: 42 as unknown as string[], matricNumber: 'X' }))
+      .rejects.toMatchObject({ code: 'invalid', message: 'Invalid acknowledgment.' })
+    await expect(submitRaAcknowledgments(su(m), { documentIds: ['x', 42 as unknown as string], matricNumber: 'X' }))
       .rejects.toMatchObject({ code: 'invalid', message: 'Invalid acknowledgment.' })
   })
 
@@ -146,8 +162,8 @@ describe('ra-service', () => {
       await revokeRaAcknowledgment(su(g), ack.id)
       expect(await prisma.raAcknowledgment.count()).toBe(0)
       // the unique freed: the same user+document can be acknowledged again
-      const again = await submitRaAcknowledgment(su(g), { documentId: doc.id, matricNumber: 'B7654321Z' })
-      expect(again.documentId).toBe(doc.id)
+      const { recorded } = await submitRaAcknowledgments(su(g), { documentIds: [doc.id], matricNumber: 'B7654321Z' })
+      expect(recorded).toBe(1)
     })
 
     it('lets an admin revoke someone else’s row', async () => {

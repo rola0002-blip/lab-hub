@@ -1,19 +1,35 @@
 'use server'
+import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/session'
 import { PolicyError } from '@/features/ra/ra-policy'
-import { submitRaAcknowledgment, revokeRaAcknowledgment } from '@/features/ra/ra-service'
+import { submitRaAcknowledgments, revokeRaAcknowledgment } from '@/features/ra/ra-service'
 
+type SubmitResult = { ok: true; recorded: number } | { ok: false; message: string }
 type Result = { ok: true } | { ok: false; message: string }
 
-function fail(e: unknown): Result {
+// A Server Action is an RPC endpoint — zod-guard the wire args so a forged
+// payload degrades to {ok:false,message}, never a PrismaClientValidationError
+// 500 (the certifications-actions idiom).
+const submitSchema = z.object({
+  documentIds: z.array(z.string().min(1)).min(1).max(100),
+  matricNumber: z.string().min(1).max(32),
+})
+
+function fail(e: unknown): { ok: false; message: string } {
   if (e instanceof PolicyError) return { ok: false, message: e.message }
   return { ok: false, message: e instanceof Error ? e.message : 'Something went wrong.' }
 }
 
-export async function submitRaAction(documentId: string, matricNumber: string): Promise<Result> {
+export async function submitRaAction(documentIds: string[], matricNumber: string): Promise<SubmitResult> {
+  const parsed = submitSchema.safeParse({ documentIds, matricNumber })
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? 'Invalid acknowledgment.' }
   const u = await requireUser()
-  try { await submitRaAcknowledgment(u, { documentId, matricNumber }); revalidatePath('/ra'); return { ok: true } } catch (e) { return fail(e) }
+  try {
+    const { recorded } = await submitRaAcknowledgments(u, parsed.data)
+    revalidatePath('/ra')
+    return { ok: true, recorded }
+  } catch (e) { return fail(e) }
 }
 
 export async function revokeRaAction(id: string): Promise<Result> {

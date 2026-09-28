@@ -30,10 +30,20 @@ describe('RA server actions', () => {
     const folder = await makeDocumentFolder({ name: 'RA' })
     const doc = await makeDocument(member.id, { folderId: folder.id, name: 'cvd-ra.pdf' })
     signIn(member)
-    expect(await submitRaAction(doc.id, 'NTU2026ABS')).toEqual({ ok: true })
+    expect(await submitRaAction([doc.id], 'NTU2026ABS')).toEqual({ ok: true, recorded: 1 })
     const row = await prisma.raAcknowledgment.findFirstOrThrow({ where: { userId: member.id, documentId: doc.id } })
     expect(row.matricNumber).toBe('NTU2026ABS')
     expect(row.documentName).toBe('cvd-ra.pdf') // snapshotted, not joined
+  })
+
+  it('submitRaAction: a bulk submit of two docs records both in one call', async () => {
+    const member = await makeUser({ role: 'member' })
+    const folder = await makeDocumentFolder({ name: 'RA' })
+    const d1 = await makeDocument(member.id, { folderId: folder.id, name: 'a.pdf' })
+    const d2 = await makeDocument(member.id, { folderId: folder.id, name: 'b.pdf' })
+    signIn(member)
+    expect(await submitRaAction([d1.id, d2.id], 'NTU2026ABS')).toEqual({ ok: true, recorded: 2 })
+    expect(await prisma.raAcknowledgment.count({ where: { userId: member.id } })).toBe(2)
   })
 
   it('submitRaAction: a document outside the RA folder is refused with the pick-from-list message', async () => {
@@ -42,15 +52,17 @@ describe('RA server actions', () => {
     const other = await makeDocumentFolder()
     const foreign = await makeDocument(member.id, { folderId: other.id })
     signIn(member)
-    expect(await submitRaAction(foreign.id, 'A1')).toEqual({ ok: false, message: 'Pick an RA document from the list.' })
+    expect(await submitRaAction([foreign.id], 'A1')).toEqual({ ok: false, message: 'Pick RA documents from the list.' })
     expect(await prisma.raAcknowledgment.count()).toBe(0)
   })
 
-  it('submitRaAction: a forged non-string id degrades to a result, never a rejected promise', async () => {
+  it('submitRaAction: a forged non-array documentIds degrades to a result, never a rejected promise', async () => {
     const member = await makeUser({ role: 'member' })
     await makeDocumentFolder({ name: 'RA' })
     signIn(member)
-    expect(await submitRaAction(42 as never, 'A1')).toEqual({ ok: false, message: 'Invalid acknowledgment.' })
+    // pinned from zod v4's first issue for { documentIds: 42 } — "Invalid input:
+    // expected array, received number" (en locale default).
+    expect(await submitRaAction(42 as never, 'A1')).toEqual({ ok: false, message: 'Invalid input: expected array, received number' })
     expect(await prisma.raAcknowledgment.count()).toBe(0)
   })
 
@@ -106,7 +118,7 @@ describe('RA acknowledgments CSV route', () => {
     // stray record).
     const tricky = await makeDocument(member.id, { folderId: folder.id, name: 'He said "wear gloves", then left\nline-two.pdf' })
     signIn(member)
-    expect(await submitRaAction(tricky.id, 'NTU2026ABS')).toEqual({ ok: true })
+    expect(await submitRaAction([tricky.id], 'NTU2026ABS')).toEqual({ ok: true, recorded: 1 })
     signIn(admin)
     const body2 = await (await GET()).text()
     expect(body2).toContain('"He said ""wear gloves"", then left\nline-two.pdf"')

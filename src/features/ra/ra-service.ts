@@ -55,35 +55,40 @@ export async function raOptions(user: SessionUser): Promise<{
   return { folderExists: true, documents, acknowledgedDocumentIds: mine.map((m) => m.documentId) }
 }
 
-export async function submitRaAcknowledgment(
-  user: SessionUser, input: { documentId: string; matricNumber: string },
-): Promise<RaAcknowledgmentDto> {
+// Wave 19: bulk submit — tick N RAs, one matric, one call. Replaces the single-doc
+// fn (the checkbox UI is its only caller). Same silent-by-design posture.
+export async function submitRaAcknowledgments(
+  user: SessionUser, input: { documentIds: string[]; matricNumber: string },
+): Promise<{ recorded: number }> {
   assertCanSubmitRa(user.role)
-  // Type guards first: this is an RPC boundary — a forged non-string must degrade
-  // to PolicyError, never a TypeError 500.
-  if (typeof input.documentId !== 'string' || typeof input.matricNumber !== 'string') {
+  // Type guards first: this is an RPC boundary — a forged non-array or non-string
+  // must degrade to PolicyError, never a TypeError 500.
+  if (!Array.isArray(input.documentIds)
+    || input.documentIds.some((id) => typeof id !== 'string')
+    || typeof input.matricNumber !== 'string') {
     throw new PolicyError('invalid', 'Invalid acknowledgment.')
   }
   const matric = input.matricNumber.trim()
   if (!matric || matric.length > MATRIC_MAX) {
     throw new PolicyError('invalid', 'Enter your matriculation number (at most 32 characters).')
   }
+  const ids = [...new Set(input.documentIds)]
+  if (ids.length === 0) throw new PolicyError('invalid', 'Pick at least one RA document.')
+  if (ids.length > 100) throw new PolicyError('invalid', 'Pick at most 100 RA documents.')
   const folderId = await raFolderId()
   if (!folderId) throw new PolicyError('invalid', 'No RA folder exists yet — an admin creates it in Files.')
-  const doc = await prisma.document.findUnique({ where: { id: input.documentId }, select: { id: true, name: true, folderId: true } })
-  if (!doc || doc.folderId !== folderId) throw new PolicyError('invalid', 'Pick an RA document from the list.')
-  try {
-    const row = await prisma.raAcknowledgment.create({
-      data: { userId: user.id, documentId: doc.id, documentName: doc.name, matricNumber: matric },
-      include: { user: AUTHOR_SELECT },
-    })
-    return toDto(row)
-  } catch (e) {
-    if ((e as { code?: string }).code === 'P2002') {
-      throw new PolicyError('invalid', 'You have already acknowledged this RA.')
-    }
-    throw e
-  }
+  const docs = await prisma.document.findMany({ where: { id: { in: ids }, folderId }, select: { id: true, name: true } })
+  // Any id missing, foreign, or outside the RA folder ⇒ generic refusal —
+  // nothing was written, and there is no existence leak.
+  if (docs.length !== ids.length) throw new PolicyError('invalid', 'Pick RA documents from the list.')
+  // One statement, atomic: createMany … ON CONFLICT DO NOTHING — a doc already
+  // acknowledged (stale UI, race, re-submit) is skipped, not an error (the
+  // grantCertification novelty-probe posture); r.count is what actually landed.
+  const r = await prisma.raAcknowledgment.createMany({
+    data: docs.map((d) => ({ userId: user.id, documentId: d.id, documentName: d.name, matricNumber: matric })),
+    skipDuplicates: true,
+  })
+  return { recorded: r.count }
 }
 
 export async function listMyRaAcknowledgments(user: SessionUser): Promise<RaAcknowledgmentDto[]> {
