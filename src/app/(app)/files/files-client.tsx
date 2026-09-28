@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { FileText, FileImage, FileSpreadsheet, FileArchive, File as FileIcon, Folder, FolderPlus, Upload, Search, MoreHorizontal, ExternalLink, ArrowUp, ArrowDown, Download } from 'lucide-react'
@@ -7,10 +7,12 @@ import { Menu } from '@/components/ui/menu'
 import { Modal } from '@/components/ui/modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
+import { useMediaQuery } from '@/components/hooks/use-media-query'
 import { toast } from '@/lib/toast-store'
 import type { Role } from '@/lib/session'
 import { canUpload, canDeleteDocument, canModifyDocument, canManageFolder } from '@/features/documents/documents-policy'
 import { sortDocuments, nextSortState, type SortState } from '@/features/documents/sort'
+import { parseNameWidth, clampNameWidth, nudgeNameWidth, NAME_WIDTH_MIN } from '@/features/documents/name-width'
 import {
   createFolderAction, renameFolderAction, deleteFolderAction,
   renameDocumentAction, moveDocumentAction, deleteDocumentAction,
@@ -35,6 +37,24 @@ function TypeIcon({ mime }: { mime: string }) {
   if (mime.includes('spreadsheet') || mime === 'text/csv') return <FileSpreadsheet size={16} className={cls} aria-hidden />
   if (mime === 'application/zip') return <FileArchive size={16} className={cls} aria-hidden />
   return <FileIcon size={16} className={cls} aria-hidden />
+}
+
+const NAME_WIDTH_KEY = 'colossus:files:name-width'
+function subscribeNameWidth(cb: () => void) { window.addEventListener('storage', cb); return () => window.removeEventListener('storage', cb) }
+function readNameWidthRaw(): string | null { try { return localStorage.getItem(NAME_WIDTH_KEY) } catch { return null } }
+// Wave 19: persisted Name-column width — raw-string snapshot (the view-toggle
+// idiom) so cross-tab edits propagate; server snapshot null = unresized.
+function useNameWidth(): [number | null, (w: number | null) => void] {
+  const raw = useSyncExternalStore(subscribeNameWidth, readNameWidthRaw, () => null)
+  const width = useMemo(() => parseNameWidth(raw), [raw])
+  const set = (w: number | null) => {
+    try {
+      if (w === null) localStorage.removeItem(NAME_WIDTH_KEY)
+      else localStorage.setItem(NAME_WIDTH_KEY, String(w))
+    } catch { /* private mode etc. */ }
+    window.dispatchEvent(new StorageEvent('storage', { key: NAME_WIDTH_KEY }))
+  }
+  return [width, set]
 }
 
 export function FilesClient({ folders, documents, currentFolderId, role, selfId }: {
@@ -93,6 +113,46 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
   const selectAllRef = useRef<HTMLInputElement>(null)
   useEffect(() => { if (selectAllRef.current) selectAllRef.current.indeterminate = someListed && !allListed }, [someListed, allListed])
   const current = folders.find((f) => f.id === currentFolderId) ?? null
+
+  // Wave 19: drag-to-resize the Name column. Persisted width in localStorage
+  // (per device); the transient dragW wins during the gesture.
+  const [nameWidth, setNameWidth] = useNameWidth()
+  const [dragW, setDragW] = useState<number | null>(null)
+  // During the gesture the transient width wins; release commits to storage then
+  // clears the transient in the same batched render (no flash).
+  const effectiveW = dragW ?? nameWidth
+  const resizing = effectiveW !== null
+  const finePointer = useMediaQuery('(hover: hover) and (pointer: fine)')
+  const nameHeadRef = useRef<HTMLDivElement>(null)
+  // Gesture anchor: DELTA-based (width-at-grab + pointer travel), not absolute
+  // (pointer x − column left). The handle sits 15px past the column's right edge
+  // (gap-3 + half the handle), so an absolute model commits width+15 on every
+  // no-move CLICK — the first click of a double-click reset walks the 6px handle
+  // out from under the second, and the dblclick never fires. Delta-anchored, a
+  // click re-commits the SAME width: the geometry holds still through the pair.
+  const resizeAnchor = useRef<{ x0: number; w0: number } | null>(null)
+
+  function beginResize(e: React.PointerEvent) {
+    if (e.button !== 0) return
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* no real pointer */ }
+    const w0 = effectiveW ?? nameHeadRef.current?.getBoundingClientRect().width ?? NAME_WIDTH_MIN
+    resizeAnchor.current = { x0: e.clientX, w0 }
+    setDragW(clampNameWidth(w0))
+  }
+  function moveResize(e: React.PointerEvent) {
+    if (dragW === null) return
+    if (e.buttons === 0) return endResize(e) // self-heal: capture lost mid-gesture
+    const a = resizeAnchor.current
+    if (!a) return
+    setDragW(clampNameWidth(a.w0 + (e.clientX - a.x0)))
+  }
+  function endResize(e: React.PointerEvent) {
+    if (dragW === null) return
+    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* already gone */ }
+    setNameWidth(dragW)
+    setDragW(null)
+    resizeAnchor.current = null
+  }
 
   // The version input mounts on menu pick; open the OS picker from this effect
   // (still inside the click's user-activation window) so the flow is one
@@ -283,13 +343,17 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
           </div>
         )}
 
-        {/* Table (or search results across all folders). The listing card deliberately
-            carries NO `overflow-hidden`: menu.tsx positions each row's action popover
-            absolutely and treats every clipping ancestor as a hard bound, so a clipped
-            listing caps the popover to the (short) list's own height — a one-row list
-            collapsed it to a 1px sliver. Same shape as the issues list container
-            (issue-list-view.tsx); rows carry no background of their own, so the rounded
-            corners need no clip anyway. */}
+        {/* Table (or search results across all folders). The listing card carries
+            NO overflow class in the DEFAULT state: menu.tsx positions each row's
+            action popover absolutely and treats every clipping ancestor as a hard
+            bound, so a clipped listing caps the popover to the (short) list's own
+            height — a one-row list collapsed it to a 1px sliver (v0.10.0). A stored
+            Name-column width (wave 19) adds overflow-x-auto ONLY while set — in that
+            explicit user-chosen state the card becomes a clip ancestor for row menus
+            (accepted, user-induced; menu.tsx caps to the card bounds); the wave-18
+            clip e2e runs in the default state. Same shape as the issues list
+            container (issue-list-view.tsx); rows carry no background of their own,
+            so the rounded corners need no clip anyway. */}
         {rows.length === 0 ? (
           <div className="mt-3">
             <EmptyState icon={FileText}
@@ -297,17 +361,34 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
               hint={hits ? 'Try a different filename.' : mayUpload ? 'Upload a file or drag one into the drop zone above.' : 'Files uploaded by your lab will appear here.'} />
           </div>
         ) : (
-          <div className="mt-3 rounded-xl border border-border bg-surface shadow-xs">
+          <div className={`mt-3 rounded-xl border border-border bg-surface shadow-xs${resizing ? ' overflow-x-auto' : ''}`}>
             {!searching && (
-              <div className="flex items-center gap-3 border-b border-border px-3 py-2">
+              <div className={`flex items-center gap-3 border-b border-border px-3 py-2${resizing ? ' w-max min-w-full' : ''}`}>
                 {/* header cells mirror the row cells' widths/breakpoints so the columns align */}
                 <input ref={selectAllRef} type="checkbox" checked={allListed} onChange={toggleAll} disabled={documents.length === 0}
                   aria-label="Select all files"
                   className="h-4 w-4 shrink-0 rounded border-border accent-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
                 <span aria-hidden className="w-4 shrink-0" />
-                <SortButton label="Name" className="min-w-0 flex-1"
-                  active={sortState?.key === 'name'} dir={sortState?.key === 'name' ? sortState.dir : undefined}
-                  onClick={() => setSortState((s) => nextSortState(s, 'name'))} />
+                <div ref={nameHeadRef} className="min-w-0 flex-1" style={effectiveW ? { minWidth: effectiveW } : undefined}>
+                  <SortButton label="Name" className="w-full"
+                    active={sortState?.key === 'name'} dir={sortState?.key === 'name' ? sortState.dir : undefined}
+                    onClick={() => setSortState((s) => nextSortState(s, 'name'))} />
+                </div>
+                {/* Wave 19 resize handle: fine-pointer devices only (the AFFORDANCE is
+                    gated, never the layout); Arrow keys nudge ±24, ArrowLeft past the
+                    floor or a double-click resets to the default column. */}
+                {finePointer && (
+                  <button type="button" aria-label="Resize name column (double-click to reset)"
+                    onPointerDown={beginResize} onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize}
+                    onDoubleClick={() => setNameWidth(null)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                        e.preventDefault()
+                        setNameWidth(nudgeNameWidth(effectiveW, e.key === 'ArrowRight' ? 24 : -24))
+                      }
+                    }}
+                    className="h-5 w-1.5 shrink-0 cursor-col-resize touch-none rounded-full transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
+                )}
                 <SortButton label="Folder" className="hidden w-32 sm:flex"
                   active={sortState?.key === 'folder'} dir={sortState?.key === 'folder' ? sortState.dir : undefined}
                   onClick={() => setSortState((s) => nextSortState(s, 'folder'))} />
@@ -326,7 +407,7 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
                 )}
               </div>
             )}
-            <ul className="divide-y divide-border">
+            <ul className={`divide-y divide-border${resizing ? ' w-max min-w-full' : ''}`}>
               {rows.map((d) => (
                 <li key={d.id} className="flex items-center gap-3 px-3 py-2 text-sm">
                   {!hits && (
@@ -337,10 +418,11 @@ export function FilesClient({ folders, documents, currentFolderId, role, selfId 
                   <TypeIcon mime={d.mime} />
                   {/* pdf/image open inline in a new tab; office files download — the serving
                       route sets Content-Disposition, so a single anchor handles both. */}
-                <div className="flex min-w-0 flex-1 items-center gap-3">
+                <div className="flex min-w-0 flex-1 items-center gap-3" style={effectiveW ? { minWidth: effectiveW } : undefined}>
                   {/* `py-1` lifts the row's primary link to a ~26px tap target (the row's
-                      action Menu trigger is already 28px, ICON_TRIGGER's h-7). */}
-                  <a href={d.path} target="_blank" rel="noreferrer"
+                      action Menu trigger is already 28px, ICON_TRIGGER's h-7). The title
+                      carries the full name — the anchor truncates (version-history-drawer idiom). */}
+                  <a href={d.path} target="_blank" rel="noreferrer" title={d.name}
                     className="min-w-0 flex-1 truncate py-1 text-default hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]">{d.name}</a>
                   {/* v0.32: version chip only once history exists (the certifications-badge shape). */}
                   {!hits && d.latestVersion > 1 && (
