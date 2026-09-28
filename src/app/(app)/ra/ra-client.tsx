@@ -1,5 +1,5 @@
 'use client'
-import { useState, useTransition } from 'react'
+import { useId, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { ShieldCheck } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -28,7 +28,15 @@ export function RaClient({ name, options, mine, all, tz }: {
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
-  const [documentId, setDocumentId] = useState('')
+  const raListId = useId()
+  // Wave 19 bulk acknowledge: multi-tick Set (the files-client export idiom) —
+  // ticks clear on success so a follow-up submit starts clean.
+  const [ticks, setTicks] = useState<Set<string>>(new Set())
+  const toggle = (id: string) => setTicks((s) => {
+    const next = new Set(s)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
   const [matric, setMatric] = useState('')
   // v0.32 Task 11: the revoke confirm (was native confirm) — whose=null is the
   // self-serve arm ("your acknowledgment"), a name is the records-table arm.
@@ -37,16 +45,18 @@ export function RaClient({ name, options, mine, all, tz }: {
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
-    const doc = documentId
     const m = matric.trim()
-    if (!doc || !m) return
+    if (ticks.size === 0 || !m) return
     start(async () => {
-      const r = await submitRaAction(doc, m)
-      // No optimistic state: the row lands via router.refresh() (the Files
-      // posture). The select is cleared too — the acknowledged option comes
-      // back disabled, and leaving it selected would strand the form on it.
-      if (r.ok) { toast('Acknowledged — recorded.'); setDocumentId(''); setMatric(''); router.refresh() }
-      else toast(r.message)
+      const r = await submitRaAction([...ticks], m)
+      // No optimistic state: rows land via router.refresh() (the Files posture);
+      // ticks + matric clear so a follow-up submit starts clean.
+      if (r.ok) {
+        toast(r.recorded > 0
+          ? `Acknowledged ${r.recorded} RA${r.recorded === 1 ? '' : 's'} — recorded.`
+          : 'Already acknowledged — nothing to record.')
+        setTicks(new Set()); setMatric(''); router.refresh()
+      } else toast(r.message)
     })
   }
 
@@ -90,20 +100,25 @@ export function RaClient({ name, options, mine, all, tz }: {
                   className={`mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-base text-default ${RING}`} />
               </label>
             </div>
-            <label className="block text-sm text-default">Which RA did you read?
-              <select value={documentId} onChange={(e) => setDocumentId(e.target.value)}
-                className={`mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-base text-default ${RING}`}>
-                <option value="">Select an RA…</option>
-                {options.documents.map((d) => (
-                  <option key={d.id} value={d.id} disabled={acked.includes(d.id)}>
-                    {d.name}{acked.includes(d.id) ? ' — acknowledged' : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button type="submit" disabled={!documentId || !matric.trim() || pending}
+            <div className="block text-sm text-default">
+              <p id={raListId} className="mb-1">Which RAs did you read?</p>
+              <div role="group" aria-labelledby={raListId}
+                className="mt-1 max-h-64 space-y-0.5 overflow-y-auto rounded-md border border-border bg-surface p-1.5">
+                {options.documents.map((d) => {
+                  const done = acked.includes(d.id)
+                  return (
+                    <label key={d.id} className={`flex items-center gap-2 rounded px-1.5 py-1 transition-colors focus-within:ring-2 focus-within:ring-[var(--ring-focus)] ${done ? '' : 'cursor-pointer hover:bg-hover'}`}>
+                      <input type="checkbox" checked={done || ticks.has(d.id)} disabled={done} onChange={() => toggle(d.id)}
+                        className="h-4 w-4 shrink-0 rounded border-border accent-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]" />
+                      <span className={`min-w-0 flex-1 truncate ${done ? 'text-subtle' : 'text-default'}`}>{d.name}{done ? ' — acknowledged' : ''}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+            <button type="submit" disabled={ticks.size === 0 || !matric.trim() || pending}
               className={`inline-flex items-center rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-on transition-colors hover:bg-accent-hover disabled:opacity-50 ${RING}`}>
-              I have read this RA
+              I have read the selected RAs
             </button>
           </form>
         </section>
