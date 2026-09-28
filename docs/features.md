@@ -194,8 +194,12 @@ current bytes.
 
 **Sorting and export.** The listing's columns — name, folder, size, uploader,
 created — sort the table with a tri-state click: ascending, descending, then
-back to the default newest-first order (client-side and ephemeral, never
-persisted). Ticking rows arms an `Export (n)` button that downloads the
+back to the default newest-first order (the sort is client-side and ephemeral,
+never persisted). The name column resizes too: on fine-pointer devices a drag
+handle beside the Name header widens it — the width is remembered per browser
+(localStorage), a double-click resets it, and the listing scrolls horizontally
+only while widened. Truncated names show a tooltip with the full name. Ticking
+rows arms an `Export (n)` button that downloads the
 selection as a zip whose entries keep their folder structure (`folder/name.ext`,
 duplicates deduplicated with a ` (2)` suffix); any signed-in role can export,
 each file ships its current version only, and one export is capped at 100
@@ -204,10 +208,11 @@ files or 1 GB.
 ## RA acknowledgments
 
 A compliance record at `/ra` (nav row "RA", in the Workspace section): members
-and guests log that they have read a risk assessment — name locked from their
-signed-in account, matric number typed in, and the document picked from the
-Files folder named exactly `RA` (the folder convention that marks a file as a
-risk assessment). One acknowledgment per person per document. Admins see
+and guests log that they have read risk assessments — name locked from their
+signed-in account, matric number typed in once, and the RAs ticked from a
+checkbox list of the Files folder named exactly `RA` (the folder convention
+that marks a file as a risk assessment); one submit records them all. One
+acknowledgment per person per document. Admins see
 everyone's records and export them as CSV (`/api/ra/acknowledgments/csv`); a
 record outlives its document, keeping a snapshot of the name rather than a
 link, so deleting the file never erases the acknowledgment.

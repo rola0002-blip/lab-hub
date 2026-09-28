@@ -412,3 +412,85 @@ test('a guest can tick and export (read-any posture)', async ({ browser }) => {
   expect(res.headers()['content-type']).toBe('application/zip')
   expect((await res.body()).subarray(0, 4).toString('latin1')).toBe('PK\x03\x04')
 })
+
+// ── wave 19 — Name column drag-resize + persisted width ──────────────────────
+test('name column drag-resizes, persists across reloads, and resets', async ({ browser }) => {
+  const page = await newPage(browser)
+  await signIn(page, ADMIN.email, ADMIN.password)
+  await page.goto('/files')
+  await waitForHydration(page)
+  // 90+ chars: long enough that a ~500px column still truncates it, so the
+  // "fully scrolled right shows the whole name" assertion below is meaningful.
+  const LONG = 'hbn growth run 0012 four-inch wafer transfer notes recipe log and post-run SEM recheck notes.pdf'
+  await page.locator('input[type=file]').first().setInputFiles({ name: LONG, mimeType: 'application/pdf', buffer: PDF })
+  const anchor = page.getByRole('link', { name: LONG })
+  await expect(anchor).toBeVisible()
+
+  // 1. The truncated anchor carries its full name as a title tooltip
+  //    (the version-history-drawer idiom).
+  await expect(anchor).toHaveAttribute('title', LONG)
+
+  // 2. The resize affordance renders on this fine-pointer viewport.
+  const handle = page.getByRole('button', { name: /Resize name column/ })
+  await expect(handle).toBeVisible()
+
+  // 3. Drag to a measured target. The gesture is delta-anchored (width-at-grab
+  //    + pointer travel), so the commit = pointer x − column left − 15 (the
+  //    gap-3 + half-handle offset): a pointer at (left + 640) commits ~625px.
+  //    At this viewport the Name column squeezes to ~100px next to the
+  //    fixed-width siblings, so a fixed +340px drag would undershoot the 500px
+  //    bar. The wrapper's left edge stays fixed while the column grows
+  //    rightward (card at scrollLeft 0). Asserted as a relationship, never
+  //    exact px (font/viewport dependent).
+  const box = (await handle.boundingBox())!
+  const cx = box.x + box.width / 2
+  const cy = box.y + box.height / 2
+  const headLeft = await page.getByRole('button', { name: /^Sort by name/ }).evaluate((el) => el.parentElement!.getBoundingClientRect().left)
+  await page.mouse.move(cx, cy)
+  await page.mouse.down()
+  await page.mouse.move(headLeft + 640, cy, { steps: 10 })
+  await page.mouse.up()
+  // The row's name wrapper (the anchor's parent div) carries the minWidth.
+  await expect.poll(() => anchor.evaluate((el) => parseInt(el.parentElement!.style.minWidth, 10) || 0)).toBeGreaterThanOrEqual(500)
+  // The listing card became a horizontal scroller (scrollWidth > clientWidth)…
+  await expect.poll(() => anchor.evaluate((el) => {
+    const card = el.closest('.overflow-x-auto')
+    return card ? card.scrollWidth - card.clientWidth : -1
+  })).toBeGreaterThan(0)
+  // …and scrolled fully right, the long name no longer truncates.
+  await anchor.evaluate((el) => {
+    const card = el.closest('.overflow-x-auto')
+    if (card) card.scrollLeft = card.scrollWidth
+  })
+  await expect.poll(() => anchor.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1)
+
+  // 3.5 While the width is STORED (post-drag, pre-reset) the card carries
+  //     overflow-x-auto, making it a clip ancestor for menu.tsx's popover —
+  //     accepted in this user-chosen state, capped to the CARD bounds (tall
+  //     here). The row menu must still open at natural height — at least two
+  //     items' worth, never the 1px sliver of the v0.10.0 regression — and a
+  //     real click must land on an item. 'History' is the harmless pick: it
+  //     opens the read-only version drawer, closable without side effects.
+  await page.getByRole('button', { name: `File ${LONG} actions` }).click()
+  const menu = page.getByRole('menu')
+  await expect(menu).toBeVisible()
+  await expect.poll(() => menu.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(64)
+  await page.getByRole('menuitem', { name: 'History' }).click()
+  const drawer = page.getByRole('dialog', { name: 'Version history' })
+  await expect(drawer).toBeVisible()
+  await drawer.getByRole('button', { name: 'Close version history' }).click()
+  await expect(drawer).toHaveCount(0)
+
+  // 4. The width survives a reload (localStorage, not component state) — same
+  //    context, so the session cookie carries the sign-in through the reload.
+  await page.reload()
+  await waitForHydration(page)
+  await expect.poll(() => page.getByRole('link', { name: LONG }).evaluate((el) => parseInt(el.parentElement!.style.minWidth, 10) || 0)).toBeGreaterThanOrEqual(500)
+
+  // 5. Double-click resets: the minWidth is gone AND the card is back to the
+  //    default (unclipped) state — no overflow-x-auto ancestor at all, which is
+  //    also what keeps the wave-18 menu-clip contract in the default state.
+  await handle.dblclick()
+  await expect.poll(() => anchor.evaluate((el) => el.parentElement!.style.minWidth)).toBe('')
+  await expect.poll(() => anchor.evaluate((el) => el.closest('.overflow-x-auto') === null)).toBe(true)
+})
