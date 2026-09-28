@@ -434,10 +434,6 @@ test('name column drag-resizes, persists across reloads, and resets', async ({ b
   const handle = page.getByRole('button', { name: /Resize name column/ })
   await expect(handle).toBeVisible()
 
-  // 3. Drag ~340px right. The gesture floors at the handle's own offset from
-  //    the column's left edge (~360px at this viewport), so the commit lands
-  //    near the 720px ceiling — well above the 500px relationship bar. Asserted
-  //    as a relationship, never exact px (font/viewport dependent).
   // 3. Drag to a measured target. The gesture is delta-anchored (width-at-grab
   //    + pointer travel), so the commit = pointer x − column left − 15 (the
   //    gap-3 + half-handle offset): a pointer at (left + 640) commits ~625px.
