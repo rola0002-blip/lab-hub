@@ -54,10 +54,17 @@ export function alertRendering(inShell: boolean): { chime: boolean; toast: boole
 // is pure and stateless: two qualifying messages 1 ms apart both alert.
 // `popup` (Task 9) is the browser OS-popup arm: on for browsers/PWA, never
 // in the desktop shell (the shell's own native toast is the popup there).
+// `swPopup` routes standalone mobile PWAs (iOS 16.4+, Android Chrome)
+// through registration.showNotification — those platforms throw on the
+// page-context Notification constructor, so the SW is the only OS surface.
 // Permission + per-device pref are environment concerns — the funnel gates
 // on them at fire time, keeping this pure.
-export function decideAlert(msgQualifies: boolean, inShell: boolean): { chime: boolean; toast: boolean; popup: boolean } {
-  if (!msgQualifies) return { chime: false, toast: false, popup: false }
+export function decideAlert(
+  msgQualifies: boolean,
+  inShell: boolean,
+  inStandalone = false,
+): { chime: boolean; toast: boolean; popup: boolean; swPopup: boolean } {
+  if (!msgQualifies) return { chime: false, toast: false, popup: false, swPopup: false }
   const { chime, toast } = alertRendering(inShell)
-  return { chime, toast, popup: !inShell }
+  return { chime, toast, popup: !inShell && !inStandalone, swPopup: !inShell && inStandalone }
 }
