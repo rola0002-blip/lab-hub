@@ -1,3 +1,5 @@
+import { healPlan, PUSH_ENDPOINT_KEY } from './push-heal'
+
 // VAPID public keys are base64url; the Push API wants the raw bytes as a BufferSource.
 // Back the view with a concrete ArrayBuffer so it satisfies applicationServerKey's type.
 function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
@@ -26,9 +28,49 @@ export async function subscribeToPush(): Promise<boolean> {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ endpoint: j.endpoint, keys: j.keys }),
     })
+    // Remember the endpoint so the launch-time heal (below) can detect
+    // rotation with zero network calls in the steady state.
+    if (typeof window !== 'undefined' && j.endpoint) window.localStorage.setItem(PUSH_ENDPOINT_KEY, j.endpoint)
     return true
   } catch (e) {
     console.warn('Push opt-in failed:', e)
     return false
+  }
+}
+
+// Best-effort launch-time heal (wired from SwRegister): re-POST a rotated
+// endpoint the server may not know, or re-mint a granted-but-missing
+// subscription (iOS silent revocation). Never throws; every failure is
+// swallowed — the wizard remains the explicit recovery path.
+export async function healPushSubscription(): Promise<void> {
+  try {
+    if (typeof window === 'undefined' || '__TAURI__' in window) return
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+    if (!('serviceWorker' in navigator)) return
+    const reg = await navigator.serviceWorker.ready
+    const sub = await reg.pushManager.getSubscription()
+    const current = sub?.toJSON().endpoint ?? null
+    const plan = healPlan({
+      permissionGranted: true,
+      storedEndpoint: window.localStorage.getItem(PUSH_ENDPOINT_KEY),
+      currentEndpoint: current,
+    })
+    if (plan === 'skip') return
+    if (plan === 'resubscribe') {
+      if (await subscribeToPush()) {
+        const again = await reg.pushManager.getSubscription()
+        const ep = again?.toJSON().endpoint
+        if (ep) window.localStorage.setItem(PUSH_ENDPOINT_KEY, ep)
+      }
+      return
+    }
+    const j = sub!.toJSON()
+    await fetch('/api/push/subscription', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint: j.endpoint, keys: j.keys }),
+    })
+    if (j.endpoint) window.localStorage.setItem(PUSH_ENDPOINT_KEY, j.endpoint)
+  } catch (e) {
+    console.warn('Push heal failed:', e)
   }
 }
