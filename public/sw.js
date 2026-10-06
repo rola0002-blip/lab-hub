@@ -48,8 +48,9 @@ function urlBase64ToUint8Array(base64) {
 
 // Apple/Google rotate push endpoints; without a resubscribe the subscription
 // silently dies (the server only prunes on 404/410). Re-mint, re-POST, and
-// best-effort delete the superseded endpoint. Same-origin fetches carry the
-// session cookie, so the POST authenticates like the wizard's own subscribe.
+// best-effort delete the superseded endpoint once the re-POST succeeded.
+// Same-origin fetches carry the session cookie, so the POST authenticates
+// like the wizard's own subscribe.
 self.addEventListener('pushsubscriptionchange', (event) => {
   event.waitUntil(
     (async () => {
@@ -62,11 +63,13 @@ self.addEventListener('pushsubscriptionchange', (event) => {
         applicationServerKey: urlBase64ToUint8Array(publicKey),
       })
       const j = sub.toJSON()
-      await fetch('/api/push/subscription', {
+      const res = await fetch('/api/push/subscription', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ endpoint: j.endpoint, keys: j.keys }),
       })
-      if (oldEndpoint && oldEndpoint !== j.endpoint) {
+      // fetch doesn't throw on 4xx/5xx — only retire the old endpoint once
+      // the server actually accepted the replacement.
+      if (res.ok && oldEndpoint && oldEndpoint !== j.endpoint) {
         await fetch('/api/push/subscription', {
           method: 'DELETE', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ endpoint: oldEndpoint }),

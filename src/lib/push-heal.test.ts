@@ -9,7 +9,11 @@ describe('healPlan', () => {
     expect(healPlan({ permissionGranted: false, storedEndpoint: ep, currentEndpoint: ep })).toBe('skip')
   })
 
-  it('granted but subscription gone (iOS silent revocation) → resubscribe', () => {
+  it('never opted in (granted permission but no stored marker and no subscription — the wizard Browser popups step) → skip', () => {
+    expect(healPlan({ permissionGranted: true, storedEndpoint: null, currentEndpoint: null })).toBe('skip')
+  })
+
+  it('revoked after opt-in (stored marker but subscription gone — iOS silent revocation) → resubscribe', () => {
     expect(healPlan({ permissionGranted: true, storedEndpoint: ep, currentEndpoint: null })).toBe('resubscribe')
   })
 

@@ -24,13 +24,14 @@ export async function subscribeToPush(): Promise<boolean> {
       userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey),
     })
     const j = sub.toJSON()
-    await fetch('/api/push/subscription', {
+    const res = await fetch('/api/push/subscription', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ endpoint: j.endpoint, keys: j.keys }),
     })
     // Remember the endpoint so the launch-time heal (below) can detect
-    // rotation with zero network calls in the steady state.
-    if (typeof window !== 'undefined' && j.endpoint) window.localStorage.setItem(PUSH_ENDPOINT_KEY, j.endpoint)
+    // rotation with zero network calls in the steady state. fetch doesn't
+    // throw on 4xx/5xx — only record the marker once the server accepted it.
+    if (res.ok && typeof window !== 'undefined' && j.endpoint) window.localStorage.setItem(PUSH_ENDPOINT_KEY, j.endpoint)
     return true
   } catch (e) {
     console.warn('Push opt-in failed:', e)
@@ -39,9 +40,10 @@ export async function subscribeToPush(): Promise<boolean> {
 }
 
 // Best-effort launch-time heal (wired from SwRegister): re-POST a rotated
-// endpoint the server may not know, or re-mint a granted-but-missing
-// subscription (iOS silent revocation). Never throws; every failure is
-// swallowed — the wizard remains the explicit recovery path.
+// endpoint the server may not know, or re-mint a subscription that vanished
+// despite the stored marker's proof of prior opt-in (iOS silent revocation).
+// Never throws; every failure is swallowed — the wizard remains the explicit
+// recovery path.
 export async function healPushSubscription(): Promise<void> {
   try {
     if (typeof window === 'undefined' || '__TAURI__' in window) return
@@ -57,19 +59,19 @@ export async function healPushSubscription(): Promise<void> {
     })
     if (plan === 'skip') return
     if (plan === 'resubscribe') {
-      if (await subscribeToPush()) {
-        const again = await reg.pushManager.getSubscription()
-        const ep = again?.toJSON().endpoint
-        if (ep) window.localStorage.setItem(PUSH_ENDPOINT_KEY, ep)
-      }
+      // subscribeToPush records the marker itself — and only after a POST the
+      // server accepted — so there is nothing to persist here.
+      await subscribeToPush()
       return
     }
     const j = sub!.toJSON()
-    await fetch('/api/push/subscription', {
+    const res = await fetch('/api/push/subscription', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ endpoint: j.endpoint, keys: j.keys }),
     })
-    if (j.endpoint) window.localStorage.setItem(PUSH_ENDPOINT_KEY, j.endpoint)
+    // Same guard as subscribeToPush: fetch doesn't throw on 4xx/5xx, so the
+    // marker must only be recorded once the POST actually succeeded.
+    if (res.ok && j.endpoint) window.localStorage.setItem(PUSH_ENDPOINT_KEY, j.endpoint)
   } catch (e) {
     console.warn('Push heal failed:', e)
   }
