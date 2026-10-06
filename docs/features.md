@@ -31,18 +31,25 @@ app in the tray no longer silences the phone). A direct @mention still
 pierces mute. Bot posts never alert. Since v0.32 there is no burst
 throttle: two qualifying messages a moment apart both alert, and the
 realtime SSE stream is the single sound source — the bell's 30-second poll
-only refreshes the badge count. Browser tabs and the PWA can also raise a
-native OS popup per incoming message through the browser's Notification
-API: the setup wizard's "Browser popups" step grants the permission (with
-a sample popup), a "Message popups" switch on the profile page opts this
-one browser out without touching the phone, and each popup is tagged per
-conversation so a burst replaces the last popup instead of stacking. In
-browsers the popup is silent — the chime is the sound there — and
-clicking it opens the conversation. The desktop shell is unchanged: its
+only refreshes the badge count. Browser tabs can also raise a native OS
+popup per incoming message through the `Notification` constructor; an
+installed PWA (iOS 16.4+, Android) raises the same popup through the
+service worker's `registration.showNotification()` — the only surface
+those platforms allow. The semantics are identical either way: the setup
+wizard's "Browser popups" step grants the permission (with a sample
+popup), a "Message popups" switch on the profile page opts this one
+browser out without touching the phone, and each popup is tagged per
+conversation so a burst replaces the last popup instead of stacking. The
+popup is silent — the chime is the sound — and clicking or tapping it
+opens the conversation. The desktop shell is unchanged: its
 native toast carries the OS sound while the in-page chime stays silent,
 so every alert makes exactly one sound. Push is squashed server-side to
 one buzz per conversation per minute and collapsed client-side by the
-service-worker tag. Members enable phone push via the bell's "Set up
+service-worker tag, and subscriptions self-heal: the service worker
+resubscribes on `pushsubscriptionchange`, and each app launch re-posts
+rotated endpoints and re-mints granted-but-missing subscriptions (iOS
+revokes push silently), so phone alerts survive OS-side churn without
+re-running the wizard. Members enable phone push via the bell's "Set up
 notifications" wizard, which ends with a real test ping; the admin
 settings page shows who has push enabled.
 A 60-minute unread-chat digest email follows (at most one per hour;
@@ -291,4 +298,6 @@ unconfigured. PWA install + Web Push are dormant on plain HTTP and light up unch
 day an HTTPS ingress is added. The install UX ships in-app: an "Install app"
 row in the bell tray (native sheet on Android, an Add-to-Home-Screen guide on
 iOS), a cached offline shell served by the service worker, and (Android) a
-launcher unread badge mirroring the tab-title count.
+launcher unread badge mirroring the tab-title count. Foreground message
+pop-outs work inside the installed app (iOS 16.4+, Android), raised via
+the service worker — the only surface those platforms allow.
