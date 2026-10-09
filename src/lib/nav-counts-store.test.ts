@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { navCountsSnapshot, subscribeNavCounts, refreshNavCounts, _resetNavCountsForTests } from './nav-counts-store'
+import { navCountsSnapshot, subscribeNavCounts, refreshNavCounts, clearNavCounts, _resetNavCountsForTests } from './nav-counts-store'
 
 const ok = (body: unknown) => (async () => ({ ok: true, json: async () => body })) as unknown as typeof fetch
 
@@ -31,6 +31,21 @@ describe('nav counts store', () => {
     await refreshNavCounts(ok({ approvals: 0, trainingRequests: 0 }))
     release(); await p1
     expect(navCountsSnapshot()).toEqual({ approvals: 0, trainingRequests: 0 })
+  })
+  it('clear forgets the counts, notifies, and discards a response issued before it', async () => {
+    await refreshNavCounts(ok({ approvals: 3, trainingRequests: 1 }))
+    let calls = 0
+    subscribeNavCounts(() => { calls++ })
+    let release!: () => void
+    const slow = (async () => { await new Promise<void>((r) => { release = r }); return { ok: true, json: async () => ({ approvals: 5, trainingRequests: 5 }) } }) as unknown as typeof fetch
+    const p = refreshNavCounts(slow)
+    clearNavCounts()
+    expect(navCountsSnapshot()).toBeNull()
+    expect(calls).toBe(1)
+    release(); await p
+    expect(navCountsSnapshot()).toBeNull()
+    clearNavCounts() // already clear: no further notification
+    expect(calls).toBe(1)
   })
   it('unsubscribe stops notifications', async () => {
     let calls = 0

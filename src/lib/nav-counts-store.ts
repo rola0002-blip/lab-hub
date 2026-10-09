@@ -36,6 +36,18 @@ export async function refreshNavCounts(fetchImpl: typeof fetch = fetch): Promise
   } catch { /* transient — the next trigger retries */ }
 }
 
+// Forget the counts when the app shell unmounts. Sign-out is a client navigation
+// (router.push), so this module state outlives the layout; without the clear,
+// the NEXT user to sign in on this tab would paint the previous user's counts
+// until the first refetch landed. Bumping seq also discards any response still
+// in flight from the previous session.
+export function clearNavCounts(): void {
+  seq++
+  if (current === null) return
+  current = null
+  for (const fn of listeners) fn()
+}
+
 export function _resetNavCountsForTests(): void {
   current = null
   seq = 0

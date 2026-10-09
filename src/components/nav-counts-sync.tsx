@@ -1,7 +1,7 @@
 'use client'
 import { useEffect } from 'react'
 import { usePathname } from 'next/navigation'
-import { refreshNavCounts } from '@/lib/nav-counts-store'
+import { clearNavCounts, refreshNavCounts } from '@/lib/nav-counts-store'
 import { useEvents } from './use-events'
 
 // W20-D: the ONE place the sidebar pending counts refetch — mounted once in the
@@ -28,6 +28,9 @@ export function NavCountsSync() {
       clearInterval(t)
     }
   }, [])
+  // Leaving the app shell (a client-side sign-out): forget the counts so the next
+  // user to sign in on this tab never sees them (clearNavCounts).
+  useEffect(() => clearNavCounts, [])
   // useEvents re-reads this closure every render (ref'd handler), so no
   // useCallback is needed; the hook shares the tab's one EventSource.
   useEvents((e) => { if (e.t === 'notif' || e.t === 'reconnect') void refreshNavCounts() })
