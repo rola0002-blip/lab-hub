@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-10-09
+
 ### Added
 - **Mobile PWA foreground pop-outs** — new-message alerts in an installed
   home-screen app (iOS 16.4+, Android) raise an OS notification through the
