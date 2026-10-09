@@ -67,8 +67,8 @@ export function shouldPingFromMessage(
   if (m.muted) return false
   if (m.kind === 'system') return false
   // W20-C: bot posts never alert here — a bot DM's paired bell row is its alert
-  // (rowAlerts), and #lab-updates announcements are FYI. This is the documented
-  // "Bot posts never alert" contract fanout's push already keeps.
+  // (rowAlerts), and #lab-updates announcements are FYI. fanout's push keeps the
+  // same rule; the row's own push (notify) is the bot DM's single phone alert.
   if (m.authorId === COLOSSUS_BOT_ID) return false
   if (m.authorId === opts.selfId) return false // never ping your own echo
   if (opts.focused && m.cid === opts.openCid) return false // you are looking at it
@@ -84,10 +84,12 @@ export function alertRendering(inShell: boolean): { chime: boolean; toast: boole
   return { chime: !inShell, toast: inShell }
 }
 
-// Task 8 (v0.32.0): the consolidated alert decision for ONE message. The SSE
-// msg path calls this for EVERY qualifying inbound message — the old 3 s
-// PingThrottle is gone ("whenever there are new messages"), so the decision
-// is pure and stateless: two qualifying messages 1 ms apart both alert.
+// Task 8 (v0.32.0): the consolidated alert decision for ONE alert. The bell's
+// raiseAlert funnel calls this for EVERY qualifying inbound message (SSE msg
+// path) and, since W20-C, for every alertable bell row (msgQualifies = true per
+// row) — the old 3 s PingThrottle is gone ("whenever there are new messages"),
+// so the decision is pure and stateless: two qualifying alerts 1 ms apart both
+// alert.
 // `popup` (Task 9) is the browser OS-popup arm: on for browsers/PWA, never
 // in the desktop shell (the shell's own native toast is the popup there).
 // `swPopup` routes standalone mobile PWAs (iOS 16.4+, Android Chrome)

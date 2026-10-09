@@ -46,7 +46,8 @@ export async function fanoutMessage(
     const pushTitle = c.type === 'DM' ? args.senderName : `#${c.name ?? 'channel'}`
     const pushBody = `${args.senderName}: ${preview}`
     const pushUrl = `/chat/${c.id}?msg=${m.id}`
-    // Bot senders (LabHub Bot announcements) must never buzz phones.
+    // Bot senders never buzz phones from THIS push (W20-C): a bot DM that carries
+    // a notification row pushes once via notify() (isRowAlertable) instead.
     const senderRow = await prisma.user.findUnique({ where: { id: m.userId }, select: { isSystem: true } })
     const senderIsBot = senderRow?.isSystem ?? false
 
@@ -58,7 +59,7 @@ export async function fanoutMessage(
       const shouldBell = direct || (!member.muted && (c.type === 'DM' || m.mentionsChannel))
       // ALERT (2026-09, Slack-like "all new messages"): every message in an
       // unmuted conversation pings; a direct mention pierces mute. Bot
-      // senders never alert.
+      // senders never alert from here — a bot DM's bell row alerts via notify().
       const shouldAlert = !senderIsBot && (direct || !member.muted)
       if (shouldBell) {
         const type = c.type === 'DM' ? 'message_dm' as const : 'message_mention' as const

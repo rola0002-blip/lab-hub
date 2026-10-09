@@ -4,6 +4,7 @@ import { resetDb, makeUser, makeIssue, seedSystem } from '../factories'
 import { pingDueSoonIssues } from '@/lib/jobs'
 import { setDueDate } from '@/features/issues/issue-service'
 import { COLOSSUS_BOT_ID } from '@/features/bot'
+import { isRowAlertable } from '@/lib/chime'
 
 // The message_dm bell lands a few DB round-trips after the (fire-and-forget) fanout
 // dispatched by the unsuppressed bot DM — poll for it rather than assert synchronously
@@ -31,6 +32,13 @@ describe('issue due-soon job', () => {
     // Prove the message_dm bell actually lands (settle-barrier), not just the row.
     await until(async () => (await prisma.notification.count({ where: { userId: u.id, type: 'message_dm' } })) === 1)
     expect(await prisma.notification.count({ where: { userId: u.id, type: 'message_dm' } })).toBe(1)
+    // W20-C: pin the real chain bot.dmUser → fanout → message_dm row → alertable.
+    // The bot DM pops out / pushes ONLY because its row carries the bot's
+    // senderId — if fanout ever dropped it, due-soon DMs would go silent.
+    const row = await prisma.notification.findFirstOrThrow({ where: { userId: u.id, type: 'message_dm' } })
+    const payload = row.payload as Record<string, unknown>
+    expect(payload.senderId).toBe(COLOSSUS_BOT_ID)
+    expect(isRowAlertable({ type: row.type, payload })).toBe(true)
     const after = await prisma.issue.findUniqueOrThrow({ where: { id: i.id } })
     expect(after.dueSoonPingedAt).not.toBeNull()
     expect(await pingDueSoonIssues()).toBe(0) // fires once

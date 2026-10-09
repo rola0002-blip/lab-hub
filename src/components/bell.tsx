@@ -179,8 +179,9 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
   // the sound there; no double audio. The popup is per-device optional
   // (labhub.popups) and needs the plain Notification permission the wizard's
   // Browser popups step grants. The shell toast renders regardless of the
-  // sound toggle — `silent` carries the toggle — while in browsers sounds-off
-  // still means total silence. `__TAURI__` exists only in the Tauri
+  // sound toggle — `silent` carries the toggle (and opts.chime, so a row batch
+  // sounds once there too) — while in browsers sounds-off still means total
+  // silence. `__TAURI__` exists only in the Tauri
   // webviews, and the app never requests direct Notification permission in
   // browsers outside that wizard step, so a 'granted' permission in a normal
   // browser means either the wizard step or a push subscription whose toasts
@@ -192,9 +193,12 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
     if (toast && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       try {
         // silent: respects the per-device sound toggle — the shell's OS
-        // toast sound is the sound (the chime never runs here). The shim
+        // toast sound is the sound (the chime never runs here). opts.chime
+        // === false silences all but the last toast of a row batch, the same
+        // one-sound-per-batch rule the browser chime follows (the msg path
+        // passes no opts, so a message toast keeps its sound). The shim
         // ignores tag/url: a shell toast focuses the right server, no deep link.
-        const o: NotificationOptions = { body: alert.body, silent: !soundsRef.current }
+        const o: NotificationOptions = { body: alert.body, silent: !soundsRef.current || opts.chime === false }
         o.tag = alert.tag
         const t = new Notification(alert.title, o)
         t.onclick = () => window.focus()

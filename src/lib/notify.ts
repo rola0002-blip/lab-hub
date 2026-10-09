@@ -47,15 +47,20 @@ export async function notify(
     // the OS replaces rather than stacks. isRowAlertable is the predicate the bell
     // shares: human chat rows are pushed by fanout, bot chat rows only here.
     // Fire-and-forget (sendPush never throws; a rejection is swallowed): a
-    // push-service round trip must never hold the caller's action open.
-    if (!user.banned && !user.isSystem && isRowAlertable({ type, payload })
-      && !isActive(userId) && tryReservePush(userId, `notif:${type}`)) {
-      void sendPush(userId, {
-        title: notificationTitle(type),
-        body: typeof payload.message === 'string' ? payload.message.slice(0, 200) : '',
-        url: notificationHref({ type, payload: payload as Record<string, string> }) ?? '/',
-        tag: `notif:${type}`,
-      }).catch(() => {})
+    // push-service round trip must never hold the caller's action open. The
+    // block has its own try, so a push failure can never cost the email below.
+    try {
+      if (!user.banned && !user.isSystem && isRowAlertable({ type, payload })
+        && !isActive(userId) && tryReservePush(userId, `notif:${type}`)) {
+        void sendPush(userId, {
+          title: notificationTitle(type),
+          body: typeof payload.message === 'string' ? payload.message.slice(0, 200) : '',
+          url: notificationHref({ type, payload: payload as Record<string, string> }) ?? '/',
+          tag: `notif:${type}`,
+        }).catch(() => {})
+      }
+    } catch (e) {
+      console.error('notify push failed', e)
     }
     if (email) {
       // emailedAt (the "exempt from the 60-min digest" latch) is stamped only

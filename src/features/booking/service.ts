@@ -96,12 +96,17 @@ export async function buildPolicyInput(
   }
 }
 
-export async function notifyManagersOfPending(equipmentId: string, requesterName: string, when: string): Promise<void> {
+// The requester is excluded from both fan-outs: with approvalPolicy 'ALL' an
+// admin's or manager's own booking goes PENDING, and since W20-C a bell row pops
+// out and pushes — alerting someone about their own request is noise. They still
+// see it in /approvals and the nav count (they may decide it).
+export async function notifyManagersOfPending(equipmentId: string, requesterId: string, requesterName: string, when: string): Promise<void> {
   const { name: orgName } = await orgInfo()
   const eq = await prisma.equipment.findUniqueOrThrow({ where: { id: equipmentId } })
   const managers = await prisma.equipmentManager.findMany({ where: { equipmentId }, select: { userId: true } })
   const admins = await prisma.user.findMany({ where: { role: 'admin', banned: false }, select: { id: true } })
   const targets = [...new Set([...managers.map((m) => m.userId), ...admins.map((a) => a.id)])]
+    .filter((id) => id !== requesterId)
   const mail = bookingPendingEmail(orgName, requesterName, eq.name, when)
   await Promise.all(targets.map((id) =>
     notify(id, 'booking_pending', { message: `${requesterName} requested ${eq.name}, ${when}` }, mail),
@@ -166,7 +171,7 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
     if (pending) {
       const { tz } = await orgInfo()
       const user = await prisma.user.findUniqueOrThrow({ where: { id: input.userId } })
-      await notifyManagersOfPending(input.equipmentId, user.name, formatRange(input.startsAt, input.endsAt, tz))
+      await notifyManagersOfPending(input.equipmentId, input.userId, user.name, formatRange(input.startsAt, input.endsAt, tz))
     }
     return { ok: true, bookingId: booking.id, pending }
   } catch (e) {
@@ -310,7 +315,7 @@ export async function createRecurringBooking(input: CreateRecurringInput): Promi
     if (pending) {
       const user = await prisma.user.findUniqueOrThrow({ where: { id: input.userId } })
       const first = formatRange(occurrences[0].startsAt, occurrences[0].endsAt, tz)
-      await notifyManagersOfPending(input.equipmentId, user.name, `recurring ×${occurrences.length}, first ${first}`)
+      await notifyManagersOfPending(input.equipmentId, input.userId, user.name, `recurring ×${occurrences.length}, first ${first}`)
     }
     return { ok: true, ruleId: rule.id, count: occurrences.length, pending }
   } catch (e) {

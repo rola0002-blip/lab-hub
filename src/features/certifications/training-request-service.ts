@@ -29,10 +29,14 @@ export async function createTrainingRequest(args: { userId: string; equipmentId:
   if (existing) return { ok: false, message: 'You already have an open training request for this instrument.' }
   await prisma.trainingRequest.create({ data: { userId: args.userId, equipmentId: args.equipmentId, note: args.note?.slice(0, 500) } })
   // Notify managers + admins (the booking-pending fan-out pattern): bell row +
-  // suppressed bot DM, one notification lane per person.
+  // suppressed bot DM, one notification lane per person. The requester is
+  // excluded even when they are an admin or a manager of this instrument — they
+  // made the request, and since W20-C a bell row pops out and pushes, so a
+  // self-alert is noise. They still see it in the Requests queue and its count.
   const managers = await prisma.equipmentManager.findMany({ where: { equipmentId: args.equipmentId }, select: { userId: true } })
   const admins = await prisma.user.findMany({ where: { role: 'admin', banned: false, isSystem: false }, select: { id: true } })
   const targets = [...new Set([...managers.map((m) => m.userId), ...admins.map((a) => a.id)])]
+    .filter((id) => id !== args.userId)
   await Promise.all(targets.map((id) =>
     notify(id, 'training_request', { message: `${user.name} requested training on ${eq.name}${args.note ? ` — "${args.note.slice(0, 120)}"` : ''}` })))
   await Promise.all(targets.map((id) =>
