@@ -50,6 +50,16 @@ export async function listPendingRequests(forUserId: string): Promise<RequestRow
   return rows.map((r) => ({ id: r.id, userId: r.userId, userName: r.user.name, equipmentId: r.equipmentId, equipmentName: r.equipment.name, note: r.note, createdAt: r.createdAt }))
 }
 
+// W20-D: the Requests queue's size for this viewer — scoped exactly like
+// listPendingRequests (admins every PENDING request; a manager only their
+// instruments'; the decide gate is isManagerOf, which folds admins in).
+export async function countPendingRequests(user: { id: string; role: string }): Promise<number> {
+  if (user.role === 'guest') return 0
+  return prisma.trainingRequest.count({
+    where: { status: 'PENDING', ...(user.role !== 'admin' ? { equipment: { managers: { some: { userId: user.id } } } } : {}) },
+  })
+}
+
 export async function decideTrainingRequest(args: { requestId: string; byId: string; decision: 'grant' | 'decline'; reason?: string; trainedOn?: string }): Promise<{ ok: boolean; message?: string }> {
   const req = await prisma.trainingRequest.findUnique({ where: { id: args.requestId }, include: { equipment: { select: { name: true } }, user: { select: { name: true } } } })
   if (!req || req.status !== 'PENDING') return { ok: false, message: 'This request is no longer pending.' }

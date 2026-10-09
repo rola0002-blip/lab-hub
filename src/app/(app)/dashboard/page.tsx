@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { DueDate } from '@/components/issues/due-date'
 import { StalledChip } from '@/components/issues/stalled-chip'
 import { BOOKING_VARIANT } from '@/features/booking/chip'
+import { countPendingApprovals } from '@/features/booking/service'
 import { listIssues } from '@/features/issues/issue-service'
 import { listProjects, type ProjectDto } from '@/features/issues/project-service'
 import { listDocuments } from '@/features/documents/document-service'
@@ -46,18 +47,12 @@ export default async function DashboardPage() {
   const dayStart = startOfOrgDay(now, tz)
   const dayEnd = new Date(+dayStart + 86_400_000)
 
-  const managedIds = me.role === 'admin'
-    ? undefined
-    : (await prisma.equipmentManager.findMany({ where: { userId: me.id }, select: { equipmentId: true } })).map((m) => m.equipmentId)
-
   const [mine, pendingCount, todayBookings, myIssuesRaw, projects, labMember, recentDocs] = await Promise.all([
     prisma.booking.findMany({
       where: { userId: me.id, status: { in: ['PENDING', 'CONFIRMED'] }, endsAt: { gte: now } },
       include: { equipment: { select: { name: true } } }, orderBy: { startsAt: 'asc' }, take: 5,
     }),
-    me.role === 'guest' ? Promise.resolve(0) : prisma.booking.count({
-      where: { status: 'PENDING', ...(managedIds ? { equipmentId: { in: managedIds } } : {}) },
-    }),
+    countPendingApprovals(me),
     prisma.booking.findMany({
       where: { status: 'CONFIRMED', startsAt: { lt: dayEnd }, endsAt: { gt: dayStart } },
       include: { equipment: { select: { name: true } }, user: { select: { name: true } } }, orderBy: { startsAt: 'asc' },
@@ -97,8 +92,9 @@ export default async function DashboardPage() {
   // would itself leak that the channel has traffic.
   const labPosts = labMember
     ? await prisma.message.findMany({
-        // kind:'user' is the codebase-wide "this row is CONTENT" gate (unread counting,
-        // message-service.ts:229; the pane's own rendering, message-pane.tsx:346).
+        // kind:'user' is the codebase-wide "this row is CONTENT" gate (unread counting
+        // in message-service.ts; the pane's own rendering, the `m.kind === 'system'`
+        // branch in message-pane.tsx).
         // #lab-updates is a PUBLIC channel, so emitSystemRow (conversation-service.ts:24)
         // writes 'X joined'/'X was added' event rows into it via joinPublicChannel and
         // addMembers — parentId:null and deletedAt:null, so without this term they would
@@ -129,6 +125,7 @@ export default async function DashboardPage() {
       <p className="text-sm font-medium text-subtle">01 — Dashboard</p>
       <h1 className="mt-1 text-2xl font-semibold text-default">Welcome, {me.name}</h1>
 
+      {/* W20-D: same unit as the Approvals nav badge — a recurring series is one request */}
       {me.role !== 'guest' && pendingCount > 0 && (
         <Link href="/approvals"
           className="mt-4 flex items-center gap-2 rounded-xl border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10 p-4 text-sm font-medium text-default transition-colors hover:bg-[var(--color-warning)]/15">

@@ -13,6 +13,7 @@ import { evaluateBooking, type Verdict, type Role, type PolicyInput } from './po
 import { expandWeekly, NonexistentWallTimeError } from './recurrence'
 import { wallMinutes } from '@/lib/wall-time'
 import { canStartSession, canEndSession } from './session'
+import { approvalUnits } from './approval-units'
 
 export type BookingListItem = {
   id: string; equipmentId: string; startsAt: Date; endsAt: Date
@@ -173,6 +174,23 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
     if (isOverlapError(e)) return { ok: false, error: 'slot_taken' }
     throw e
   }
+}
+
+// W20-D: the /approvals queue's size for this viewer, in the queue's own unit
+// (approvalUnits: one per single, one per recurring series). Scope mirrors the
+// page exactly: admins see every PENDING booking, a manager only the instruments
+// they manage, everyone else (incl. a member managing nothing, and guests) 0.
+export async function countPendingApprovals(user: { id: string; role: string }): Promise<number> {
+  if (user.role === 'guest') return 0
+  const managedIds = user.role === 'admin'
+    ? undefined
+    : (await prisma.equipmentManager.findMany({ where: { userId: user.id }, select: { equipmentId: true } })).map((m) => m.equipmentId)
+  if (managedIds && managedIds.length === 0) return 0
+  const rows = await prisma.booking.findMany({
+    where: { status: 'PENDING', ...(managedIds ? { equipmentId: { in: managedIds } } : {}) },
+    select: { recurrenceRuleId: true },
+  })
+  return approvalUnits(rows)
 }
 
 export async function decideBooking(args: { bookingId: string; deciderId: string; decision: 'approve' | 'reject'; reason?: string }): Promise<{ ok: boolean; message?: string }> {
