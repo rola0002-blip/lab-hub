@@ -17,6 +17,8 @@ import { ImageViewerDialog } from '@/components/chat/image-viewer-dialog'
 import { ProjectUpdateModal } from '@/components/issues/project-update-modal'
 import { IssueHotkeys } from '@/components/issues/issue-hotkeys'
 import { ChatTitleBadge } from '@/components/chat-title-badge'
+import { NavCountsSync } from '@/components/nav-counts-sync'
+import { loadNavCounts } from '@/lib/nav-counts'
 import { SwRegister } from '@/components/sw-register'
 import { UserMenu } from '@/components/user-menu'
 import { ToastHost } from '@/components/ui/toast'
@@ -28,6 +30,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const org = await requireSetup()
   const user = await requireUser()
   const chatUnread = await totalUnread(user.id)
+  // W20-D: SSR seed for the Approvals / Certifications nav badges (guests: zeros,
+  // no query); NavCountsSync keeps them live after hydration.
+  const navCounts = await loadNavCounts(user)
   // Read the saved per-user theme + avatar directly (not part of the session
   // contract); ThemeSync applies the theme on the device only when localStorage
   // has no choice yet.
@@ -58,6 +63,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             org={{ name: org.name, logoPath: org.logoPath }}
             user={{ id: user.id, name: user.name, image: pref?.image ?? null }}
             unread={chatUnread}
+            navSeed={navCounts}
             role={user.role}
             version={APP_VERSION}
           />
@@ -107,6 +113,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {/* Unread-chats "(N)" tab title — mounted once in the app shell (inside
           ChatProvider); same live derivation as the sidebar Chat badge. */}
       <ChatTitleBadge />
+      {/* Live pending counts for the nav badges — one refetcher per tab (W20-D). */}
+      {user.role !== 'guest' && <NavCountsSync />}
       {/* Registers the service worker (push + offline shell) on every load. */}
       <SwRegister />
       {/* Global toast host — mounted once so `toast()` works from any page. */}

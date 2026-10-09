@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { prisma } from '@/lib/db'
 import { resetDb, makeUser, makeEquipment, hoursFromNow } from '../factories'
-import { expirePendingBookings, sendBookingReminders, digestUnreadChat } from '@/lib/jobs'
+import { expirePendingBookings, sendBookingReminders, digestUnreadChat, BOOKING_REMINDER_LEAD_MS } from '@/lib/jobs'
 import { setManagers } from '@/features/equipment/service'
 
 describe('scheduler jobs', () => {
@@ -22,15 +22,28 @@ describe('scheduler jobs', () => {
     expect(await prisma.notification.count({ where: { userId: mgr.id, type: 'booking_expired' } })).toBe(1)
   })
 
-  it('sends one reminder inside the 60-minute window, exactly once', async () => {
+  it('reminds once, inside the 15-minute log-on window, and says log-on is open', async () => {
+    expect(BOOKING_REMINDER_LEAD_MS).toBe(15 * 60_000) // == SESSION_EARLY_MS: remind when log-on opens
     const u = await makeUser()
     const eq = await makeEquipment()
-    await prisma.booking.create({ data: { userId: u.id, equipmentId: eq.id, purpose: 'x', status: 'CONFIRMED', startsAt: new Date(Date.now() + 30 * 60_000), endsAt: hoursFromNow(3) } })
+    const eq2 = await makeEquipment() // booking_no_overlap covers CONFIRMED: the 30-min row overlaps the 10-min one
+    await prisma.booking.create({ data: { userId: u.id, equipmentId: eq.id, purpose: 'x', status: 'CONFIRMED', startsAt: new Date(Date.now() + 10 * 60_000), endsAt: hoursFromNow(3) } })
+    await prisma.booking.create({ data: { userId: u.id, equipmentId: eq2.id, purpose: 'later', status: 'CONFIRMED', startsAt: new Date(Date.now() + 30 * 60_000), endsAt: hoursFromNow(4) } })
     await prisma.booking.create({ data: { userId: u.id, equipmentId: eq.id, purpose: 'far', status: 'CONFIRMED', startsAt: hoursFromNow(5), endsAt: hoursFromNow(6) } })
     expect(await sendBookingReminders()).toBe(1)
     expect(await sendBookingReminders()).toBe(0) // reminderSentAt set — no double send
-    expect(await prisma.notification.count({ where: { userId: u.id, type: 'booking_reminder' } })).toBe(1)
+    const n = await prisma.notification.findFirstOrThrow({ where: { userId: u.id, type: 'booking_reminder' } })
+    expect((n.payload as { message: string }).message).toMatch(/— you can log on now\.$/)
     expect(await prisma.emailOutbox.count()).toBe(1)
+  })
+
+  it('a booking 30 min out is reminded only once it enters the window', async () => {
+    const u = await makeUser()
+    const eq = await makeEquipment()
+    const now = new Date()
+    await prisma.booking.create({ data: { userId: u.id, equipmentId: eq.id, purpose: 'x', status: 'CONFIRMED', startsAt: new Date(+now + 30 * 60_000), endsAt: new Date(+now + 90 * 60_000) } })
+    expect(await sendBookingReminders(now)).toBe(0)
+    expect(await sendBookingReminders(new Date(+now + 16 * 60_000))).toBe(1) // 14 min before start
   })
 
   it('digestUnreadChat emails one digest per user, exactly once, excluding bot senders and fresh rows', async () => {

@@ -13,6 +13,7 @@ import { promptAtFor, shouldPrompt, promptDigestLine } from '@/features/issues/u
 import { isEffectiveLead } from '@/features/issues/project-health'
 import { isIssueStalled, STARTED_STATUSES } from '@/features/issues/stale'
 import { lastTouchedByIssue } from '@/features/issues/issue-service'
+import { SESSION_EARLY_MS } from '@/features/booking/session'
 import * as bot from '@/features/bot'
 
 export async function expirePendingBookings(now: Date = new Date()): Promise<number> {
@@ -39,9 +40,17 @@ export async function expirePendingBookings(now: Date = new Date()): Promise<num
   return flipped
 }
 
+// W20-B: remind when log-on OPENS — the lead IS the session early window (15 min),
+// so "you can log on now" is true by construction (canStartSession admits a
+// CONFIRMED booking from startsAt − SESSION_EARLY_MS). The job ticks every 60 s,
+// so a reminder lands 14–15 min ahead; a booking confirmed inside the window is
+// reminded on the next tick. No booking edit/move path exists, so reminderSentAt
+// never needs a reset.
+export const BOOKING_REMINDER_LEAD_MS = SESSION_EARLY_MS
+
 export async function sendBookingReminders(now: Date = new Date()): Promise<number> {
   const soon = await prisma.booking.findMany({
-    where: { status: 'CONFIRMED', reminderSentAt: null, startsAt: { gt: now, lte: new Date(now.getTime() + 60 * 60_000) } },
+    where: { status: 'CONFIRMED', reminderSentAt: null, startsAt: { gt: now, lte: new Date(now.getTime() + BOOKING_REMINDER_LEAD_MS) } },
     include: { equipment: { select: { name: true } } },
   })
   if (soon.length === 0) return 0
@@ -49,9 +58,9 @@ export async function sendBookingReminders(now: Date = new Date()): Promise<numb
   const tz = org?.timezone ?? 'Asia/Singapore'
   for (const b of soon) {
     const when = formatRange(b.startsAt, b.endsAt, tz)
-    await notify(b.userId, 'booking_reminder', { message: `Upcoming: ${b.equipment.name} ${when}` },
+    await notify(b.userId, 'booking_reminder', { message: `Upcoming: ${b.equipment.name} ${when} — you can log on now.` },
       bookingReminderEmail(org?.name ?? 'LabHub', b.equipment.name, when))
-    await bot.dmUser(b.userId, `Upcoming: ${b.equipment.name} ${when}.`, { suppress: true })
+    await bot.dmUser(b.userId, `Upcoming: ${b.equipment.name} ${when} — you can log on now.`, { suppress: true })
     await prisma.booking.update({ where: { id: b.id }, data: { reminderSentAt: now } })
   }
   return soon.length
@@ -263,7 +272,7 @@ export function startJobs(): void {
   }
   setInterval(guard(() => drainOutbox()), 60_000)
   setInterval(guard(() => expirePendingBookings()), 60_000)
-  setInterval(guard(() => sendBookingReminders()), 300_000)
+  setInterval(guard(() => sendBookingReminders()), 60_000) // W20-B: a 15-min lead needs minute resolution
   setInterval(guard(() => pingDueSoonIssues()), 300_000)
   setInterval(guard(() => pingOverdueIssues()), 300_000)
   setInterval(guard(() => promptProjectUpdates()), 300_000)

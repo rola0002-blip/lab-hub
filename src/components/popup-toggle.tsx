@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { popupPref, setPopupPref } from '@/lib/popup-pref'
 
-// Profile Appearance row (Task 9): the Message popups switch mirrors
+// Profile Appearance row (Task 9): the Notification popups switch mirrors
 // SoundsToggle's visual language and per-device posture, but its value only
 // takes effect once the browser granted the plain Notification permission —
 // so until then the switch disables and an Enable button (or, when blocked,
@@ -42,7 +42,7 @@ export function PopupToggle() {
           Enable
         </button>
       )}
-      <button type="button" role="switch" aria-checked={active} aria-label="Message popups" disabled={!granted}
+      <button type="button" role="switch" aria-checked={active} aria-label="Notification popups" disabled={!granted}
         onClick={() => { setOn(!on); setPopupPref(!on) }}
         className={`relative h-6 w-11 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] disabled:cursor-not-allowed disabled:opacity-50 ${active ? 'border-transparent bg-accent' : 'border-border bg-active'}`}>
         <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-surface transition-all ${active ? 'left-[1.375rem]' : 'left-0.5'}`} />

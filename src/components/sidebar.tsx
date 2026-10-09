@@ -1,4 +1,5 @@
 'use client'
+import { useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
@@ -14,6 +15,7 @@ import { sumUnread } from '@/features/chat/unread'
 import { authClient } from '@/lib/auth-client'
 import { openFeedbackComposer } from '@/lib/feedback-composer-store'
 import { isNavItemActive } from '@/lib/nav-active'
+import { navCountsSnapshot, subscribeNavCounts, type NavCounts } from '@/lib/nav-counts-store'
 import type { Role } from '@/lib/session'
 
 export type NavItem = { href: string; label: string; icon: LucideIcon }
@@ -65,10 +67,11 @@ export function isNavVisible(href: string, role: Role): boolean {
   return true
 }
 
-export function Sidebar({ org, user, unread, role, version }: {
+export function Sidebar({ org, user, unread, navSeed, role, version }: {
   org: { name: string; logoPath: string | null }
   user: { id: string; name: string; image: string | null }
   unread: number
+  navSeed: NavCounts
   role: Role
   version: string
 }) {
@@ -78,7 +81,7 @@ export function Sidebar({ org, user, unread, role, version }: {
   // and the App Router preserves that layout segment across every client navigation —
   // so it never changes for the life of the SPA session, and reading a conversation
   // left the badge stale. Derive it from the live chat store instead. Sidebar is already
-  // a client component, and it already sits inside ChatProvider (layout.tsx:41), so this
+  // a client component, and it already sits inside ChatProvider ((app)/layout.tsx), so this
   // costs no provider hoisting and no extra subscription.
   const { conversations } = useChat()
   // The SSR seed holds until the store's first fetch lands, so the badge never flashes
@@ -87,6 +90,10 @@ export function Sidebar({ org, user, unread, role, version }: {
   // rather than a new store field, and it is provably safe: totalUnread returns 0 for a
   // user with no memberships, so both branches coincide in the only ambiguous case.
   const live = conversations.length > 0 ? sumUnread(conversations) : unread
+  // W20-D: live Approvals / Certifications pending counts — the store's value once
+  // NavCountsSync's first fetch lands, the layout's SSR seed until then (server
+  // snapshot null ⇒ the seed paints on both sides of hydration; the Chat seed rule).
+  const nav = useSyncExternalStore(subscribeNavCounts, navCountsSnapshot, () => null) ?? navSeed
   // Flat href list feeds the longest-prefix-wins active test (all sections,
   // regardless of role visibility, so activeness is stable across roles).
   const allHrefs = NAV_SECTIONS.flatMap((s) => s.items.map((i) => i.href))
@@ -153,6 +160,8 @@ export function Sidebar({ org, user, unread, role, version }: {
                         <Icon size={15} aria-hidden />
                         <span className="truncate">{label}</span>
                         {label === 'Chat' && <Badge count={live} />}
+                        {href === '/approvals' && <Badge count={nav.approvals} />}
+                        {href === '/certifications' && <Badge count={nav.trainingRequests} />}
                       </Link>
                     </li>
                   )

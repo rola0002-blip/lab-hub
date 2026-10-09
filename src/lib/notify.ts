@@ -3,6 +3,12 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from './db'
 import { enqueueEmail } from './email/outbox'
 import { emitEvent } from './events'
+import { isActive } from './activity'
+import { tryReservePush } from './push-squelch'
+import { sendPush } from './push'
+import { isRowAlertable } from './chime'
+import { notificationTitle } from './notification-label'
+import { notificationHref } from './notification-href'
 
 export type NotificationType =
   | 'booking_pending' | 'booking_decided' | 'booking_cancelled_maintenance'
@@ -33,6 +39,29 @@ export async function notify(
     // (InputJsonValue) is narrower than Record<string, unknown>, so cast here.
     const row = await prisma.notification.create({ data: { userId, type, payload: payload as Prisma.InputJsonValue } })
     void emitEvent({ t: 'notif', uid: userId }) // live bell push; emitEvent never throws
+    // W20-C: every row that does not already alert through chat fan-out pushes to
+    // an IDLE user's devices — the fanout posture: activity-gated (an open tab or
+    // a tray app must not silence the phone; only real recent use may), one push
+    // per (user, type) per 60 s (the squelch key cannot collide with a cuid
+    // conversation id), and the same title/body/url/tag the in-app popup uses so
+    // the OS replaces rather than stacks. isRowAlertable is the predicate the bell
+    // shares: human chat rows are pushed by fanout, bot chat rows only here.
+    // Fire-and-forget (sendPush never throws; a rejection is swallowed): a
+    // push-service round trip must never hold the caller's action open. The
+    // block has its own try, so a push failure can never cost the email below.
+    try {
+      if (!user.banned && !user.isSystem && isRowAlertable({ type, payload })
+        && !isActive(userId) && tryReservePush(userId, `notif:${type}`)) {
+        void sendPush(userId, {
+          title: notificationTitle(type),
+          body: typeof payload.message === 'string' ? payload.message.slice(0, 200) : '',
+          url: notificationHref({ type, payload: payload as Record<string, string> }) ?? '/',
+          tag: `notif:${type}`,
+        }).catch(() => {})
+      }
+    } catch (e) {
+      console.error('notify push failed', e)
+    }
     if (email) {
       // emailedAt (the "exempt from the 60-min digest" latch) is stamped only
       // AFTER the enqueue resolves: stamping in the create would silently swallow

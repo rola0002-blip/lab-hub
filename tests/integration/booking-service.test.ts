@@ -1,12 +1,17 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { prisma } from '@/lib/db'
-import { resetDb, makeUser, makeEquipment, hoursFromNow } from '../factories'
+import { resetDb, makeUser, makeEquipment, hoursFromNow, seedSystem } from '../factories'
+import { COLOSSUS_BOT_ID } from '@/features/bot/ids'
 import { createBooking, decideBooking, cancelBooking, previewBooking } from '@/features/booking/service'
 import { setManagers } from '@/features/equipment/service'
 import { grantCertification } from '@/features/certifications/service'
 import { deactivateUser } from '@/features/people/service'
 
 const slot = (a: number, b: number) => ({ startsAt: hoursFromNow(a), endsAt: hoursFromNow(b) })
+
+// Bot-authored messages in the DM the bot shares with `userId` (bot-triggers idiom).
+const botDmCount = (userId: string) =>
+  prisma.message.count({ where: { userId: COLOSSUS_BOT_ID, conversation: { type: 'DM', members: { some: { userId } } } } })
 
 describe('createBooking', () => {
   beforeEach(resetDb)
@@ -27,6 +32,22 @@ describe('createBooking', () => {
     const r = await createBooking({ userId: g.id, equipmentId: eq.id, purpose: 'fyp', ...slot(24, 28) })
     expect(r).toMatchObject({ ok: true, pending: true })
     expect(await prisma.notification.count({ where: { userId: mgr.id, type: 'booking_pending' } })).toBe(1)
+  })
+
+  // W20-C review: on an 'ALL' instrument an admin's own booking goes PENDING;
+  // the bell row would pop out + push, so the requester is dropped from the
+  // fan-out while every other admin is still notified.
+  it("an admin's own ALL-policy booking notifies the other admins, never the booker", async () => {
+    await seedSystem() // the bot user, so the suppressed DMs actually deliver
+    const me = await makeUser({ role: 'admin' })
+    const other = await makeUser({ role: 'admin' })
+    const eq = await makeEquipment({ approvalPolicy: 'ALL' })
+    const r = await createBooking({ userId: me.id, equipmentId: eq.id, purpose: 'own run', ...slot(24, 28) })
+    expect(r).toMatchObject({ ok: true, pending: true })
+    expect(await prisma.notification.count({ where: { userId: me.id, type: 'booking_pending' } })).toBe(0)
+    expect(await botDmCount(me.id)).toBe(0)
+    expect(await prisma.notification.count({ where: { userId: other.id, type: 'booking_pending' } })).toBe(1)
+    expect(await botDmCount(other.id)).toBe(1)
   })
 
   it('policy blocks return the human message', async () => {

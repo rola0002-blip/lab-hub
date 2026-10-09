@@ -1,5 +1,5 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
-import { wipe, runWizard, signIn, ADMIN, createMemberViaInvite, acceptInvite, db } from './helpers'
+import { wipe, runWizard, signIn, ADMIN, createMemberViaInvite, acceptInvite, db, waitForHydration } from './helpers'
 
 // Per-context client IP. better-auth rate-limits /sign-in/email and /sign-up/email at 10/60 s
 // keyed by client IP; on localhost every request would otherwise share one bucket and the
@@ -922,5 +922,53 @@ test('21: jump-to-latest arrow — appears when scrolled up, jumps, counts new, 
   await expect(logMsg(page, 'new while away')).toBeVisible()
 
   await pageB.context().close()
+  await page.context().close()
+})
+
+test('22: day pills never stack — the next day pushes the previous pill off the top', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  const cid = await createChannel(page, 'history')
+  const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  // Local noon anchors keep every seeded row inside its own local day (Node and the
+  // browser share the machine timezone). Day A = two days ago (8 rows), day B =
+  // yesterday (40 rows — tall enough to read with day A above). 48 rows + the
+  // channel's system line stay inside the 50-row first page, so nothing pages.
+  const DAY = 86_400_000
+  const noon = new Date(); noon.setHours(12, 0, 0, 0)
+  const seed = (dayAgo: number, n: number, tag: string) => db.message.createMany({
+    data: Array.from({ length: n }, (_, i) => ({
+      conversationId: cid, userId: me.id, body: `${tag} row ${i}`,
+      createdAt: new Date(+noon - dayAgo * DAY + i * 60_000),
+    })),
+  })
+  await seed(2, 8, 'dayA')
+  await seed(1, 40, 'dayB')
+
+  await page.goto('/chat/' + cid)
+  await waitForHydration(page)
+  const log = page.getByRole('log', { name: 'Messages' })
+  await expect(log.getByText('dayB row 39')).toBeVisible()
+  await expect(log.getByText('dayA row 0')).toBeAttached()
+
+  // Scroll so the log's top edge sits 100 px below day B's first row (well past its
+  // pill), then list every STICKY element intersecting the top 48 px of the log.
+  // Anchors are structure-independent on purpose (the `[data-msg-id]` row + computed
+  // `position: sticky`), so the pre-fix flat layout fails on the assertion itself:
+  // there every passed pill pinned at top-2 together (day A's under day B's); now
+  // day A's pill left with day A's wrapper.
+  const pinned = await log.evaluate(async (el) => {
+    const rows = Array.from(el.querySelectorAll<HTMLElement>('[data-msg-id]'))
+    const b = rows.find((r) => r.textContent?.includes('dayB row 0'))!
+    el.scrollTop += b.getBoundingClientRect().top - el.getBoundingClientRect().top + 100
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+    const top = el.getBoundingClientRect().top
+    return Array.from(el.querySelectorAll<HTMLElement>('*'))
+      .filter((n) => getComputedStyle(n).position === 'sticky')
+      .filter((p) => { const r = p.getBoundingClientRect(); return r.bottom > top && r.top < top + 48 })
+      .map((p) => p.textContent?.trim() ?? '')
+  })
+  expect(pinned).toEqual(['Yesterday'])
+
   await page.context().close()
 })

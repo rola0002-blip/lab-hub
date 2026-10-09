@@ -66,6 +66,11 @@ test('member requests training; admin grants; matrix flips and member is notifie
   expect(row.note).toBe('Need hBN growth training before Thursday runs')
   expect(row.status).toBe('PENDING')
 
+  // W20-D: the admin's Certifications nav badge lights live from the request's
+  // notif event — the admin page has sat on /people since the invite, untouched.
+  const certBadge = adminPage.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: /^Certifications/ }).locator('span.rounded-full')
+  await expect(certBadge).toHaveText('1')
+
   // ── The admin decides under Certifications → Requests ──────────────────────
   await adminPage.goto('/certifications')
   await waitForHydration(adminPage)
@@ -87,6 +92,7 @@ test('member requests training; admin grants; matrix flips and member is notifie
     new Intl.DateTimeFormat('en-CA', { timeZone: org.timezone }).format(new Date()))
   await grant.getByRole('button', { name: 'Grant' }).click()
   await expect(grant).not.toBeVisible()
+  await expect(certBadge).toHaveCount(0) // decided → the badge clears (not the bell)
   // The decided row falls out of the queue.
   await expect(requests.getByRole('cell', { name: 'Noor', exact: true })).not.toBeVisible()
 

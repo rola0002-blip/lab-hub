@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
-import { wipe, runWizard, signIn, ADMIN, waitForHydration, db, createMemberViaInvite, acceptInvite } from './helpers'
+import { wipe, runWizard, signIn, ADMIN, waitForHydration, db, createMemberViaInvite, acceptInvite, seedSystem } from './helpers'
+import { COLOSSUS_BOT_ID } from '@/features/bot/ids'
 
 test.beforeEach(async ({ page }) => {
   await wipe()
@@ -286,6 +287,223 @@ test('OS popups: once per message, same-tag replacement, silent when focused or 
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __notifs?: unknown[] }).__notifs?.length ?? 0), { timeout: 20_000 })
     .toBe(3)
+
+  await bobCtx.close()
+})
+
+// Installed-PWA popouts (iOS 16.4+/Android): those platforms throw on the
+// page-context Notification constructor, so the funnel must route through
+// registration.showNotification. Standalone mode + the SW registration are
+// faked via addInitScript; the constructor is ALSO faked so the spec can
+// prove it was never used. Covers: SW popouts once per message, ≤100-char
+// slice, silent:true, tag=cid, data.url deep link, zero constructor calls,
+// and silence while the conversation is open and focused.
+test('standalone PWA: popouts render via the service worker, never the constructor', async ({ page, browser }) => {
+  test.setTimeout(120_000)
+  const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+
+  const token = await createMemberViaInvite(page, 'swbob@lab.test', 'member')
+  const bobCtx = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': '10.20.31.10' } })
+  const bob = await bobCtx.newPage()
+  await acceptInvite(bob, token, 'SW Bob', 'MemberPass!1234')
+  const bobUser = await db.user.findFirstOrThrow({ where: { email: 'swbob@lab.test' } })
+
+  const conv = await db.conversation.create({ data: { type: 'CHANNEL', name: 'sw-chan', createdById: me.id } })
+  await db.conversationMember.createMany({
+    data: [
+      { conversationId: conv.id, userId: me.id },
+      { conversationId: conv.id, userId: bobUser.id },
+    ],
+  })
+
+  // Viewer: standalone display-mode, a stubbed SW registration (with enough
+  // surface for SwRegister/heal to no-op), a recording showNotification, and
+  // a recording constructor that must stay at zero calls.
+  await page.addInitScript(() => {
+    const w = window as unknown as {
+      __swNotifs: { title: string; body: string; tag: string; silent?: boolean; data?: { url?: string } }[]
+      __ctorNotifs: unknown[]
+      Notification: unknown
+    }
+    // The recordings must survive the viewer's later full-page navigation
+    // into the conversation (init scripts re-run per document and would
+    // otherwise reset both arrays mid-spec); sessionStorage is per-tab and
+    // persists across same-origin navigations.
+    w.__swNotifs = JSON.parse(sessionStorage.getItem('e2e.swNotifs') ?? '[]')
+    w.__ctorNotifs = JSON.parse(sessionStorage.getItem('e2e.ctorNotifs') ?? '[]')
+    class FakeNotification {
+      static permission = 'granted'
+      static requestPermission() { return Promise.resolve('granted') }
+      onclick: (() => void) | null = null
+      close() {}
+      constructor(title: string, opts: NotificationOptions) {
+        w.__ctorNotifs.push({ title, opts })
+        sessionStorage.setItem('e2e.ctorNotifs', JSON.stringify(w.__ctorNotifs))
+      }
+    }
+    w.Notification = FakeNotification
+    Object.defineProperty(window, 'matchMedia', {
+      value: (q: string) => ({
+        matches: q === '(display-mode: standalone)', media: q, onchange: null,
+        addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {},
+        dispatchEvent() { return false },
+      }),
+    })
+    const sw = {
+      showNotification: (title: string, opts: NotificationOptions) => {
+        w.__swNotifs.push({ title, body: opts.body ?? '', tag: opts.tag ?? '', silent: opts.silent ?? undefined, data: opts.data as { url?: string } | undefined })
+        sessionStorage.setItem('e2e.swNotifs', JSON.stringify(w.__swNotifs))
+      },
+      // SwRegister calls register(); the launch heal (if present) reads
+      // pushManager — a stable stored endpoint keeps it a silent no-op.
+      register: () => Promise.resolve(sw),
+      pushManager: { getSubscription: () => Promise.resolve({ toJSON: () => ({ endpoint: 'https://fcm.googleapis.com/fcm/send/e2e-stable', keys: { p256dh: 'k', auth: 'a' } }) }) },
+    }
+    localStorage.setItem('labhub.push-endpoint', 'https://fcm.googleapis.com/fcm/send/e2e-stable')
+    // `register` must sit on the container too: SwRegister calls
+    // navigator.serviceWorker.register('/sw.js') whenever 'serviceWorker' in
+    // navigator holds (which this fake needs, for the funnel's gate) — a
+    // missing register() throws synchronously and crashes hydration.
+    Object.defineProperty(navigator, 'serviceWorker', { value: { ready: Promise.resolve(sw), register: () => Promise.resolve(sw) }, configurable: true })
+  })
+
+  const convLoaded = page.waitForResponse(async (r) => {
+    if (!r.url().includes('/api/chat/conversations')) return false
+    const d = (await r.json()) as { conversations?: { id: string }[] }
+    return (d.conversations?.map((c) => c.id) ?? []).includes(conv.id)
+  }, { timeout: 30_000 })
+  await page.goto('/dashboard')
+  await waitForHydration(page)
+  await convLoaded
+
+  await bob.goto('/chat/' + conv.id)
+  await expect(bob.getByRole('heading', { name: '#sw-chan' })).toBeVisible()
+  const box = bob.getByPlaceholder('Write a message…')
+  await box.fill('sw one')
+  await box.press('Enter')
+  await bob.waitForTimeout(500)
+  await box.fill('sw two')
+  await box.press('Enter')
+
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __swNotifs?: unknown[] }).__swNotifs?.length ?? 0), { timeout: 20_000 })
+    .toBe(2)
+  const swNotifs = await page.evaluate(() => (window as unknown as { __swNotifs: { title: string; body: string; tag: string; silent?: boolean; data?: { url?: string } }[] }).__swNotifs)
+  for (const n of swNotifs) {
+    expect(n.title).toBe('#sw-chan')
+    expect(n.tag).toBe(conv.id) // tag=cid: same-conversation replacement
+    expect(n.silent).toBe(true) // the chime is the sound — no double audio
+    expect(n.body.length).toBeLessThanOrEqual(100)
+    expect(n.body.startsWith('SW Bob: ')).toBe(true)
+    expect(n.data?.url).toBe('/chat/' + conv.id) // notificationclick deep link
+  }
+  // The constructor arm must never fire in standalone mode.
+  expect(await page.evaluate(() => (window as unknown as { __ctorNotifs: unknown[] }).__ctorNotifs.length)).toBe(0)
+
+  // Open AND focused → no popout. The viewer must first ENTER the
+  // conversation (the Task 9 spec got there via the popup's onclick nav):
+  // from /dashboard there is no Messages log and openCid is null, so nothing
+  // would suppress — the phase below would prove nothing.
+  await page.goto('/chat/' + conv.id)
+  await waitForHydration(page)
+  await expect(page.getByRole('heading', { name: '#sw-chan' })).toBeVisible()
+  // Assert the focus precondition first: a focus-less tab would make
+  // suppression look like success for nothing.
+  await page.bringToFront()
+  await expect.poll(() => page.evaluate(() => document.hasFocus())).toBe(true)
+  await box.fill('while you read')
+  await box.press('Enter')
+  await expect(page.getByRole('log', { name: 'Messages' }).getByText('while you read')).toBeVisible({ timeout: 20_000 })
+  await page.waitForTimeout(500)
+  expect(await page.evaluate(() => (window as unknown as { __swNotifs: unknown[] }).__swNotifs.length)).toBe(2)
+
+  await bobCtx.close()
+})
+
+// W20-C: a bell ROW pops out exactly once, and its paired LabHub Bot DM never
+// adds a second popup. Training requests are the probe: createTrainingRequest
+// writes a training_request row for every admin AND a suppressed bot DM. The
+// second request runs AFTER the admin's chat store knows the bot DM (reload +
+// conversations gate) — before W20-C that DM's msg event raised a second popup
+// titled "LabHub Bot".
+test('bell rows pop out once; the paired bot DM stays silent', async ({ page, browser }) => {
+  test.setTimeout(120_000)
+  await seedSystem()
+  const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  const xps = await db.equipment.create({ data: { name: 'XPS', certificationRequired: true, approvalPolicy: 'NONE' } })
+  const afm = await db.equipment.create({ data: { name: 'AFM', certificationRequired: true, approvalPolicy: 'NONE' } })
+
+  const token = await createMemberViaInvite(page, 'rowbob@lab.test', 'member')
+  const bobCtx = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': '10.20.31.11' } })
+  const bob = await bobCtx.newPage()
+  await acceptInvite(bob, token, 'Row Bob', 'MemberPass!1234')
+
+  await page.addInitScript(() => {
+    const w = window as unknown as {
+      __notifs: { title: string; body: string; tag: string; silent?: boolean }[]
+      __notifInstances: { onclick: (() => void) | null }[]
+      Notification: unknown
+    }
+    w.__notifs = []
+    w.__notifInstances = []
+    class FakeNotification {
+      static permission = 'granted'
+      static requestPermission() { return Promise.resolve('granted') }
+      onclick: (() => void) | null = null
+      close() {}
+      constructor(title: string, opts: NotificationOptions) {
+        w.__notifs.push({ title, body: opts.body ?? '', tag: opts.tag ?? '', silent: opts.silent ?? undefined })
+        w.__notifInstances.push(this)
+      }
+    }
+    w.Notification = FakeNotification
+  })
+  const notifs = () => page.evaluate(() => (window as unknown as { __notifs: { title: string; body: string; tag: string; silent?: boolean }[] }).__notifs)
+  await page.goto('/dashboard')
+  await waitForHydration(page)
+
+  const requestTraining = async (eqId: string, name: string) => {
+    await bob.goto(`/booking/${eqId}`)
+    await waitForHydration(bob)
+    await bob.getByRole('main').getByRole('button', { name: 'Request training' }).click()
+    const ask = bob.getByRole('dialog', { name: `Request training — ${name}` })
+    await ask.getByRole('button', { name: 'Send request' }).click()
+    await expect(bob.getByText('Training request sent.')).toBeVisible()
+  }
+
+  // ── First request: the row pops out (title/body/tag/silent) ──────────────────
+  await requestTraining(xps.id, 'XPS')
+  await expect.poll(async () => (await notifs()).length, { timeout: 20_000 }).toBe(1)
+  const [first] = await notifs()
+  expect(first.title).toBe('Training request')
+  expect(first.body).toContain('Row Bob requested training on XPS')
+  expect(first.tag).toBe('notif:training_request')
+  expect(first.silent).toBe(true)
+
+  // ── Make the admin's chat store know the bot DM, then request again ─────────
+  const botDm = await db.conversation.findFirstOrThrow({
+    where: { type: 'DM', AND: [{ members: { some: { userId: me.id } } }, { members: { some: { userId: COLOSSUS_BOT_ID } } }] },
+  })
+  const convLoaded = page.waitForResponse(async (r) => {
+    if (!r.url().includes('/api/chat/conversations')) return false
+    const d = (await r.json()) as { conversations?: { id: string }[] }
+    return (d.conversations ?? []).some((c) => c.id === botDm.id)
+  }, { timeout: 30_000 })
+  await page.reload()
+  await waitForHydration(page)
+  await convLoaded
+
+  await requestTraining(afm.id, 'AFM')
+  await expect.poll(async () => (await notifs()).length, { timeout: 20_000 }).toBe(1)
+  await page.waitForTimeout(1_500) // quiet gap: a bot-DM popup would land here
+  const after = await notifs()
+  expect(after).toHaveLength(1)
+  expect(after[0].body).toContain('AFM')
+  expect(after.some((n) => n.title === 'LabHub Bot')).toBe(false)
+
+  // ── Clicking the popup lands on the row's target ────────────────────────────
+  await page.evaluate(() => (window as unknown as { __notifInstances: { onclick: (() => void) | null }[] }).__notifInstances[0].onclick?.())
+  await page.waitForURL('**/certifications')
 
   await bobCtx.close()
 })

@@ -56,8 +56,10 @@ Details: [docs/desktop.md](docs/desktop.md).
 ## Mobile app (PWA)
 
 LabHub installs on phones as a progressive web app — a home-screen icon,
-fullscreen, with push notifications for every unmuted message once you've
-been idle for two minutes (a direct @mention still pierces mute). The server must be
+fullscreen, with push notifications for every unmuted message and every bell
+notification (booking requests and reminders, issue assignments, approvals)
+once you've been idle for two minutes (a direct @mention still pierces mute).
+The server must be
 reachable over HTTPS (service workers and push require a secure context); the
 Cloudflare Tunnel option above provides it.
 
@@ -75,8 +77,8 @@ Cloudflare Tunnel option above provides it.
   from the bell.
 
 Members who complete the bell's **Set up notifications** wizard (install,
-permission, test ping) receive sounded push for every unmuted message
-whenever they are idle or away — the same Slack-like behavior as the
+permission, test ping) receive sounded push for every unmuted message and
+every bell notification whenever they are idle or away — the same Slack-like behavior as the
 desktop app.
 
 ## What's inside

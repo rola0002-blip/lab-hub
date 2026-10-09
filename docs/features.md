@@ -27,22 +27,40 @@ notifications (Slack-like, 2026-09): every message in an unmuted
 conversation alerts the moment it lands — in-app chime plus desktop toast
 while a member is at a keyboard, and Web Push to every subscribed device
 once the member has been idle for 2 minutes (an open tab or the desktop
-app in the tray no longer silences the phone). A direct @mention still
-pierces mute. Bot posts never alert. Since v0.32 there is no burst
+app in the tray no longer silences the phone). A direct @mention in a
+muted conversation still lands in the bell and still pushes to an idle
+member; in-app it does not chime or pop out. Bot posts never alert. Since v0.32 there is no burst
 throttle: two qualifying messages a moment apart both alert, and the
-realtime SSE stream is the single sound source — the bell's 30-second poll
-only refreshes the badge count. Browser tabs and the PWA can also raise a
-native OS popup per incoming message through the browser's Notification
-API: the setup wizard's "Browser popups" step grants the permission (with
-a sample popup), a "Message popups" switch on the profile page opts this
-one browser out without touching the phone, and each popup is tagged per
-conversation so a burst replaces the last popup instead of stacking. In
-browsers the popup is silent — the chime is the sound there — and
-clicking it opens the conversation. The desktop shell is unchanged: its
+realtime SSE stream is the single sound source for messages. Since v0.35
+every other bell notification alerts the same way — booking requests,
+decisions and reminders, issue assignments, mentions and comments,
+training requests, feedback, channel invites — from its bell row: the
+in-app popup and chime fire when the row lands (diffed against a
+watermark, so each row alerts once; at most three per refresh, and rows
+older than 15 minutes only update the badge), and an idle member gets a
+Web Push with the same title, text, link and per-type tag (one push per
+notification type per minute). A LabHub Bot DM that carries a notification
+alerts once, through that notification — bot messages themselves never
+alert. Browser tabs can also raise a native OS
+popup per incoming message through the `Notification` constructor; an
+installed PWA (iOS 16.4+, Android) raises the same popup through the
+service worker's `registration.showNotification()` — the only surface
+those platforms allow. The semantics are identical either way: the setup
+wizard's "Browser popups" step grants the permission (with a sample
+popup), a "Notification popups" switch on the profile page opts this one
+browser out without touching the phone, and each popup is tagged per
+conversation (or per notification type) so a burst replaces the last popup
+instead of stacking. The popup is silent — the chime is the sound — and
+clicking or tapping it opens the conversation or the notification's page.
+The desktop shell is unchanged: its
 native toast carries the OS sound while the in-page chime stays silent,
 so every alert makes exactly one sound. Push is squashed server-side to
 one buzz per conversation per minute and collapsed client-side by the
-service-worker tag. Members enable phone push via the bell's "Set up
+service-worker tag, and subscriptions self-heal: the service worker
+resubscribes on `pushsubscriptionchange`, and each app launch re-posts
+rotated endpoints and re-mints granted-but-missing subscriptions (iOS
+revokes push silently), so phone alerts survive OS-side churn without
+re-running the wizard. Members enable phone push via the bell's "Set up
 notifications" wizard, which ends with a real test ping; the admin
 settings page shows who has push enabled.
 A 60-minute unread-chat digest email follows (at most one per hour;
@@ -134,7 +152,12 @@ bookings, and maintenance windows — with overlap safety enforced by a
 Postgres exclusion constraint (`booking_no_overlap`); everything is
 stored UTC and rendered in the lab's timezone. Confirmed bookings can be
 logged on and off to record actual usage against booked time, and each
-instrument's full history exports to Excel.
+instrument's full history exports to Excel. A reminder (bell, LabHub Bot
+DM, email, and a phone push when idle) arrives 15 minutes before a
+confirmed slot — the moment log-on opens. Equipment managers and admins
+see live pending counts on the Approvals and Certifications nav rows
+(booking requests, with a recurring series counted once, and training
+requests they can decide); a count clears when the request is decided.
 
 **Daily access windows (v0.32).** Each instrument names the hours it is
 bookable, in the lab's timezone: the admin equipment form carries
@@ -163,7 +186,8 @@ add one to Google or Outlook with a quick-add link. No OAuth, no two-way sync, n
 cannot sign in — posts lab activity (new projects and issues, and completions) to
 the seeded `#lab-updates` channel that every member auto-joins, and DMs you about
 your own bookings and due-soon issues. Bot DMs for events you are already notified
-about arrive silent, preserving the one-bell rule. Recurring bookings now follow the
+about arrive silent, preserving the one-bell rule, and no bot message pops out on
+its own — the paired bell notification is the one alert. Recurring bookings now follow the
 same per-instrument approval policy as single bookings.
 
 ## Files — shared document library
@@ -291,4 +315,6 @@ unconfigured. PWA install + Web Push are dormant on plain HTTP and light up unch
 day an HTTPS ingress is added. The install UX ships in-app: an "Install app"
 row in the bell tray (native sheet on Android, an Add-to-Home-Screen guide on
 iOS), a cached offline shell served by the service worker, and (Android) a
-launcher unread badge mirroring the tab-title count.
+launcher unread badge mirroring the tab-title count. Foreground message
+pop-outs work inside the installed app (iOS 16.4+, Android), raised via
+the service worker — the only surface those platforms allow.
