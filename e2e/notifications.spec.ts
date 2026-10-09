@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
-import { wipe, runWizard, signIn, ADMIN, waitForHydration, db, createMemberViaInvite, acceptInvite } from './helpers'
+import { wipe, runWizard, signIn, ADMIN, waitForHydration, db, createMemberViaInvite, acceptInvite, seedSystem } from './helpers'
+import { COLOSSUS_BOT_ID } from '@/features/bot/ids'
 
 test.beforeEach(async ({ page }) => {
   await wipe()
@@ -415,6 +416,94 @@ test('standalone PWA: popouts render via the service worker, never the construct
   await expect(page.getByRole('log', { name: 'Messages' }).getByText('while you read')).toBeVisible({ timeout: 20_000 })
   await page.waitForTimeout(500)
   expect(await page.evaluate(() => (window as unknown as { __swNotifs: unknown[] }).__swNotifs.length)).toBe(2)
+
+  await bobCtx.close()
+})
+
+// W20-C: a bell ROW pops out exactly once, and its paired LabHub Bot DM never
+// adds a second popup. Training requests are the probe: createTrainingRequest
+// writes a training_request row for every admin AND a suppressed bot DM. The
+// second request runs AFTER the admin's chat store knows the bot DM (reload +
+// conversations gate) — before W20-C that DM's msg event raised a second popup
+// titled "LabHub Bot".
+test('bell rows pop out once; the paired bot DM stays silent', async ({ page, browser }) => {
+  test.setTimeout(120_000)
+  await seedSystem()
+  const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  const xps = await db.equipment.create({ data: { name: 'XPS', certificationRequired: true, approvalPolicy: 'NONE' } })
+  const afm = await db.equipment.create({ data: { name: 'AFM', certificationRequired: true, approvalPolicy: 'NONE' } })
+
+  const token = await createMemberViaInvite(page, 'rowbob@lab.test', 'member')
+  const bobCtx = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': '10.20.31.11' } })
+  const bob = await bobCtx.newPage()
+  await acceptInvite(bob, token, 'Row Bob', 'MemberPass!1234')
+
+  await page.addInitScript(() => {
+    const w = window as unknown as {
+      __notifs: { title: string; body: string; tag: string; silent?: boolean }[]
+      __notifInstances: { onclick: (() => void) | null }[]
+      Notification: unknown
+    }
+    w.__notifs = []
+    w.__notifInstances = []
+    class FakeNotification {
+      static permission = 'granted'
+      static requestPermission() { return Promise.resolve('granted') }
+      onclick: (() => void) | null = null
+      close() {}
+      constructor(title: string, opts: NotificationOptions) {
+        w.__notifs.push({ title, body: opts.body ?? '', tag: opts.tag ?? '', silent: opts.silent ?? undefined })
+        w.__notifInstances.push(this)
+      }
+    }
+    w.Notification = FakeNotification
+  })
+  const notifs = () => page.evaluate(() => (window as unknown as { __notifs: { title: string; body: string; tag: string; silent?: boolean }[] }).__notifs)
+  await page.goto('/dashboard')
+  await waitForHydration(page)
+
+  const requestTraining = async (eqId: string, name: string) => {
+    await bob.goto(`/booking/${eqId}`)
+    await waitForHydration(bob)
+    await bob.getByRole('main').getByRole('button', { name: 'Request training' }).click()
+    const ask = bob.getByRole('dialog', { name: `Request training — ${name}` })
+    await ask.getByRole('button', { name: 'Send request' }).click()
+    await expect(bob.getByText('Training request sent.')).toBeVisible()
+  }
+
+  // ── First request: the row pops out (title/body/tag/silent) ──────────────────
+  await requestTraining(xps.id, 'XPS')
+  await expect.poll(async () => (await notifs()).length, { timeout: 20_000 }).toBe(1)
+  const [first] = await notifs()
+  expect(first.title).toBe('Training request')
+  expect(first.body).toContain('Row Bob requested training on XPS')
+  expect(first.tag).toBe('notif:training_request')
+  expect(first.silent).toBe(true)
+
+  // ── Make the admin's chat store know the bot DM, then request again ─────────
+  const botDm = await db.conversation.findFirstOrThrow({
+    where: { type: 'DM', AND: [{ members: { some: { userId: me.id } } }, { members: { some: { userId: COLOSSUS_BOT_ID } } }] },
+  })
+  const convLoaded = page.waitForResponse(async (r) => {
+    if (!r.url().includes('/api/chat/conversations')) return false
+    const d = (await r.json()) as { conversations?: { id: string }[] }
+    return (d.conversations ?? []).some((c) => c.id === botDm.id)
+  }, { timeout: 30_000 })
+  await page.reload()
+  await waitForHydration(page)
+  await convLoaded
+
+  await requestTraining(afm.id, 'AFM')
+  await expect.poll(async () => (await notifs()).length, { timeout: 20_000 }).toBe(1)
+  await page.waitForTimeout(1_500) // quiet gap: a bot-DM popup would land here
+  const after = await notifs()
+  expect(after).toHaveLength(1)
+  expect(after[0].body).toContain('AFM')
+  expect(after.some((n) => n.title === 'LabHub Bot')).toBe(false)
+
+  // ── Clicking the popup lands on the row's target ────────────────────────────
+  await page.evaluate(() => (window as unknown as { __notifInstances: { onclick: (() => void) | null }[] }).__notifInstances[0].onclick?.())
+  await page.waitForURL('**/certifications')
 
   await bobCtx.close()
 })

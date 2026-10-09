@@ -50,7 +50,7 @@ export function NotificationWizard({ open, onClose }: { open: boolean; onClose: 
 
   // Task 9: the plain Notification API needs no VAPID keys or service worker
   // — this step stands alone. The grant doubles as the funnel's gate, and the
-  // sample popup shows exactly what new-message alerts will look like.
+  // sample popup shows exactly what alerts will look like.
   async function enablePopups() {
     setBusy(true)
     try {
@@ -58,7 +58,7 @@ export function NotificationWizard({ open, onClose }: { open: boolean; onClose: 
       setPopupPerm(perm)
       if (perm === 'granted') {
         try {
-          const t = new Notification('LabHub', { body: 'This is how new-message popups will look', silent: true })
+          const t = new Notification('LabHub', { body: 'This is how popups will look', silent: true })
           t.onclick = () => window.focus()
         } catch { /* best-effort sample — the grant itself is the win */ }
       }
@@ -85,8 +85,8 @@ export function NotificationWizard({ open, onClose }: { open: boolean; onClose: 
       <p className="text-sm font-medium text-default">Browser popups</p>
       <p className="mt-1 text-xs text-muted">
         {popupPerm === 'granted'
-          ? 'On — new messages pop up on this browser even when the tab is in the background.'
-          : 'A small popup on this browser for new messages — no phone setup needed.'}
+          ? 'On — new messages and notifications pop up on this browser even when the tab is in the background.'
+          : 'A small popup on this browser for new messages and notifications — no phone setup needed.'}
       </p>
       {popupPerm === 'granted' ? (
         <p className="mt-1 flex items-center gap-1.5 text-xs text-subtle">

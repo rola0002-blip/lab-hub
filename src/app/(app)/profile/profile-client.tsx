@@ -130,11 +130,11 @@ export default function ProfileClient({ user, soundsEnabled }: { user: ProfileUs
           <div className="mt-2"><AccentPicker /></div>
         </div>
         <div className="mt-4 flex items-center justify-between gap-4">
-          <p className="text-sm text-muted">Notification sounds — a soft ping for new messages in unmuted conversations on this device.</p>
+          <p className="text-sm text-muted">Notification sounds — a soft ping for new messages in unmuted conversations and for bell notifications on this device.</p>
           <SoundsToggle initial={soundsEnabled} />
         </div>
         <div className="mt-4 flex items-center justify-between gap-4">
-          <p className="text-sm text-muted">Message popups — a browser popup for new messages in unmuted conversations on this device. Enable it once from the bell or the button beside the switch.</p>
+          <p className="text-sm text-muted">Notification popups — a browser popup on this device for new messages in unmuted conversations and for bell notifications (bookings, approvals, issues, reminders). Enable it once from the bell or the button beside the switch.</p>
           <PopupToggle />
         </div>
       </section>

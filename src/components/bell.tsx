@@ -13,8 +13,8 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { renderBody } from '@/features/chat/mentions'
 import { humanTime } from '@/lib/humanize'
 import { notificationHref } from '@/lib/notification-href'
-import { rowAlerts, shouldPingFromMessage, decideAlert } from '@/lib/chime'
-import { NOTIFICATION_LABEL } from '@/lib/notification-label'
+import { rowAlerts, shouldAlertRow, shouldPingFromMessage, decideAlert, type AlertRow } from '@/lib/chime'
+import { NOTIFICATION_LABEL, notificationTitle } from '@/lib/notification-label'
 import { inStandalonePwa } from '@/lib/pwa-context'
 import { popupPref } from '@/lib/popup-pref'
 import { useNotificationStatus } from './hooks/use-notification-state'
@@ -154,18 +154,24 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
   // The open conversation (route-derived — the store deliberately does not know
   // it; /chat/<cid> is the only place a conversation is "open"). The SSE msg
   // handler below reads it live from this render's closure (useEvents re-reads
-  // the closure every render), so no ref mirror is needed anymore.
+  // the closure every render); only the memoized load() needs the ref mirror.
   const pathname = usePathname()
   const openCid = pathname.match(/^\/chat\/([^/]+)/)?.[1] ?? null
-  // Task 9: popup clicks navigate to the conversation. Bell had no router
+  // load() is memoized (stable across renders), so it reads the open conversation
+  // through this ref mirror (the soundsRef idiom) for the row focus rule.
+  const openCidRef = useRef(openCid)
+  useEffect(() => { openCidRef.current = openCid }, [openCid])
+  // Task 9: popup clicks navigate to the alert's url (the conversation, or a
+  // bell row's target since W20-C). Bell had no router
   // (pathname was enough until now); the App Router's useRouter is
   // referentially stable, so the funnel's useCallback just lists it — soft
   // nav keeps the SSE subscription and chat store alive, unlike a
   // window.location.assign full reload.
   const router = useRouter()
 
-  // The single alert funnel (Task 8): EVERY qualifying message runs this —
-  // no burst throttle. WHERE the alert renders (decideAlert): in the desktop
+  // The single alert funnel (Task 8; W20-C): EVERY qualifying message AND every
+  // alertable bell row runs this — no burst throttle (a row batch chimes once).
+  // WHERE the alert renders (decideAlert): in the desktop
   // shell every alert becomes an OS-sounded native toast (the shell bridges
   // Notification natively and attaches the OS sound) and the in-page chime
   // stays silent — exactly one sound. Browsers/PWA keep the WebAudio chime
@@ -179,16 +185,18 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
   // browsers outside that wizard step, so a 'granted' permission in a normal
   // browser means either the wizard step or a push subscription whose toasts
   // the SW already shows — gating the popup arm on the shell marker
-  // prevents a second toast from here in-shell.
-  const alertFromMessage = useCallback((msgAlert: { title: string; body: string; tag: string }) => {
+  // prevents a second toast from here in-shell. `url` is the click target:
+  // /chat/<cid> for a message, notificationHref(row) for a bell row.
+  const raiseAlert = useCallback((alert: { title: string; body: string; tag: string; url: string }, opts: { chime?: boolean } = {}) => {
     const { chime, toast, popup, swPopup } = decideAlert(true, '__TAURI__' in window, inStandalonePwa())
     if (toast && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       try {
         // silent: respects the per-device sound toggle — the shell's OS
-        // toast sound is the sound (the chime never runs here).
-        const opts: NotificationOptions = { body: msgAlert.body, silent: !soundsRef.current }
-        opts.tag = msgAlert.tag
-        const t = new Notification(msgAlert.title, opts)
+        // toast sound is the sound (the chime never runs here). The shim
+        // ignores tag/url: a shell toast focuses the right server, no deep link.
+        const o: NotificationOptions = { body: alert.body, silent: !soundsRef.current }
+        o.tag = alert.tag
+        const t = new Notification(alert.title, o)
         t.onclick = () => window.focus()
       } catch { /* best-effort */ }
       return
@@ -201,11 +209,11 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
       // through data.url. Best-effort: the chime still covers the alert.
       void navigator.serviceWorker.ready
         .then((reg) =>
-          reg.showNotification(msgAlert.title, {
-            body: msgAlert.body.slice(0, 100),
+          reg.showNotification(alert.title, {
+            body: alert.body.slice(0, 100),
             silent: true,
-            tag: msgAlert.tag,
-            data: { url: `/chat/${msgAlert.tag}` },
+            tag: alert.tag,
+            data: { url: alert.url },
           }),
         )
         .catch(() => { /* best-effort */ })
@@ -213,15 +221,16 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
     if (popup && popupPref() && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       try {
         // silent: the WebAudio chime below is the sound in browsers — the
-        // popup must not double it. tag: same-conversation messages replace
-        // the popup instead of stacking.
-        const opts: NotificationOptions = { body: msgAlert.body.slice(0, 100), silent: true }
-        opts.tag = msgAlert.tag
-        const t = new Notification(msgAlert.title, opts)
-        t.onclick = () => { window.focus(); router.push(`/chat/${msgAlert.tag}`) }
+        // popup must not double it. tag: a same-conversation (chat) or
+        // same-type (bell row) burst replaces the popup instead of stacking.
+        const o: NotificationOptions = { body: alert.body.slice(0, 100), silent: true }
+        o.tag = alert.tag
+        const t = new Notification(alert.title, o)
+        t.onclick = () => { window.focus(); router.push(alert.url) }
       } catch { /* some platforms throw on construction — the chime still covers the alert */ }
     }
-    if (chime && soundsRef.current) playChime()
+    // opts.chime === false: a multi-row batch chimes once (on its last row).
+    if (chime && soundsRef.current && opts.chime !== false) playChime()
   }, [router])
 
   const load = useCallback(async () => {
@@ -230,20 +239,30 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
       if (!r.ok) return
       const d = await r.json()
       setUnread(d.unread); setItems(d.items)
-      // Task 8: the 30 s poll is a badge refresher ONLY — the watermark
-      // advances silently and nothing chimes/toasts here. The SSE msg path is
-      // the single alert source, so a message that rode both paths can never
-      // double-ding.
-      watermark.current = rowAlerts(watermark.current, d.items as Item[]).watermark
+      // W20-C: the bell ROW is the alert source for everything the realtime msg
+      // path does not alert — every non-chat type, plus bot-sent chat rows.
+      // rowAlerts diffs against the watermark, so the 30 s poll, a notif event
+      // and a reconnect can each surface a row but never the same row twice, and
+      // the first load seeds silently. One chime per batch (on its last row).
+      const { watermark: next, alerts } = rowAlerts(watermark.current, d.items as (Item & AlertRow)[])
+      watermark.current = next
+      const ctx = { openCid: openCidRef.current, focused: document.hasFocus() }
+      const due = alerts.filter((it) => shouldAlertRow(it, ctx))
+      due.forEach((it, i) => raiseAlert({
+        title: notificationTitle(it.type),
+        body: typeof it.payload?.message === 'string' ? it.payload.message : '',
+        tag: `notif:${it.type}`,
+        url: notificationHref(it) ?? '/',
+      }, { chime: i === due.length - 1 }))
     } catch { /* transient network error; next poll retries */ }
-  }, [])
+  }, [raiseAlert])
 
   useEffect(() => {
     // Fetch-on-mount: load() is async and only setStates after an awaited network
     // round-trip, so it can't cause the synchronous cascading render this rule guards against.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load()
-    const t = setInterval(load, 30_000) // spec: 30 s polling
+    const t = setInterval(load, 30_000) // spec: 30 s polling — badge refresh + row alerts (W20-C)
     return () => clearInterval(t)
   }, [load])
 
@@ -253,6 +272,7 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
   // store conversations / selfId / openCid are live. The `msg` event carries
   // only {cid, mid}, so the message is fetched (the MessagePane precedent) —
   // skipped entirely when the open+focused conversation would suppress anyway.
+  // Bot posts never alert here (shouldPingFromMessage) — a bot DM's bell row alerts through load() instead (W20-C).
   useEvents((e) => {
     if (e.t === 'notif' || e.t === 'reconnect') { void load(); return }
     if (e.t !== 'msg' || !('cid' in e)) return
@@ -279,7 +299,7 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
         const names = new Map(users.map((u) => [u.id, u.name]))
         const bodyText = renderBody(d.message.body || '(attachment)', names).slice(0, 120)
         const body = `${senderName}: ${bodyText}`
-        alertFromMessage({ title, body, tag: cid })
+        raiseAlert({ title, body, tag: cid, url: `/chat/${cid}` })
       }
     })
   })
