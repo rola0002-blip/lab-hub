@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowDown, ArrowLeft, Hash, MessageSquare, Pin } from 'lucide-react'
 import { messageToPlainText } from '@/features/chat/markdown'
 import { extractClipboardFiles, looksLikeSynthesizedFilename, tryClipboardReadImage } from '@/features/chat/clipboard-files'
+import { groupByDay } from '@/features/chat/day-groups'
 import { toast } from '@/lib/toast-store'
 import { dayLabel, humanTime } from '@/lib/humanize'
 import { Avatar } from '@/components/ui/avatar'
@@ -43,11 +44,12 @@ const DEEPLINK_MAX_PAGES = 12
 // the end; below the threshold we show the jump-to-latest button.
 const AT_BOTTOM_PX = 80
 
-// Pane-level day divider — a sticky pill that rides the top of the scroller as you
-// read through a day's messages.
+// Pane-level day divider — a sticky pill that rides the top of the scroller while
+// you read a day's messages. W20-A: it is the FIRST child of its day's wrapper, so
+// it sticks only within that day and the next day's pill pushes it off the top.
 function DayDivider({ label }: { label: string }) {
   return (
-    <div className="sticky top-2 z-10 mx-auto my-2 w-fit rounded-full border border-border bg-surface px-3 py-0.5 text-xs font-semibold text-muted shadow-sm">
+    <div data-day-divider className="sticky top-2 z-10 mx-auto my-2 w-fit rounded-full border border-border bg-surface px-3 py-0.5 text-xs font-semibold text-muted shadow-sm">
       {label}
     </div>
   )
@@ -607,34 +609,38 @@ export default function MessagePane({ conversationId, conversationType, channelN
               never one per pill. Provides the resolved-ref Map each MessageItem reads. */}
           {!loading && (
           <IssueRefProvider bodies={messages.map((m) => m.body)}>
-          {messages.map((m, i) => {
-            const prev = messages[i - 1]
-            const prevDate = prev ? new Date(prev.createdAt) : null
-            const dayChanged = !prevDate || new Date(m.createdAt).toDateString() !== prevDate.toDateString()
-            // System rows (created/joined) render as a centered muted line — no
-            // avatar, no toolbar, no reactions, never grouped or leading.
-            if (m.kind === 'system') {
-              return (
-                <Fragment key={m.id}>
-                  {dayChanged && <DayDivider label={dayLabel(m.createdAt, now)} />}
-                  <p className="mx-auto my-1 text-center text-xs italic text-muted">{m.body}</p>
-                </Fragment>
-              )
-            }
-            const isFirstUnread = m.id === firstUnreadId
-            // Group only against a preceding USER message; a system row breaks the
-            // run so the next real message renders leading (avatar + name).
-            const groupPrev = prev && prev.kind !== 'system' ? prev : undefined
-            return (
-              <Fragment key={m.id}>
-                {dayChanged && <DayDivider label={dayLabel(m.createdAt, now)} />}
-                {isFirstUnread && <NewMessagesDivider />}
-                <MessageItem msg={m} prev={groupPrev} names={names} selfId={selfId} selfRole={selfRole}
-                  tabIndex={m.id === rovingId ? 0 : -1}
-                  forceLeading={isFirstUnread} onUpdated={upsert} onOpenThread={() => setThreadRoot(m.id)} onRetry={retrySend} />
-              </Fragment>
-            )
-          })}
+          {groupByDay(messages).map((g) => (
+            // W20-A: one wrapper per local day so the sticky pill's containing block
+            // is its own day. Plain div by design — no role (axe: a list here needs
+            // listitem children; a named section adds landmark noise inside the log),
+            // no overflow (it would become the sticky scrollport), no z-index or
+            // transform (no new stacking context under the rows' z-10 toolbars).
+            <div key={g.key} data-day-group>
+              <DayDivider label={dayLabel(g.items[0].createdAt, now)} />
+              {g.items.map((m, j) => {
+                // Grouping still reads the GLOBAL predecessor (a day boundary already
+                // forces a leading row inside MessageItem).
+                const prev = messages[g.start + j - 1]
+                // System rows (created/joined) render as a centered muted line — no
+                // avatar, no toolbar, no reactions, never grouped or leading.
+                if (m.kind === 'system') {
+                  return <p key={m.id} className="mx-auto my-1 text-center text-xs italic text-muted">{m.body}</p>
+                }
+                const isFirstUnread = m.id === firstUnreadId
+                // Group only against a preceding USER message; a system row breaks the
+                // run so the next real message renders leading (avatar + name).
+                const groupPrev = prev && prev.kind !== 'system' ? prev : undefined
+                return (
+                  <Fragment key={m.id}>
+                    {isFirstUnread && <NewMessagesDivider />}
+                    <MessageItem msg={m} prev={groupPrev} names={names} selfId={selfId} selfRole={selfRole}
+                      tabIndex={m.id === rovingId ? 0 : -1}
+                      forceLeading={isFirstUnread} onUpdated={upsert} onOpenThread={() => setThreadRoot(m.id)} onRetry={retrySend} />
+                  </Fragment>
+                )
+              })}
+            </div>
+          ))}
           </IssueRefProvider>
           )}
           {typing && <TypingIndicator name={typing} />}

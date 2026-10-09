@@ -253,9 +253,9 @@ export default function MessageItem({ msg, prev, names, selfId, selfRole, onUpda
   ]
 
   return (
-    // Day dividers and the "New messages" line are pane-level siblings (rendered
-    // by MessagePane), not part of this row — so a message stays a self-contained
-    // grid cell. A temp (optimistic) row is dimmed to 60% and settles to 100%
+    // Day dividers and the "New messages" line are rendered by MessagePane (the
+    // pill heads its day's wrapper; the New line sits just before its row), not by
+    // this row — so a message stays a self-contained grid cell. A temp (optimistic) row is dimmed to 60% and settles to 100%
     // once the real message replaces it.
     // `tabIndex`/`data-*` make each row a focus target the pane's `r` hotkey can
     // resolve to; focus also reveals the toolbar (group-focus-within), so the
