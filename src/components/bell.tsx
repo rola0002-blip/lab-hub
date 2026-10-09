@@ -14,6 +14,7 @@ import { renderBody } from '@/features/chat/mentions'
 import { humanTime } from '@/lib/humanize'
 import { notificationHref } from '@/lib/notification-href'
 import { shouldChime, shouldPingFromMessage, decideAlert } from '@/lib/chime'
+import { inStandalonePwa } from '@/lib/pwa-context'
 import { popupPref } from '@/lib/popup-pref'
 import { useNotificationStatus } from './hooks/use-notification-state'
 import { NotificationWizard } from './notification-wizard'
@@ -203,7 +204,7 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
   // the SW already shows — gating the popup arm on the shell marker
   // prevents a second toast from here in-shell.
   const alertFromMessage = useCallback((msgAlert: { title: string; body: string; tag: string }) => {
-    const { chime, toast, popup } = decideAlert(true, '__TAURI__' in window)
+    const { chime, toast, popup, swPopup } = decideAlert(true, '__TAURI__' in window, inStandalonePwa())
     if (toast && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       try {
         // silent: respects the per-device sound toggle — the shell's OS
@@ -214,6 +215,23 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
         t.onclick = () => window.focus()
       } catch { /* best-effort */ }
       return
+    }
+    if (swPopup && popupPref() && typeof Notification !== 'undefined' && Notification.permission === 'granted' && 'serviceWorker' in navigator) {
+      // Installed mobile PWAs (iOS 16.4+, Android Chrome) throw on the
+      // page-context Notification constructor — the SW's showNotification
+      // is the only OS-popup surface there. silent + the chime below keeps
+      // the one-sound rule; notificationclick in sw.js owns focus+navigate
+      // through data.url. Best-effort: the chime still covers the alert.
+      void navigator.serviceWorker.ready
+        .then((reg) =>
+          reg.showNotification(msgAlert.title, {
+            body: msgAlert.body.slice(0, 100),
+            silent: true,
+            tag: msgAlert.tag,
+            data: { url: `/chat/${msgAlert.tag}` },
+          }),
+        )
+        .catch(() => { /* best-effort */ })
     }
     if (popup && popupPref() && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       try {

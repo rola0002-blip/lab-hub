@@ -85,27 +85,32 @@ describe('alertRendering', () => {
 
 describe('decideAlert', () => {
   it('non-qualifying message → no alert on any surface', () => {
-    expect(decideAlert(false, false)).toEqual({ chime: false, toast: false, popup: false })
-    expect(decideAlert(false, true)).toEqual({ chime: false, toast: false, popup: false })
+    expect(decideAlert(false, false)).toEqual({ chime: false, toast: false, popup: false, swPopup: false })
+    expect(decideAlert(false, true)).toEqual({ chime: false, toast: false, popup: false, swPopup: false })
   })
 
-  it('qualifying, browser/PWA → chime + popup arm (permission/pref gate in the funnel)', () => {
-    expect(decideAlert(true, false)).toEqual({ chime: true, toast: false, popup: true })
+  it('qualifying, browser tab → chime + constructor popup arm', () => {
+    expect(decideAlert(true, false)).toEqual({ chime: true, toast: false, popup: true, swPopup: false })
+  })
+
+  it('qualifying, standalone PWA → chime + SW popup arm (constructor throws on installed iOS/Android)', () => {
+    expect(decideAlert(true, false, true)).toEqual({ chime: true, toast: false, popup: false, swPopup: true })
   })
 
   it('qualifying, desktop shell → OS-sounded toast only (popup never fires in-shell)', () => {
-    expect(decideAlert(true, true)).toEqual({ chime: false, toast: true, popup: false })
+    expect(decideAlert(true, true)).toEqual({ chime: false, toast: true, popup: false, swPopup: false })
+  })
+
+  it('shell outranks standalone (the shell marker wins even if both read true)', () => {
+    expect(decideAlert(true, true, true)).toEqual({ chime: false, toast: true, popup: false, swPopup: false })
   })
 
   it('two SSE messages within 3 s both alert — the old burst throttle is gone', () => {
-    // The bell funnel is a pure shouldPingFromMessage → decideAlert chain with
-    // no interval state anywhere: a second message 1 ms after the first gets
-    // the same alert decision the first did (PingThrottle swallowed it).
     const m = { cid: 'c1', authorId: 'other', muted: false }
     const opts = { openCid: null, focused: false, selfId: 'me' }
     expect(decideAlert(shouldPingFromMessage(m, opts), false))
-      .toEqual({ chime: true, toast: false, popup: true })
+      .toEqual({ chime: true, toast: false, popup: true, swPopup: false })
     expect(decideAlert(shouldPingFromMessage({ ...m }, opts), false))
-      .toEqual({ chime: true, toast: false, popup: true })
+      .toEqual({ chime: true, toast: false, popup: true, swPopup: false })
   })
 })

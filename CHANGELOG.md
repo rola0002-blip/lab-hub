@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Mobile PWA foreground pop-outs** — new-message alerts in an installed
+  home-screen app (iOS 16.4+, Android) raise an OS notification through the
+  service worker, the only surface those platforms allow; browser-tab and
+  desktop-shell behavior is unchanged.
+- **Push subscription self-healing** — rotated or silently revoked push
+  endpoints are re-minted automatically (`pushsubscriptionchange` in the
+  service worker plus a launch-time check), so mobile notifications survive
+  OS-side churn instead of dying until the wizard is re-run.
+
 ## [0.34.0] - 2026-09-28
 
 ### Added
