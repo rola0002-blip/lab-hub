@@ -4,6 +4,7 @@ import { ClipboardCheck } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import { toast } from '@/components/ui/toast'
+import { refreshNavCounts } from '@/lib/nav-counts-store'
 import { approveAction, rejectAction, approveRuleAction, rejectRuleAction } from './actions'
 
 export type ApprovalItem = {
@@ -28,24 +29,30 @@ export default function ApprovalsClient({ items, recurring }: { items: ApprovalI
   // Approvals have no inline retry affordance, so a failed decision surfaces a
   // blameless toast whose Retry re-runs the exact same action (reason captured in
   // the closure). On a successful reject we close + clear the reason box; on
-  // failure we keep it open so the reviewer can adjust and try again.
+  // failure we keep it open so the reviewer can adjust and try again. Every
+  // successful decision refreshes the sidebar Approvals badge (W20-D): revalidatePath
+  // re-renders this page, but the badge is a CLIENT store the refresh never touches.
   const approve = (id: string) => start(async () => {
     const r = await approveAction(id)
-    if (!r.ok) toast(r.message ?? "We couldn't approve this request.", { action: { label: 'Retry', onClick: () => approve(id) } })
+    if (!r.ok) { toast(r.message ?? "We couldn't approve this request.", { action: { label: 'Retry', onClick: () => approve(id) } }); return }
+    void refreshNavCounts() // W20-D: the badge drops with the card
   })
   const reject = (id: string, why: string) => start(async () => {
     const r = await rejectAction(id, why)
     if (!r.ok) { toast(r.message ?? "We couldn't reject this request.", { action: { label: 'Retry', onClick: () => reject(id, why) } }); return }
     setRejecting(null); setReasonFor(id, '')
+    void refreshNavCounts()
   })
   const approveRule = (ruleId: string) => start(async () => {
     const x = await approveRuleAction(ruleId)
-    if (!x.ok) toast(x.message ?? "We couldn't approve the series.", { action: { label: 'Retry', onClick: () => approveRule(ruleId) } })
+    if (!x.ok) { toast(x.message ?? "We couldn't approve the series.", { action: { label: 'Retry', onClick: () => approveRule(ruleId) } }); return }
+    void refreshNavCounts()
   })
   const rejectRule = (ruleId: string, why: string) => start(async () => {
     const x = await rejectRuleAction(ruleId, why)
     if (!x.ok) { toast(x.message ?? "We couldn't reject the series.", { action: { label: 'Retry', onClick: () => rejectRule(ruleId, why) } }); return }
     setRejecting(null); setReasonFor(ruleId, '')
+    void refreshNavCounts()
   })
 
   if (items.length === 0 && recurring.length === 0) {

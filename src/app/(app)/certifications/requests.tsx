@@ -4,6 +4,7 @@ import { GraduationCap } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Modal } from '@/components/ui/modal'
 import { toast } from '@/components/ui/toast'
+import { refreshNavCounts } from '@/lib/nav-counts-store'
 import { decideTrainingRequestAction } from './actions'
 
 export type RequestRowView = {
@@ -40,6 +41,9 @@ export default function Requests({ rows, today, me }: { rows: RequestRowView[]; 
       const r = await decideTrainingRequestAction(row.id, 'grant', undefined, grantDate)
       if (!r.ok) { toast(r.message ?? "We couldn't grant this request."); return }
       setGrant(null)
+      // W20-D: the sidebar Certifications badge is a client store the action's
+      // revalidatePath never touches — refresh it so it drops with the row.
+      void refreshNavCounts()
     })
   }
 
@@ -48,6 +52,7 @@ export default function Requests({ rows, today, me }: { rows: RequestRowView[]; 
       const r = await decideTrainingRequestAction(id, 'decline', why)
       if (!r.ok) { toast(r.message ?? "We couldn't decline this request."); return }
       setDeclining(null); setReasonFor(id, '')
+      void refreshNavCounts()
     })
   }
 
