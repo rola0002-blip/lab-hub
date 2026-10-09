@@ -13,7 +13,8 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { renderBody } from '@/features/chat/mentions'
 import { humanTime } from '@/lib/humanize'
 import { notificationHref } from '@/lib/notification-href'
-import { shouldChime, shouldPingFromMessage, decideAlert } from '@/lib/chime'
+import { rowAlerts, shouldPingFromMessage, decideAlert } from '@/lib/chime'
+import { NOTIFICATION_LABEL } from '@/lib/notification-label'
 import { inStandalonePwa } from '@/lib/pwa-context'
 import { popupPref } from '@/lib/popup-pref'
 import { useNotificationStatus } from './hooks/use-notification-state'
@@ -25,30 +26,6 @@ import { useChat } from './chat/chat-store'
 import { useEvents } from './use-events'
 
 type Item = { id: string; type: string; payload: Record<string, string>; readAt: string | null; createdAt: string }
-
-const LABEL: Record<string, string> = {
-  booking_pending: 'Booking needs approval',
-  booking_decided: 'Booking decision',
-  booking_cancelled_maintenance: 'Booking cancelled (maintenance)',
-  booking_reminder: 'Upcoming booking',
-  booking_expired: 'Booking request expired',
-  booking_cancelled: 'Booking cancelled',
-  message_mention: 'You were mentioned',
-  message_dm: 'New direct message',
-  message_thread_reply: 'New thread reply',
-  channel_added: 'Added to a channel',
-  issue_assigned: 'Issue assigned to you',
-  issue_mention: 'You were mentioned on an issue',
-  issue_comment: 'New comment on an issue',
-  issue_done: 'Your issue was completed',
-  project_update_prompt: 'Project update due',
-  feedback_new: 'New feedback',
-  feedback_decided: 'Feedback update',
-  // v0.32 training requests: managers/admins on a new open request, the requester
-  // on a decision (Task 6's notification lane — the Task 7 fold-in).
-  training_request: 'Training request',
-  training_decided: 'Training decision',
-}
 
 // Per-type glyph for the actor square when there's no person avatar to show
 // (booking events, and chat events whose conversation resolves to a channel).
@@ -257,7 +234,7 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
       // advances silently and nothing chimes/toasts here. The SSE msg path is
       // the single alert source, so a message that rode both paths can never
       // double-ding.
-      watermark.current = shouldChime(watermark.current, d.items.map((i: Item) => ({ id: i.id, type: i.type, createdAt: i.createdAt }))).watermark
+      watermark.current = rowAlerts(watermark.current, d.items as Item[]).watermark
     } catch { /* transient network error; next poll retries */ }
   }, [])
 
@@ -377,7 +354,7 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
                   <FaceAvatar face={face} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
-                      <p className={`truncate text-sm ${unreadGroup ? 'font-semibold text-default' : 'text-muted'}`}>{LABEL[head.type] ?? head.type}</p>
+                      <p className={`truncate text-sm ${unreadGroup ? 'font-semibold text-default' : 'text-muted'}`}>{NOTIFICATION_LABEL[head.type] ?? head.type}</p>
                       <time className="shrink-0 text-2xs text-subtle">{humanTime(head.createdAt, now)}</time>
                     </div>
                     {g.items.map((it) => (
