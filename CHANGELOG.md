@@ -15,6 +15,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   endpoints are re-minted automatically (`pushsubscriptionchange` in the
   service worker plus a launch-time check), so mobile notifications survive
   OS-side churn instead of dying until the wizard is re-run.
+- **Every bell notification pops out** — booking requests and decisions,
+  reminders, issue assignments, mentions and comments, training requests,
+  feedback and channel invites now raise the same alert a chat message
+  does: an OS popup (or the desktop app's native toast) plus the chime
+  while LabHub is open, and a web push to your phone once you have been
+  idle for two minutes. Each notification alerts exactly once; a burst of
+  the same kind replaces the last popup instead of stacking, and at most
+  three pop out at once after a reconnect (the rest wait in the bell).
+- **Pending badges on Approvals and Certifications** — the sidebar shows
+  how many booking requests and training requests are waiting on you. The
+  count updates live and clears when the request is decided, not when the
+  bell is opened.
+
+### Changed
+- **Booking reminders arrive 15 minutes before the slot** (was about an
+  hour), the moment log-on opens, and say so: "you can log on now".
+- **LabHub Bot posts no longer pop out.** A bot DM that carries a
+  notification (reminders, approvals, training requests, due dates) alerts
+  once through its bell notification, and #lab-updates announcements stay
+  quiet. Browsers now follow the documented rule that bot posts never
+  alert, which push notifications already followed.
+- You are no longer notified about your own requests: an admin or manager
+  who books an approval-required instrument, or requests training on one
+  they manage, no longer gets the "needs your approval" notification and
+  bot DM for it. The request still appears in their Approvals or Requests
+  queue and in the badge count.
+- The dashboard's approvals banner counts a recurring booking series as
+  one request, matching the Approvals queue and its new badge.
+- The profile page's "Message popups" switch is now "Notification popups",
+  and the popup and sound settings describe both messages and notifications.
+
+### Fixed
+- **Chat date pills no longer stack.** Scrolling a long conversation, the
+  floating date now belongs to its own day, so the next day's pill pushes
+  it away instead of overlapping it.
 
 ## [0.34.0] - 2026-09-28
 
