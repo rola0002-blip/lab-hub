@@ -6,9 +6,12 @@
 // toDateString predicate MessageItem's `newDay` uses — and NEVER the first row's
 // id: "Load earlier" prepends same-day rows INTO the existing group, and a key
 // change would remount every row in it (dropping MessageItem edit drafts).
-// Input must be ascending by createdAt (the pane's order), so a day key never
-// reappears in a later group.
-export type DayGroup<T> = { key: string; start: number; items: T[] }
+// The list is ascending in practice, but the pane's upsert appends in ARRIVAL
+// order, so near local midnight a late send confirmation can land after the next
+// day's first row. A day that reappears gets an occurrence-suffixed key
+// (`<day>#1`, …) so React keys stay unique; the first run keeps the bare day key,
+// which is the one Load earlier grows.
+export type DayGroup<T> = { key: string; day: string; start: number; items: T[] }
 
 export function dayKey(iso: string): string {
   return new Date(iso).toDateString()
@@ -16,11 +19,14 @@ export function dayKey(iso: string): string {
 
 export function groupByDay<T extends { createdAt: string }>(items: T[]): DayGroup<T>[] {
   const groups: DayGroup<T>[] = []
+  const runs = new Map<string, number>()
   items.forEach((it, i) => {
-    const key = dayKey(it.createdAt)
+    const day = dayKey(it.createdAt)
     const last = groups[groups.length - 1]
-    if (last && last.key === key) last.items.push(it)
-    else groups.push({ key, start: i, items: [it] })
+    if (last && last.day === day) { last.items.push(it); return }
+    const n = runs.get(day) ?? 0
+    runs.set(day, n + 1)
+    groups.push({ key: n === 0 ? day : `${day}#${n}`, day, start: i, items: [it] })
   })
   return groups
 }
