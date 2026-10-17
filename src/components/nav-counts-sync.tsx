@@ -8,7 +8,7 @@ import { useEvents } from './use-events'
 // app shell for non-guests (the ChatTitleBadge posture), NEVER inside Sidebar
 // (which mounts twice while the phone drawer is open). Triggers: mount + every
 // navigation, a `notif`/`reconnect` SSE event (a new booking or training request
-// notifies every decider — each instrument's managers plus every admin, exactly
+// notifies every decider — exactly
 // the set the counts cover), the window regaining focus or visibility, and a 60 s
 // poll — the backstop for a decision made by ANOTHER manager, which notifies only
 // the requester (deliberately NO new LabEvent member). A decider's own

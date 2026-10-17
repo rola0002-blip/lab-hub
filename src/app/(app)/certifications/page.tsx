@@ -34,8 +34,10 @@ export default async function CertificationsPage({ searchParams }: { searchParam
     listTrainingRecords(),
     listCertRevocations(),
   ])
-  // Requests is the managers/admins tab (the decide gate is isManagerOf, which
-  // folds admins in) — a member who manages nothing never sees it.
+  // Requests is the managers/admins tab. W21-A scopes its CONTENTS (only the
+  // instrument's active managers decide; admins only for instruments with no
+  // active manager — decidableWhere), but every admin keeps the tab so the
+  // fallback queue is reachable. A member who manages nothing never sees it.
   const canDecide = me.role === 'admin' || myManaged.length > 0
   const active: Tab = rawTab === 'history' ? 'history'
     : rawTab === 'requests' && canDecide ? 'requests'

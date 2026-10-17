@@ -2,7 +2,7 @@ import { requireSetup } from '@/lib/org'
 import { requireUser } from '@/lib/session'
 import { prisma } from '@/lib/db'
 import { totalUnread } from '@/features/chat/conversation-service'
-import { listProjectOptions } from '@/features/issues/project-service'
+import { listProjectOptions, listPinnedProjects } from '@/features/issues/project-service'
 import { listLabels } from '@/features/issues/issue-service'
 import { Sidebar } from '@/components/sidebar'
 import { APP_VERSION } from '@/lib/version'
@@ -43,10 +43,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // list is ONE source — the project-update composer reads the same array.
   // Labels (wave 8) feed the composer's Labels picker — same one-query posture
   // at lab scale as the issue pages' listLabels().
-  const [issueUsers, issueProjects, issueLabels] = await Promise.all([
+  // W21-C: the viewer's pinned projects feed the sidebar's Pinned rows (pin
+  // order; deleted projects drop out). The layout re-renders on the viewer's own
+  // revalidating actions (pin/unpin included) and on router.refresh().
+  const [issueUsers, issueProjects, issueLabels, pinnedProjects] = await Promise.all([
     prisma.user.findMany({ where: { banned: false, isSystem: false }, orderBy: { name: 'asc' }, select: { id: true, name: true, image: true } }),
     listProjectOptions(),
     listLabels(),
+    listPinnedProjects(user.id),
   ])
 
   return (
@@ -64,6 +68,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             user={{ id: user.id, name: user.name, image: pref?.image ?? null }}
             unread={chatUnread}
             navSeed={navCounts}
+            pinned={pinnedProjects.map(({ id, name }) => ({ id, name }))}
             role={user.role}
             version={APP_VERSION}
           />

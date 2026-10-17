@@ -255,7 +255,7 @@ test('a guest sees the linked-folder card read-only, with no way to change the l
   await expect(gp.getByRole('button', { name: 'Project actions' })).toBeVisible()
   await gp.getByRole('button', { name: 'Project actions' }).click()
   await expect(gp.getByRole('menuitem', { name: 'Edit project' })).toHaveCount(0)
-  await expect(gp.getByRole('menuitem', { name: 'Pin to My issues' })).toBeVisible()
+  await expect(gp.getByRole('menuitem', { name: 'Pin to sidebar' })).toBeVisible()
   await expect(gp.getByRole('combobox', { name: 'Files folder' })).toHaveCount(0)
 })
 

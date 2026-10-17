@@ -20,6 +20,7 @@ async function resetWithOrg() {
 const botDmCount = (userId: string) =>
   prisma.message.count({ where: { userId: COLOSSUS_BOT_ID, conversation: { type: 'DM', members: { some: { userId } } } } })
 
+// eq has NO managers ⇒ the admin is a fallback decider (W21-A); tests that need a managed instrument call setManagers.
 async function seed() {
   const member = await makeUser({ role: 'member' })
   const admin = await makeUser({ role: 'admin' })
@@ -48,10 +49,11 @@ describe('training requests', () => {
     expect(await prisma.notification.count({ where: { userId: admin.id, type: 'training_request' } })).toBeGreaterThan(0)
   })
 
-  // W20-C review: a bell row now pops out + pushes, so the requester (here an
-  // admin who is also a manager of the instrument) must not be alerted about
-  // their own request — while every OTHER decider still is.
-  it('the requester is never notified of their own request; other deciders are', async () => {
+  // W20-C review: a bell row pops out + pushes, so the requester (here an admin
+  // who is also a manager of the instrument) is not alerted about their own
+  // request — while every OTHER decider is. W21-A: on a managed instrument the
+  // deciders are its active managers ONLY — a non-manager admin hears nothing.
+  it('the requester is never notified of their own request; other managers are; non-manager admins are not', async () => {
     const { admin, eq } = await seed()
     const otherAdmin = await makeUser({ role: 'admin' })
     const mgr = await makeUser({ role: 'member' })
@@ -60,12 +62,65 @@ describe('training requests', () => {
     expect((await svc.createTrainingRequest({ userId: admin.id, equipmentId: eq.id })).ok).toBe(true)
     expect(await prisma.notification.count({ where: { userId: admin.id, type: 'training_request' } })).toBe(0)
     expect(await botDmCount(admin.id)).toBe(0)
-    for (const id of [otherAdmin.id, mgr.id]) {
-      expect(await prisma.notification.count({ where: { userId: id, type: 'training_request' } })).toBe(1)
-      expect(await botDmCount(id)).toBe(1)
-    }
-    // Only the alert is dropped: the request still sits in the admin's own queue.
+    expect(await prisma.notification.count({ where: { userId: mgr.id, type: 'training_request' } })).toBe(1)
+    expect(await botDmCount(mgr.id)).toBe(1)
+    expect(await prisma.notification.count({ where: { userId: otherAdmin.id, type: 'training_request' } })).toBe(0)
+    expect(await botDmCount(otherAdmin.id)).toBe(0)
+    // Only the alert is dropped: the request still sits in the requester-manager's queue.
     expect(await svc.listPendingRequests(admin.id)).toHaveLength(1)
+    expect(await svc.listPendingRequests(otherAdmin.id)).toHaveLength(0)
+  })
+
+  it('W21-A: on a managed instrument only its managers see, count and decide — a non-manager admin cannot', async () => {
+    const { member, admin, eq } = await seed()
+    const mgr = await makeUser({ role: 'member' })
+    await setManagers(eq.id, [mgr.id])
+    const svc = await import('@/features/certifications/training-request-service')
+    expect((await svc.createTrainingRequest({ userId: member.id, equipmentId: eq.id })).ok).toBe(true)
+    expect(await prisma.notification.count({ where: { userId: admin.id, type: 'training_request' } })).toBe(0)
+    expect(await prisma.notification.count({ where: { userId: mgr.id, type: 'training_request' } })).toBe(1)
+    expect(await svc.listPendingRequests(admin.id)).toHaveLength(0)
+    expect(await svc.countPendingRequests({ id: admin.id, role: 'admin' })).toBe(0)
+    const [row] = await svc.listPendingRequests(mgr.id)
+    expect(await svc.countPendingRequests({ id: mgr.id, role: 'member' })).toBe(1)
+    expect(await svc.decideTrainingRequest({ requestId: row.id, byId: admin.id, decision: 'grant' }))
+      .toEqual({ ok: false, message: "Only this instrument's managers can decide this request." })
+    expect((await prisma.trainingRequest.findUniqueOrThrow({ where: { id: row.id } })).status).toBe('PENDING')
+    expect((await svc.decideTrainingRequest({ requestId: row.id, byId: mgr.id, decision: 'grant' })).ok).toBe(true)
+    const decided = await prisma.trainingRequest.findUniqueOrThrow({ where: { id: row.id } })
+    expect(decided).toMatchObject({ status: 'GRANTED', decidedById: mgr.id })
+  })
+
+  it('W21-A: no ACTIVE manager (banned / guest rows only) ⇒ the admins are the fallback deciders', async () => {
+    const { member, admin, eq } = await seed()
+    const banned = await makeUser({ role: 'member', banned: true })
+    const guestMgr = await makeUser({ role: 'guest' })
+    await setManagers(eq.id, [banned.id, guestMgr.id])
+    const svc = await import('@/features/certifications/training-request-service')
+    expect((await svc.createTrainingRequest({ userId: member.id, equipmentId: eq.id })).ok).toBe(true)
+    expect(await prisma.notification.count({ where: { userId: admin.id, type: 'training_request' } })).toBe(1)
+    expect(await prisma.notification.count({ where: { userId: guestMgr.id, type: 'training_request' } })).toBe(0)
+    expect(await svc.countPendingRequests({ id: admin.id, role: 'admin' })).toBe(1)
+    const [row] = await svc.listPendingRequests(admin.id)
+    expect((await svc.decideTrainingRequest({ requestId: row.id, byId: guestMgr.id, decision: 'grant' })).ok).toBe(false)
+    expect((await svc.decideTrainingRequest({ requestId: row.id, byId: admin.id, decision: 'grant' })).ok).toBe(true)
+  })
+
+  it('W21-A: canDecideTrainingRequest truth table', async () => {
+    const { admin, eq } = await seed()
+    const unmanaged = await makeEquipment({ certificationRequired: true })
+    const mgr = await makeUser({ role: 'member' })
+    const rando = await makeUser({ role: 'member' })
+    const guestMgr = await makeUser({ role: 'guest' })
+    await setManagers(eq.id, [mgr.id, guestMgr.id])
+    const { canDecideTrainingRequest: can } = await import('@/features/certifications/training-request-service')
+    expect(await can(mgr.id, eq.id)).toBe(true)           // active manager
+    expect(await can(admin.id, eq.id)).toBe(false)        // admin, instrument has an active manager
+    expect(await can(admin.id, unmanaged.id)).toBe(true)  // admin fallback
+    expect(await can(rando.id, eq.id)).toBe(false)        // non-manager member
+    expect(await can(rando.id, unmanaged.id)).toBe(false) // fallback is admins only
+    expect(await can(guestMgr.id, eq.id)).toBe(false)     // a guest manager never decides
+    expect(await can('nobody', eq.id)).toBe(false)        // missing user
   })
 
   it('decline requires a reason; re-request allowed after decline', async () => {

@@ -20,8 +20,8 @@ export const NOTIFICATION_LABEL: Record<string, string> = {
   project_update_prompt: 'Project update due',
   feedback_new: 'New feedback',
   feedback_decided: 'Feedback update',
-  // v0.32 training requests: managers/admins on a new open request, the requester
-  // on a decision (Task 6's notification lane — the Task 7 fold-in).
+  // v0.32 training requests: the deciders on a new open request (W21-A: active
+  // managers, admins only when the instrument has none), the requester on a decision (Task 6's notification lane — the Task 7 fold-in).
   training_request: 'Training request',
   training_decided: 'Training decision',
 }

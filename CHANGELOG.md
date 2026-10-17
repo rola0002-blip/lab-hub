@@ -6,6 +6,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Pinned projects in the sidebar** — projects you pin (from the project
+  page's ⋯ menu, now "Pin to sidebar") appear as rows under Projects in the
+  left panel, in the order you pinned them, one click from any page. The
+  pinned chips on My issues stay.
+
+### Changed
+- **Training requests are decided by the instrument's managers.** Only an
+  instrument's managers can grant or decline a training request for it, get
+  its notification, and see it under Certifications → Requests and in the
+  badge count. Admins decide only for an instrument that has no managers (a
+  banned or guest manager does not count). The certification matrix is
+  unchanged: admins can still grant and revoke there directly.
+- **RA records export to Excel.** The admin "Export CSV" on `/ra` is now
+  "Export Excel": a workbook with a bold, frozen header row, a filter on
+  every column, sized columns, rows sorted by name then RA, and the
+  acknowledgment time as a real date in the lab's timezone (named in the
+  column header), so it sorts and filters correctly. The CSV export is
+  removed.
+
+### Fixed
+- A deleted project no longer holds one of your 8 pin slots; the next pin
+  drops it.
+
 ## [0.35.0] - 2026-10-09
 
 ### Added

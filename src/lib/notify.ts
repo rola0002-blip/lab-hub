@@ -23,7 +23,8 @@ export type NotificationType =
   // v0.13 feedback: in-app only — admins on every submission, the author on a
   // decision. Both are three-arg (no email) and carry { feedbackId, message }.
   | 'feedback_new' | 'feedback_decided'
-  // v0.32 training requests: managers/admins on a new open request; the requester
+  // v0.32 training requests: the deciders on a new open request (W21-A: the
+  // instrument's active managers, admins only when it has none); the requester
   // on a decision. Both are three-arg (no email) and carry { message } only —
   // the booking_* posture (the queue is in-app, no deep-link id).
   | 'training_request' | 'training_decided'

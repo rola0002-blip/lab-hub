@@ -142,7 +142,9 @@ tokens and conventions on top of the design system:
 v0.16 rounds out the tracker: milestones — a dated strip under the project
 description, completed by hand, with the count on the project card — per-project
 labels (names unique within their scope, global labels shared), pinned-project
-chips on My issues, and attachments on project updates.
+chips on My issues, and attachments on project updates. Since v0.36 the pinned
+projects also sit in the sidebar under Projects, in pin order, each linking
+straight to its project page.
 
 ## Equipment booking
 
@@ -237,7 +239,9 @@ signed-in account, matric number typed in once, and the RAs ticked from a
 checkbox list of the Files folder named exactly `RA` (the folder convention
 that marks a file as a risk assessment); one submit records them all. One
 acknowledgment per person per document. Admins see
-everyone's records and export them as CSV (`/api/ra/acknowledgments/csv`); a
+everyone's records and export them as an Excel workbook
+(`/api/ra/acknowledgments/export` — frozen header, a filter on every column,
+rows sorted by name then RA, times as real dates in the lab's timezone); a
 record outlives its document, keeping a snapshot of the name rather than a
 link, so deleting the file never erases the acknowledgment.
 
@@ -255,9 +259,11 @@ right where the certification rule bites: a "Request training" button on
 the instrument's own page and its catalogue card, and inside the booking
 dialog when certification is exactly what blocks the slot — with an
 optional note, and one open request per person per instrument (guests
-cannot ask; they talk to a manager). The instrument's managers and the
-admins hear about it through a bell row and a silent bot DM, and the
-queue lives under Certifications → Requests. Grant flows through the
+cannot ask; they talk to a manager). The instrument's managers hear about
+it through a bell row and a silent bot DM, and only they decide it under
+Certifications → Requests; admins step in only for an instrument with no
+managers (a banned or guest manager does not count). The matrix itself
+stays open to admins. Grant flows through the
 same certification grant as the matrix — trainer and training date
 default to the deciding manager and today (org timezone) and land in the
 training ledger — while a decline requires a reason. The requester hears

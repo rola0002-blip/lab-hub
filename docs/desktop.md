@@ -22,7 +22,7 @@ the server's own origin (http→https upgrades allowed); everything else opens
 externally. No file system, no arbitrary commands, no event spoofing.
 
 The one sanctioned write outside the session store: attachment downloads
-(a navigation the webview cannot render, e.g. the `/ra` CSV export) are
+(a navigation the webview cannot render, e.g. the `/ra` Excel export) are
 accepted by an `on_download` handler and land in the user's Downloads folder
 under the engine's suggested filename (deduplicated, never overwriting);
 a silent shell notification confirms the save. The page never picks the

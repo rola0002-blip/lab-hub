@@ -59,7 +59,7 @@ export default function Requests({ rows, today, me }: { rows: RequestRowView[]; 
   if (rows.length === 0) {
     return (
       <EmptyState icon={GraduationCap} title="No training requests"
-        hint="When someone asks for training on an instrument you manage, the request waits here." />
+        hint="Requests for instruments you manage wait here. Admins decide only for instruments with no managers." />
     )
   }
 
