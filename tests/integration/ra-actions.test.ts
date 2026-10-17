@@ -101,7 +101,6 @@ describe('RA server actions', () => {
   })
 })
 
-
 // 404-as-deny (the /api/bookings/[id]/ics posture): the route must not reveal
 // whether records exist to anyone who cannot review them. Every response —
 // denials included — is private, no-store (the download-route doctrine).
@@ -160,6 +159,8 @@ describe('RA acknowledgments Excel export route', () => {
     expect(res.status).toBe(404)
     expect(res.headers.get('cache-control')).toBe('private, no-store')
     mockUser.current = null
-    expect((await GET()).status).toBe(404)
+    const anon = await GET()
+    expect(anon.status).toBe(404)
+    expect(anon.headers.get('cache-control')).toBe('private, no-store')
   })
 })

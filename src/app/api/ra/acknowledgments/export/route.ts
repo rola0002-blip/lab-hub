@@ -15,11 +15,13 @@ const deny = (status: number, body: string) =>
   new Response(body, { status, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'private, no-store' } })
 
 export async function GET() {
-  const user = await getSessionUser()
-  if (!user || !canReviewRa(user.role)) return deny(404, 'Not found')
   let body: Buffer
   let filename: string
   try {
+    // The session lookup sits inside the try too: an auth/DB failure must still
+    // answer with a no-store deny, never Next's bare default 500.
+    const user = await getSessionUser()
+    if (!user || !canReviewRa(user.role)) return deny(404, 'Not found')
     const timezone = (await getOrg())?.timezone ?? 'Asia/Singapore'
     body = await buildRaAcknowledgmentsXlsx(await listAllRaAcknowledgments(user), timezone)
     filename = raExportFilename(orgToday(new Date(), timezone))

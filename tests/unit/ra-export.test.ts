@@ -29,6 +29,9 @@ describe('orgWallClock', () => {
     expect(orgWallClock(new Date('2026-09-02T01:00:00Z'), 'Asia/Singapore').toISOString()).toBe('2026-09-02T09:00:00.000Z')
     // and the previous calendar day west of UTC
     expect(orgWallClock(new Date('2026-09-02T01:00:00Z'), 'America/New_York').toISOString()).toBe('2026-09-01T21:00:00.000Z')
+    // non-hour offsets keep their minutes (+05:30, +05:45)
+    expect(orgWallClock(new Date('2026-09-02T01:00:00Z'), 'Asia/Kolkata').toISOString()).toBe('2026-09-02T06:30:00.000Z')
+    expect(orgWallClock(new Date('2026-09-02T01:00:00Z'), 'Asia/Kathmandu').toISOString()).toBe('2026-09-02T06:45:00.000Z')
   })
 })
 
