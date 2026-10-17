@@ -32,7 +32,7 @@ export const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     // role-adaptive, not role-gated (a guest sees their own submissions there).
     { href: '/feedback', label: 'Feedback', icon: Megaphone },
     // All roles (wave 9 D2/D4): anyone may acknowledge an RA they read; the
-    // records table + CSV are role-adaptive on the page itself.
+    // records table + Excel export are role-adaptive on the page itself.
     { href: '/ra', label: 'RA', icon: ShieldCheck },
   ] },
   { title: 'Projects', items: [

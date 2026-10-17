@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { prisma } from '@/lib/db'
+import ExcelJS from 'exceljs'
 import { resetDb, makeUser, makeDocumentFolder, makeDocument, makeRaAcknowledgment } from '../factories'
 
 const mockUser = vi.hoisted(() => ({ current: null as null | { id: string; name: string; email: string; role: string } }))
@@ -13,7 +14,7 @@ vi.mock('@/lib/session', () => ({
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
 import { submitRaAction, revokeRaAction } from '@/app/(app)/ra/actions'
-import { GET } from '@/app/api/ra/acknowledgments/csv/route'
+import { GET } from '@/app/api/ra/acknowledgments/export/route'
 
 const signIn = (u: { id: string; name: string; email: string; role: string }) => {
   mockUser.current = { id: u.id, name: u.name, email: u.email, role: u.role }
@@ -100,12 +101,20 @@ describe('RA server actions', () => {
   })
 })
 
+
 // 404-as-deny (the /api/bookings/[id]/ics posture): the route must not reveal
-// whether records exist to anyone who cannot review them.
-describe('RA acknowledgments CSV route', () => {
+// whether records exist to anyone who cannot review them. Every response —
+// denials included — is private, no-store (the download-route doctrine).
+describe('RA acknowledgments Excel export route', () => {
   beforeEach(async () => { await resetDb(); mockUser.current = null })
 
-  it('an admin exports every acknowledgment as an attachment CSV', async () => {
+  const sheetOf = async (res: Response) => {
+    const wb = new ExcelJS.Workbook()
+    await wb.xlsx.load(Buffer.from(await res.arrayBuffer()) as unknown as Parameters<ExcelJS.Workbook['xlsx']['load']>[0])
+    return wb.getWorksheet('RA acknowledgments')!
+  }
+
+  it('an admin downloads every acknowledgment as an attachment workbook', async () => {
     const admin = await makeUser({ role: 'admin' })
     const member = await makeUser({ role: 'member', name: 'Mira' })
     const folder = await makeDocumentFolder({ name: 'RA' })
@@ -114,33 +123,42 @@ describe('RA acknowledgments CSV route', () => {
     signIn(admin)
     const res = await GET()
     expect(res.status).toBe(200)
-    expect(res.headers.get('content-type')).toMatch(/^text\/csv/)
-    expect(res.headers.get('content-disposition')).toContain('attachment')
-    const body = await res.text()
-    // cell() quotes every field, so the header line is the quoted form.
-    expect(body).toContain('"name","email","matric","ra","acknowledgedAt"')
-    expect(body).toContain('NTU2026ABS')
+    expect(res.headers.get('content-type')).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    expect(res.headers.get('content-disposition')).toMatch(/^attachment; filename="labhub-ra-acknowledgments-\d{4}-\d{2}-\d{2}\.xlsx"$/)
+    expect(res.headers.get('cache-control')).toBe('private, no-store')
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff')
+    const ws = await sheetOf(res)
+    // no Organization row (resetDb truncates it) — the Asia/Singapore fallback names the zone
+    expect(ws.getRow(1).getCell(5).value).toBe('Acknowledged (Asia/Singapore)')
+    expect(ws.getRow(2).getCell(1).value).toBe('Mira')
+    expect(ws.getRow(2).getCell(3).value).toBe('NTU2026ABS')
 
-    // RFC 4180 round trip through the action: a name with quotes and an
-    // embedded newline comes back doubled-quoted, and the file stays exactly
-    // header + 2 rows (the newline lives INSIDE one quoted cell, never a
-    // stray record).
+    // A title with quotes and an embedded newline round-trips as ONE literal cell
+    // through the real submit action.
     const tricky = await makeDocument(member.id, { folderId: folder.id, name: 'He said "wear gloves", then left\nline-two.pdf' })
     signIn(member)
     expect(await submitRaAction([tricky.id], 'NTU2026ABS')).toEqual({ ok: true, recorded: 1 })
     signIn(admin)
-    const body2 = await (await GET()).text()
-    expect(body2).toContain('"He said ""wear gloves"", then left\nline-two.pdf"')
-    expect(body2.split('\r\n')).toHaveLength(3)
+    const ws2 = await sheetOf(await GET())
+    expect(ws2.rowCount).toBe(3)
+    expect([ws2.getRow(2).getCell(4).value, ws2.getRow(3).getCell(4).value]).toContain('He said "wear gloves", then left\nline-two.pdf')
   })
 
-  it('a member and a signed-out caller both get 404', async () => {
+  it('names the org timezone when an Organization row exists', async () => {
+    await prisma.organization.create({ data: { name: 'Lab', timezone: 'Asia/Tokyo' } })
+    signIn(await makeUser({ role: 'admin' }))
+    expect((await sheetOf(await GET())).getRow(1).getCell(5).value).toBe('Acknowledged (Asia/Tokyo)')
+  })
+
+  it('a member and a signed-out caller both get a no-store 404', async () => {
     const member = await makeUser({ role: 'member' })
     const folder = await makeDocumentFolder({ name: 'RA' })
     const doc = await makeDocument(member.id, { folderId: folder.id })
     await makeRaAcknowledgment(member.id, doc.id, { matricNumber: 'NTU2026ABS' })
     signIn(member)
-    expect((await GET()).status).toBe(404)
+    const res = await GET()
+    expect(res.status).toBe(404)
+    expect(res.headers.get('cache-control')).toBe('private, no-store')
     mockUser.current = null
     expect((await GET()).status).toBe(404)
   })

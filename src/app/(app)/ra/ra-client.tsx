@@ -151,7 +151,9 @@ export function RaClient({ name, options, mine, all, tz }: {
         <section>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-muted">Records</h2>
-            <a href="/api/ra/acknowledgments/csv" className={`${SMALL_BTN} text-default`}>Export CSV</a>
+            {/* download attr: the desktop-shell-safe download path (v0.25.1) — the
+                route answers with an attachment workbook either way. */}
+            <a href="/api/ra/acknowledgments/export" download className={`${SMALL_BTN} text-default`}>Export Excel</a>
           </div>
           {all.length > 0 ? (
             // 375px: six columns cannot fit — the repo's scroll-container

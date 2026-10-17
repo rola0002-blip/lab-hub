@@ -1,4 +1,5 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
+import ExcelJS from 'exceljs'
 import { wipe, seedSystem, runWizard, signIn, waitForHydration, ADMIN, createMemberViaInvite, acceptInvite } from './helpers'
 
 // W9-B — RA acknowledgments: the /ra round trip. Test order is load-bearing:
@@ -7,7 +8,7 @@ import { wipe, seedSystem, runWizard, signIn, waitForHydration, ADMIN, createMem
 // BEFORE any 'RA' folder exists (it asserts the friendly empty state);
 // journey 2 creates the folder + uploads two risk assessments through the
 // real Files UI, then bulk-acknowledges both in one submit (wave 19); journey
-// 3 reads the admin records table + CSV; journey 4 revokes on both sides —
+// 3 reads the admin records table + the Excel export; journey 4 revokes on both sides —
 // the member's own revoke frees re-acknowledgement, and the re-ack it creates
 // is the row the admin then revokes from Records. The member's matric
 // 'NTU2026ABS' is the thread the journeys share — consumed and re-created by
@@ -17,7 +18,7 @@ import { wipe, seedSystem, runWizard, signIn, waitForHydration, ADMIN, createMem
 // assessment.pdf' — substring locators (hasText, role-name) hit both. The
 // disambiguation idioms used throughout: exact:true role names (checkbox
 // accessible name is the doc name, later '… — acknowledged'), hasNotText on
-// row/listitem filters, and quoted '"name"' for CSV field matching.
+// row/listitem filters, and EXACT cell equality on the parsed workbook.
 //
 // Per-context client IP so better-auth's per-IP sign-in/up limit never trips.
 // Bands 10.10–10.91 are taken by the other suites (see feedback.spec.ts's
@@ -45,6 +46,20 @@ const RA_DOC = 'risk assessment.pdf'
 // Wave 19 bulk acknowledge: a second doc whose name CONTAINS RA_DOC — the
 // substring pitfall this file deliberately exercises.
 const RA_DOC2 = 'laser cutters risk assessment.pdf'
+
+// Parsed RA column (D) of the admin export — EXACT cell values, so RA_DOC can
+// never substring-match RA_DOC2. APIResponse has .body(), not .arrayBuffer().
+async function exportedRaColumn(page: Page): Promise<string[]> {
+  const res = await page.request.get('/api/ra/acknowledgments/export')
+  expect(res.status()).toBe(200)
+  expect(res.headers()['content-type']).toContain('spreadsheetml')
+  const wb = new ExcelJS.Workbook()
+  await wb.xlsx.load((await res.body()) as unknown as Parameters<ExcelJS.Workbook['xlsx']['load']>[0])
+  const ws = wb.getWorksheet('RA acknowledgments')!
+  const out: string[] = []
+  ws.eachRow((row, n) => { if (n > 1) out.push(String(row.getCell(4).value)) })
+  return out
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 test('1: no RA folder yet shows the friendly empty state', async ({ browser }) => {
@@ -151,7 +166,7 @@ test('2: member bulk-acknowledges both RAs and sees their history', async ({ bro
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-test('3: admin sees records + CSV export', async ({ browser }) => {
+test('3: admin sees records + Excel export', async ({ browser }) => {
   test.setTimeout(150_000)
   const page = await newPage(browser)
   await signIn(page, ADMIN.email, ADMIN.password)
@@ -164,16 +179,10 @@ test('3: admin sees records + CSV export', async ({ browser }) => {
   await expect(rows).toHaveCount(2)
   await expect(rows.filter({ hasText: RA_DOC2 })).toContainText(MEMBER.name)
   await expect(rows.filter({ hasNotText: RA_DOC2 })).toContainText(MEMBER.name)
-  await expect(page.getByRole('link', { name: 'Export CSV' })).toBeVisible()
-
-  // page.request shares the page's storage state — this GET is the admin session.
-  const csv = await page.request.get('/api/ra/acknowledgments/csv')
-  expect(csv.status()).toBe(200)
-  expect(csv.headers()['content-type']).toContain('text/csv')
-  const body = await csv.text()
-  expect(body).toContain(MATRIC)
-  // cell() quotes every field, so the header line is the quoted form.
-  expect(body).toContain('"name","email","matric","ra","acknowledgedAt"')
+  const exportLink = page.getByRole('link', { name: 'Export Excel' })
+  await expect(exportLink).toBeVisible()
+  await expect(exportLink).toHaveAttribute('download', '')
+  expect((await exportedRaColumn(page)).sort()).toEqual([RA_DOC, RA_DOC2].sort())
 
   await page.context().close()
 })
@@ -210,10 +219,9 @@ test('4: revoke — own row frees re-acknowledgement; admin revoke removes the r
   await mp.context().close()
 
   // Admin revokes the member's re-acked short-RA row from Records (the
-  // long-RA row shares MATRIC — isolated with hasNotText); the CSV stops
-  // carrying that record while keeping the survivor. The ra field is
-  // quoted by cell(), so '"risk assessment.pdf"' cannot substring-match
-  // inside '"laser cutters risk assessment.pdf"'.
+  // long-RA row shares MATRIC — isolated with hasNotText); the export stops
+  // carrying that record while keeping the survivor (exact cell equality —
+  // RA_DOC is a substring of RA_DOC2).
   const ap = await newPage(browser)
   await signIn(ap, ADMIN.email, ADMIN.password)
   await ap.goto('/ra')
@@ -225,9 +233,6 @@ test('4: revoke — own row frees re-acknowledgement; admin revoke removes the r
   await expect(ap.locator('[aria-live="polite"]').getByText('Acknowledgment revoked.')).toBeVisible()
   await expect(ap.getByRole('row').filter({ hasText: RA_DOC }).filter({ hasNotText: RA_DOC2 })).toHaveCount(0)
   await expect(ap.getByRole('row').filter({ hasText: RA_DOC2 })).toContainText(MATRIC)
-  const csv = await ap.request.get('/api/ra/acknowledgments/csv')
-  const body = await csv.text()
-  expect(body).not.toContain(`"${RA_DOC}"`)
-  expect(body).toContain(`"${RA_DOC2}"`)
+  expect(await exportedRaColumn(ap)).toEqual([RA_DOC2])
   await ap.context().close()
 })

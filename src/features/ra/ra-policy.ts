@@ -19,7 +19,7 @@ export function assertCanSubmitRa(role: Role): void {
   if (!canSubmitRa(role)) throw new PolicyError('forbidden', 'Your account cannot acknowledge RAs.')
 }
 
-// Records + CSV export are the admin's due-diligence view.
+// Records + the Excel export are the admin's due-diligence view.
 export function canReviewRa(role: Role): boolean {
   return role === 'admin'
 }
