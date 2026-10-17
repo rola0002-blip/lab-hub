@@ -822,7 +822,7 @@ model CertificationRevocation {
 }
 
 // v0.32 Task 6: a certification training request. An uncertified member asks;
-// an equipment manager (or admin) decides. One PENDING row per (userId,
+// the instrument's active managers decide (admins only when it has none — W21-A). One PENDING row per (userId,
 // equipmentId) — enforced ONLY by the partial unique index in the migration SQL
 // (the Label posture; never reintroduce @@unique here, it would fight the
 // partial). status is a CHECK-constrained plain String ('PENDING' | 'GRANTED' |

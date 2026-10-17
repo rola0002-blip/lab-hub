@@ -50,7 +50,7 @@ export default function RequestTrainingButton({ equipmentId, equipmentName, tone
       </button>
       {open && (
         <Modal title={`Request training — ${equipmentName}`} onClose={() => { if (!pending) setOpen(false) }}>
-          <p className="mt-2 text-sm text-muted">The instrument&apos;s managers are notified and can grant your certification.</p>
+          <p className="mt-2 text-sm text-muted">The instrument&apos;s managers are notified and can grant your certification (the admins, if it has no managers).</p>
           <label className="mt-3 block text-sm text-default">Note <span className="text-subtle">(optional)</span>
             <textarea rows={3} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)}
               placeholder="e.g. ready for hBN growth runs from next week"

@@ -1,9 +1,10 @@
+import { randomUUID } from 'node:crypto'
 import { test, expect, type Browser, type Page } from '@playwright/test'
 import { db, wipe, runWizard, createMemberViaInvite, acceptInvite, waitForHydration } from './helpers'
 
 // v0.32 Task 7: the training-request UI. A member blocked by the certification
 // gate asks for training from the equipment page (and sees the affordance in the
-// booking dialog's blocked banner); an admin decides under Certifications →
+// booking dialog's blocked banner); on an unmanaged instrument an admin (the W21-A fallback) decides under Certifications →
 // Requests; the grant flips the member's matrix cell and rings their bell.
 //
 // Per-context client IP so better-auth's per-IP sign-in limit never trips. The
@@ -108,6 +109,47 @@ test('member requests training; admin grants; matrix flips and member is notifie
   // ── The member's bell carries the decision ─────────────────────────────────
   await page.getByRole('button', { name: 'Notifications' }).click()
   await expect(page.getByText('Training granted: you are now certified on CVD Furnace.')).toBeVisible()
+})
+
+// W21-A: on a MANAGED instrument only its managers decide. A member who manages
+// XPS sees the request, its badge and the Grant flow; the non-manager admin's
+// queue is empty and carries no badge.
+test('a managed instrument: its member-manager grants; the non-manager admin sees nothing', async ({ browser }) => {
+  test.setTimeout(240_000)
+  const adminPage = await newPage(browser)
+  await runWizard(adminPage)
+  const token = await createMemberViaInvite(adminPage, 'lina@lab.test', 'member')
+  const lp = await newPage(browser)
+  await acceptInvite(lp, token, 'Lina', 'MemberPass!1234')
+  const lina = await db.user.findFirstOrThrow({ where: { email: 'lina@lab.test' } })
+  const eq = await db.equipment.create({ data: { name: 'XPS', certificationRequired: true, approvalPolicy: 'NONE' } })
+  await db.equipmentManager.create({ data: { userId: lina.id, equipmentId: eq.id } })
+  const omar = await db.user.create({ data: { id: randomUUID(), name: 'Omar', email: 'omar@lab.test', emailVerified: true, role: 'member' } })
+  await db.trainingRequest.create({ data: { userId: omar.id, equipmentId: eq.id, note: 'XPS depth profiling' } })
+
+  // The non-manager admin: the tab stays (fallback queue), its contents are empty.
+  await adminPage.goto('/certifications?tab=requests')
+  await waitForHydration(adminPage)
+  await expect(main(adminPage).getByText('No training requests')).toBeVisible()
+  await expect(main(adminPage).getByRole('cell', { name: 'Omar', exact: true })).toHaveCount(0)
+  await expect(adminPage.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: /^Certifications/ }).locator('span.rounded-full')).toHaveCount(0)
+
+  // The member-manager: badge 1, the row, and a working grant.
+  await lp.goto('/certifications')
+  await waitForHydration(lp)
+  const badge = lp.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: /^Certifications/ }).locator('span.rounded-full')
+  await expect(badge).toHaveText('1')
+  await main(lp).getByRole('tab', { name: 'Requests' }).click()
+  await lp.waitForURL(/\/certifications\?tab=requests$/)
+  const requests = main(lp).getByRole('tabpanel')
+  await expect(requests.getByRole('cell', { name: 'Omar', exact: true })).toBeVisible()
+  await requests.getByRole('button', { name: 'Grant' }).click()
+  const grant = lp.getByRole('dialog', { name: 'Grant training — Omar on XPS' })
+  await expect(grant).toBeVisible()
+  await grant.getByRole('button', { name: 'Grant' }).click()
+  await expect(grant).not.toBeVisible()
+  await expect(badge).toHaveCount(0)
+  await expect.poll(async () => (await db.certification.findUnique({ where: { userId_equipmentId: { userId: omar.id, equipmentId: eq.id } } }))?.grantedById).toBe(lina.id)
 })
 
 test('guests see no request affordance; members see one per certification-gated card', async ({ browser }) => {

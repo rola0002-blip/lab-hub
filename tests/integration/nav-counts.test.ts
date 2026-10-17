@@ -40,7 +40,7 @@ describe('nav counts (W20-D)', () => {
     expect(await countPendingApprovals(guest)).toBe(0)
   })
 
-  it('training requests: admin all PENDING, manager own instruments, decided excluded, guest 0', async () => {
+  it('training requests: admin only unmanaged instruments, manager own instruments, decided excluded, guest 0', async () => {
     const admin = await makeUser({ role: 'admin' })
     const mgr = await makeUser()
     const guest = await makeUser({ role: 'guest' })
@@ -51,7 +51,7 @@ describe('nav counts (W20-D)', () => {
     await prisma.trainingRequest.create({ data: { userId: a.id, equipmentId: xps.id } })
     await prisma.trainingRequest.create({ data: { userId: b.id, equipmentId: afm.id } })
     await prisma.trainingRequest.create({ data: { userId: b.id, equipmentId: xps.id, status: 'GRANTED' } })
-    expect(await countPendingRequests(admin)).toBe(2)
+    expect(await countPendingRequests(admin)).toBe(1) // AFM only — XPS has an active manager (W21-A)
     expect(await countPendingRequests(mgr)).toBe(1)
     expect(await countPendingRequests(guest)).toBe(0)
   })
