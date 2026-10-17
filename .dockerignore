@@ -17,3 +17,6 @@ test-results
 # multi-GB desktop/src-tauri/target out of the context (a bare 'debug' pattern
 # would only match the context ROOT, not nested target dirs).
 desktop
+# .claude/ holds local agent config and other sessions' git worktrees (each a
+# full checkout with its own node_modules/.next, several GB) — never image content.
+.claude
