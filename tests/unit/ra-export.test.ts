@@ -57,6 +57,19 @@ describe('buildRaAcknowledgmentsXlsx', () => {
     expect(at.numFmt).toBe('yyyy-mm-dd hh:mm')
   })
 
+  it('breaks a same-person same-RA tie by time, oldest first, whatever the input order', async () => {
+    const ws = await parse(await buildRaAcknowledgmentsXlsx([
+      ack('Amy', 'cvd ra.pdf', '2026-09-02T03:00:00.000Z', 'late'),
+      ack('Amy', 'cvd ra.pdf', '2026-09-02T01:00:00.000Z', 'early'),
+      ack('Amy', 'cvd ra.pdf', '2026-09-02T02:00:00.000Z', 'mid-a'),
+      ack('Amy', 'cvd ra.pdf', '2026-09-02T02:00:00.000Z', 'mid-b'),
+    ], 'Asia/Singapore'))
+    const matrics = [2, 3, 4, 5].map((n) => ws.getRow(n).getCell(3).value)
+    expect(matrics[0]).toBe('early')
+    expect(matrics[3]).toBe('late')
+    expect(matrics.slice(1, 3).sort()).toEqual(['mid-a', 'mid-b']) // an exact tie keeps both, adjacent
+  })
+
   it('keeps a formula-looking value a literal string', async () => {
     const ws = await parse(await buildRaAcknowledgmentsXlsx([ack('=SUM(A1)', '+evil.pdf', '2026-09-02T01:00:00.000Z', '@x')], 'Asia/Singapore'))
     expect(ws.getRow(2).getCell(1).value).toBe('=SUM(A1)')
