@@ -422,7 +422,8 @@ test('standalone PWA: popouts render via the service worker, never the construct
 
 // W20-C: a bell ROW pops out exactly once, and its paired LabHub Bot DM never
 // adds a second popup. Training requests are the probe: createTrainingRequest
-// writes a training_request row for every admin AND a suppressed bot DM. The
+// writes a training_request row for every admin (XPS/AFM have no managers, so
+// the admins are the W21-A fallback deciders) AND a suppressed bot DM. The
 // second request runs AFTER the admin's chat store knows the bot DM (reload +
 // conversations gate) — before W20-C that DM's msg event raised a second popup
 // titled "LabHub Bot".

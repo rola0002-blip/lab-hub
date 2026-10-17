@@ -128,8 +128,13 @@ test('a managed instrument: its member-manager grants; the non-manager admin see
   await db.trainingRequest.create({ data: { userId: omar.id, equipmentId: eq.id, note: 'XPS depth profiling' } })
 
   // The non-manager admin: the tab stays (fallback queue), its contents are empty.
+  // The badge is asserted only AFTER NavCountsSync's live fetch lands — before it,
+  // the SSR seed alone paints and an absent badge would prove nothing about the
+  // live count.
+  const adminCounts = adminPage.waitForResponse((r) => r.url().includes('/api/nav-counts') && r.ok())
   await adminPage.goto('/certifications?tab=requests')
   await waitForHydration(adminPage)
+  expect((await (await adminCounts).json()).trainingRequests).toBe(0)
   await expect(main(adminPage).getByText('No training requests')).toBeVisible()
   await expect(main(adminPage).getByRole('cell', { name: 'Omar', exact: true })).toHaveCount(0)
   await expect(adminPage.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: /^Certifications/ }).locator('span.rounded-full')).toHaveCount(0)
