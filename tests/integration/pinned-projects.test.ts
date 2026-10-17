@@ -62,4 +62,19 @@ describe('pinned projects', () => {
     await unpinProject({ userId: g.id, projectId: p.id })
     expect(await listPinnedProjects(g.id)).toEqual([])
   })
+
+  it('W21-C: a deleted pinned project frees its slot on the next pin', async () => {
+    const u = await makeUser({ role: 'member' })
+    const ids: string[] = []
+    for (let i = 0; i < MAX_PINS; i++) {
+      const p = await createProject({ actorId: u.id, role: 'member', name: `P${i}` })
+      ids.push(p.id)
+      await pinProject({ userId: u.id, projectId: p.id })
+    }
+    await prisma.project.delete({ where: { id: ids[3] } })
+    const extra = await createProject({ actorId: u.id, role: 'member', name: 'X' })
+    await pinProject({ userId: u.id, projectId: extra.id }) // no cap error: the dead id no longer counts
+    const stored = (await prisma.user.findUniqueOrThrow({ where: { id: u.id }, select: { pinnedProjectIds: true } })).pinnedProjectIds
+    expect(stored).toEqual([...ids.filter((id) => id !== ids[3]), extra.id])
+  })
 })

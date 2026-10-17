@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import {
   ChevronDown, LayoutDashboard, MessageCircle, CalendarDays, CalendarCheck,
   ClipboardCheck, Award, Users, Microscope, Settings, ListTodo, Inbox,
-  FolderKanban, Files, Megaphone, ShieldCheck, type LucideIcon,
+  FolderKanban, Files, Megaphone, ShieldCheck, Pin, type LucideIcon,
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -67,11 +67,12 @@ export function isNavVisible(href: string, role: Role): boolean {
   return true
 }
 
-export function Sidebar({ org, user, unread, navSeed, role, version }: {
+export function Sidebar({ org, user, unread, navSeed, pinned, role, version }: {
   org: { name: string; logoPath: string | null }
   user: { id: string; name: string; image: string | null }
   unread: number
   navSeed: NavCounts
+  pinned: { id: string; name: string }[]
   role: Role
   version: string
 }) {
@@ -96,7 +97,15 @@ export function Sidebar({ org, user, unread, navSeed, role, version }: {
   const nav = useSyncExternalStore(subscribeNavCounts, navCountsSnapshot, () => null) ?? navSeed
   // Flat href list feeds the longest-prefix-wins active test (all sections,
   // regardless of role visibility, so activeness is stable across roles).
-  const allHrefs = NAV_SECTIONS.flatMap((s) => s.items.map((i) => i.href))
+  // W21-C: pinned project rows (outside NAV_SECTIONS — the ⌘K palette contract is
+  // the static map). Their hrefs JOIN the longest-prefix list so that on a pinned
+  // project's page ONLY its pinned row is current; an unpinned project page still
+  // lights "Projects".
+  const pinnedHrefs = pinned.map((p) => `/projects/${p.id}`)
+  const allHrefs = [...NAV_SECTIONS.flatMap((s) => s.items.map((i) => i.href)), ...pinnedHrefs]
+  const rowClass = (active: boolean) => active
+    ? 'bg-sidebar-active font-semibold text-white'
+    : 'text-sidebar-fg hover:bg-sidebar-hover hover:text-sidebar-fg-strong'
   // Reuse the existing better-auth sign-out mechanism (was <SignOutButton/>).
   // Also drop this device's saved theme/accent so a shared machine never leaks
   // the previous user's appearance to the next (and their own server prefs win).
@@ -151,11 +160,7 @@ export function Sidebar({ org, user, unread, navSeed, role, version }: {
                       <Link
                         href={href}
                         aria-current={active ? 'page' : undefined}
-                        className={`flex h-7 items-center gap-2 rounded-md px-2 text-sm ${
-                          active
-                            ? 'bg-sidebar-active font-semibold text-white'
-                            : 'text-sidebar-fg hover:bg-sidebar-hover hover:text-sidebar-fg-strong'
-                        }`}
+                        className={`flex h-7 items-center gap-2 rounded-md px-2 text-sm ${rowClass(active)}`}
                       >
                         <Icon size={15} aria-hidden />
                         <span className="truncate">{label}</span>
@@ -163,6 +168,32 @@ export function Sidebar({ org, user, unread, navSeed, role, version }: {
                         {href === '/approvals' && <Badge count={nav.approvals} />}
                         {href === '/certifications' && <Badge count={nav.trainingRequests} />}
                       </Link>
+                      {/* W21-C: the viewer's pinned projects, indented under
+                          Projects in pin order. A named list, NOT a heading —
+                          e2e matches getByRole('heading', { name: 'Projects' })
+                          (substring) on four pages. Plain <a> rows, so the phone
+                          drawer closes on tap without data-close-nav. */}
+                      {href === '/projects' && pinned.length > 0 && (
+                        <ul aria-label="Pinned projects" className="mt-0.5">
+                          {pinned.map((p) => {
+                            const pHref = `/projects/${p.id}`
+                            const pActive = isNavItemActive(pathname, pHref, allHrefs)
+                            return (
+                              <li key={p.id}>
+                                <Link
+                                  href={pHref}
+                                  title={p.name}
+                                  aria-current={pActive ? 'page' : undefined}
+                                  className={`flex h-7 items-center gap-2 rounded-md pl-6 pr-2 text-sm ${rowClass(pActive)}`}
+                                >
+                                  <Pin size={12} className="shrink-0" aria-hidden />
+                                  <span className="truncate">{p.name}</span>
+                                </Link>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      )}
                     </li>
                   )
                 })}

@@ -18,4 +18,13 @@ describe('isNavItemActive (longest-prefix-wins)', () => {
     expect(isNavItemActive('/issues/LAB-1', '/issues', HREFS)).toBe(true)
     expect(isNavItemActive('/issues/LAB-1', '/issues/me', HREFS)).toBe(false)
   })
+  // W21-C: sidebar pinned rows join the href list, so a pinned project's page
+  // lights ONLY its pinned row; an unpinned project page still lights Projects.
+  it('/projects/p1 → the pinned row only when pinned; Projects otherwise', () => {
+    const withPin = [...HREFS, '/projects/p1']
+    expect(isNavItemActive('/projects/p1', '/projects/p1', withPin)).toBe(true)
+    expect(isNavItemActive('/projects/p1', '/projects', withPin)).toBe(false)
+    expect(isNavItemActive('/projects/p2', '/projects', withPin)).toBe(true)
+    expect(isNavItemActive('/projects/p1', '/projects', HREFS)).toBe(true)
+  })
 })

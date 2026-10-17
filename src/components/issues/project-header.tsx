@@ -50,10 +50,11 @@ export function ProjectHeader({ project, role, users, folders, timezone, today, 
     // F3: pin/unpin sits before the admin Delete item and is available to EVERY
     // role (guests included — it only edits the viewer's own pinnedProjectIds).
     // With this item the menu always has ≥1 entry, so the header's kebab now
-    // renders for guests too.
-    { label: pinned ? 'Unpin from My issues' : 'Pin to My issues', onSelect: () => start(async () => {
+    // renders for guests too. W21-C: a pin lands in the sidebar AND on My issues;
+    // the two labels are deliberately not substrings of each other (e2e names).
+    { label: pinned ? 'Unpin from sidebar' : 'Pin to sidebar', onSelect: () => start(async () => {
       const r = pinned ? await unpinProjectAction(project.id) : await pinProjectAction(project.id)
-      toast(r.ok ? (pinned ? 'Unpinned.' : 'Pinned to My issues.') : r.message)
+      toast(r.ok ? (pinned ? 'Unpinned.' : 'Pinned to the sidebar and My issues.') : r.message)
       router.refresh()
     }) },
     ...(role === 'admin' ? [{ label: 'Delete project', danger: true, onSelect: () => setConfirmDel(true) }] : []),

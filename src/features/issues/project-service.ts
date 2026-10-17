@@ -420,8 +420,14 @@ export async function pinProject(args: { userId: string; projectId: string }): P
   if (!project) throw new PolicyError('not_found', 'Project not found.')
   const current = u.pinnedProjectIds
   if (current.includes(args.projectId)) return // idempotent — a repeat click is a no-op
-  if (current.length >= MAX_PINS) throw new PolicyError('invalid', `Pin limit is ${MAX_PINS} projects.`)
-  await prisma.user.update({ where: { id: args.userId }, data: { pinnedProjectIds: [...current, args.projectId] } })
+  // W21-C: prune pins whose project was deleted BEFORE the cap check — deleteProject
+  // never touches User.pinnedProjectIds (a plain TEXT[], no FK), the lists drop dead
+  // ids silently, and no UI can unpin a project that no longer exists, so without
+  // this a deleted pinned project would occupy a slot forever.
+  const live = new Set((await prisma.project.findMany({ where: { id: { in: current } }, select: { id: true } })).map((p) => p.id))
+  const kept = current.filter((id) => live.has(id))
+  if (kept.length >= MAX_PINS) throw new PolicyError('invalid', `Pin limit is ${MAX_PINS} projects.`)
+  await prisma.user.update({ where: { id: args.userId }, data: { pinnedProjectIds: [...kept, args.projectId] } })
 }
 
 // Unpin is idempotent too: filtering out an absent id yields the same array.

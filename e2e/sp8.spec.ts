@@ -340,7 +340,7 @@ test('5: "Lab today" renders five sections whose attention counts agree with /pr
   await expect(gp.getByRole('button', { name: 'Project actions' })).toBeVisible()
   await gp.getByRole('button', { name: 'Project actions' }).click()
   await expect(gp.getByRole('menuitem', { name: 'Skip the next prompt' })).toHaveCount(0)
-  await expect(gp.getByRole('menuitem', { name: 'Pin to My issues' })).toBeVisible()
+  await expect(gp.getByRole('menuitem', { name: 'Pin to sidebar' })).toBeVisible()
   await gp.context().close()
 })
 

@@ -412,7 +412,7 @@ test('create-issue modal: status menu is fully visible and clickable, not clippe
   await expect(dialog.getByRole('button', { name: 'Status', exact: true })).toContainText('In Progress')
 })
 
-test('pinned projects: pin from the project page, chip filters /issues/me, unpin', async ({ page }) => {
+test('pinned projects: pin from the project page, sidebar row + chip on /issues/me, unpin', async ({ page }) => {
   test.setTimeout(120_000)
   await runWizard(page)
   await signIn(page, ADMIN.email, ADMIN.password)
@@ -426,30 +426,44 @@ test('pinned projects: pin from the project page, chip filters /issues/me, unpin
   await page.waitForURL(/\/projects\/[^/]+$/)
   await expect(page.getByRole('heading', { name: 'Pin E2E Project' })).toBeVisible()
   await page.getByRole('button', { name: 'Project actions' }).click()
-  await page.getByRole('menuitem', { name: 'Pin to My issues' }).click()
-  await expect(page.getByText('Pinned to My issues.')).toBeVisible()
+  await page.getByRole('menuitem', { name: 'Pin to sidebar' }).click()
+  await expect(page.getByText('Pinned to the sidebar and My issues.')).toBeVisible()
   // The refreshed header now offers the inverse action.
   await expect(page.getByRole('button', { name: 'Project actions' })).toBeVisible()
   await page.getByRole('button', { name: 'Project actions' }).click()
-  await expect(page.getByRole('menuitem', { name: 'Unpin from My issues' })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: 'Unpin from sidebar' })).toBeVisible()
   await page.keyboard.press('Escape')
 
-  // (b) The chip row on /issues/me — clicking the chip filters via ?project= (the
-  // existing filter machinery, no new filter code).
+  // (b) W21-C: the sidebar gains the pinned row under Projects — current on its
+  // own page, while the Projects row is NOT (longest-prefix-wins).
+  const rail = page.getByRole('navigation', { name: 'Primary' })
+  const railRow = rail.getByRole('list', { name: 'Pinned projects' }).getByRole('link', { name: 'Pin E2E Project' })
+  await expect(railRow).toBeVisible()
+  await expect(railRow).toHaveAttribute('aria-current', 'page')
+  await expect(rail.getByRole('link', { name: 'Projects', exact: true })).not.toHaveAttribute('aria-current', 'page')
+  const projectUrl = page.url()
+
+  // (c) The chip row on /issues/me — MAIN-scoped: the sidebar row carries the
+  // same accessible name. Clicking the chip filters via ?project=.
   await page.goto('/issues/me')
-  const chip = page.getByRole('link', { name: 'Pin E2E Project' })
+  const chip = page.getByRole('main').getByRole('link', { name: 'Pin E2E Project' })
   await expect(chip).toBeVisible()
   await chip.click()
   await expect(page).toHaveURL(/\/issues\/me\?project=/)
   await expect(chip).toBeVisible() // still rendered, now in its active/selected style
 
-  // (c) Unpin from the manage menu — the chip disappears after the refresh. The
-  // manage menu is deliberately quiet on success (rail precedent: the visible
-  // chip change IS the feedback; only failures toast, e.g. the MAX_PINS cap) —
-  // unlike the project-page kebab, which does toast 'Unpinned.'
+  // (d) The sidebar row is quick access to the project page from anywhere.
+  await railRow.click()
+  await expect(page).toHaveURL(projectUrl)
+
+  // (e) Unpin from the /issues/me manage menu — chip AND sidebar row disappear
+  // after the refresh. The manage menu is deliberately quiet on success (only
+  // failures toast, e.g. the MAX_PINS cap) — unlike the project-page kebab.
+  await page.goto('/issues/me')
   await page.getByRole('button', { name: 'Manage pinned projects' }).click()
   await page.getByRole('menuitem', { name: 'Unpin Pin E2E Project' }).click()
   await expect(chip).toHaveCount(0)
+  await expect(railRow).toHaveCount(0)
 })
 
 test('project labels: create on the project page, apply via the properties menu, detach on project move, filter by label', async ({ page }) => {
