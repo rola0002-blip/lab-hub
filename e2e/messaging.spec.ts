@@ -1,4 +1,5 @@
-import { test, expect, type Browser, type Page } from '@playwright/test'
+import { test, expect, type Browser, type Locator, type Page } from '@playwright/test'
+import { crc32, deflateSync } from 'node:zlib'
 import { wipe, runWizard, signIn, ADMIN, createMemberViaInvite, acceptInvite, db, waitForHydration } from './helpers'
 
 // Per-context client IP. better-auth rate-limits /sign-in/email and /sign-up/email at 10/60 s
@@ -970,5 +971,233 @@ test('22: day pills never stack — the next day pushes the previous pill off th
   })
   expect(pinned).toEqual(['Yesterday'])
 
+  await page.context().close()
+})
+
+// Wave 22 (feedback cmwqckdx8): the pane sticks to the newest message by the reader's
+// INTENT before an append, never by post-append geometry — a tall append (a day pill +
+// sender header, a long message, an image) used to read as "not at bottom" and never
+// stuck. `gap` is the distance from the log's scroll end; ≤ 2 px absorbs sub-pixel
+// rounding. Each test seeds 40 admin rows (grouped, minutes apart, all in the past)
+// so the log overflows the default 1280×720 viewport; with the channel's system line
+// that stays inside the 50-row first page, so nothing pages.
+const gap = (log: Locator) => log.evaluate((el: HTMLElement) => el.scrollHeight - el.scrollTop - el.clientHeight)
+
+async function seedHistory(cid: string) {
+  const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  const start = Date.now() - 2 * 3_600_000
+  await db.message.createMany({
+    data: Array.from({ length: 40 }, (_, i) => ({
+      conversationId: cid, userId: me.id, body: `history row ${i}`,
+      createdAt: new Date(start + i * 60_000),
+    })),
+  })
+}
+
+// Admin opens the seeded channel and lands at the newest row (first-load snap).
+async function openAtBottom(page: Page, cid: string): Promise<Locator> {
+  await page.goto('/chat/' + cid)
+  await waitForHydration(page)
+  const log = page.getByRole('log', { name: 'Messages' })
+  await expect(log.getByText('history row 39')).toBeVisible()
+  await expect.poll(() => gap(log)).toBeLessThanOrEqual(2)
+  await expect(page.getByRole('button', { name: /^Jump to/ })).toBeHidden()
+  return log
+}
+
+test('23: your own send lands on the newest message from any scroll position', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  const cid = await createChannel(page, 'own-send')
+  await seedHistory(cid)
+  const log = await openAtBottom(page, cid)
+
+  await log.evaluate((el: HTMLElement) => { el.scrollTop = 0 })
+  await expect(page.getByRole('button', { name: 'Jump to latest messages' })).toBeVisible()
+
+  await send(page, 'sent from the top of history')
+  await expect(logMsg(page, 'sent from the top of history')).toBeVisible()
+  await expect.poll(() => gap(log)).toBeLessThanOrEqual(2)
+  await expect(page.getByRole('button', { name: /^Jump to/ })).toBeHidden()
+  await expect(logMsg(page, 'sent from the top of history')).toBeInViewport()
+
+  await page.context().close()
+})
+
+test('24: a tall incoming message sticks at the bottom; a reader who scrolled up is never yanked', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  const pageB = await joinAs(page, browser, BOB, 'member')
+  const cid = await createChannel(page, 'tall')
+  await joinChannel(pageB, cid, 'tall')
+  await seedHistory(cid)
+  const log = await openAtBottom(page, cid)
+
+  // Bob's leading row (avatar + name) plus eight pre-wrapped lines is far taller than
+  // the 80 px proximity threshold — the post-append check never stuck on it.
+  const tall = (tag: string) => [`${tag} line 1`, ...Array.from({ length: 7 }, (_, i) => `${tag} line ${i + 2}`)].join('\n')
+  await send(pageB, tall('first tall'))
+  await expect(logMsg(page, 'first tall line 8')).toBeVisible()
+  await expect.poll(() => gap(log)).toBeLessThanOrEqual(2)
+  await expect(page.getByRole('button', { name: /^Jump to/ })).toBeHidden()
+
+  // Scrolled up: the next tall message counts on the button and never moves the reader.
+  await log.evaluate((el: HTMLElement) => { el.scrollTop = 0 })
+  await expect(page.getByRole('button', { name: 'Jump to latest messages' })).toBeVisible()
+  await send(pageB, tall('second tall'))
+  await expect(page.getByRole('button', { name: 'Jump to 1 new message' })).toBeVisible()
+  await expect(logMsg(page, 'second tall line 8')).toBeAttached()
+  expect(await log.evaluate((el: HTMLElement) => el.scrollTop)).toBeLessThanOrEqual(2)
+
+  await pageB.context().close()
+  await page.context().close()
+})
+
+test('25: the composer growing keeps the newest message in view', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  const cid = await createChannel(page, 'grow')
+  await seedHistory(cid)
+  const log = await openAtBottom(page, cid)
+
+  // Auto-grow (W4-B) shrinks the scroller with no messages change and no scroll
+  // event — only the ResizeObserver keeps the reader pinned.
+  const box = page.getByPlaceholder('Write a message…')
+  const oneRow = await box.evaluate((el: HTMLElement) => el.offsetHeight)
+  await box.fill(Array.from({ length: 6 }, (_, i) => `draft line ${i + 1}`).join('\n'))
+  await expect.poll(() => box.evaluate((el: HTMLElement) => el.offsetHeight)).toBeGreaterThan(oneRow + 40)
+  await expect.poll(() => gap(log)).toBeLessThanOrEqual(2)
+  await expect(page.getByRole('button', { name: /^Jump to/ })).toBeHidden()
+
+  await box.press('Enter')
+  await expect(logMsg(page, 'draft line 6')).toBeVisible()
+  await expect(box).toHaveValue('')
+  await expect.poll(() => gap(log)).toBeLessThanOrEqual(2)
+  await expect(page.getByRole('button', { name: /^Jump to/ })).toBeHidden()
+
+  await page.context().close()
+})
+
+// A solid-colour 40×600 RGB PNG built in Node (no fixture file): rendered under the
+// timeline's max-h-64 it is 256 px tall, and the <img> has no intrinsic size until it
+// decodes — so it grows the log AFTER the row's stick effect has already run.
+function tallPng(w: number, h: number): Buffer {
+  const chunk = (type: string, data: Buffer) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length)
+    const td = Buffer.concat([Buffer.from(type, 'ascii'), data])
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(td) >>> 0)
+    return Buffer.concat([len, td, crc])
+  }
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4)
+  ihdr[8] = 8; ihdr[9] = 2 // 8-bit depth, truecolour; compression/filter/interlace 0
+  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(w * 3, 0x5a)]) // filter 0 + pixels
+  const raw = Buffer.concat(Array.from({ length: h }, () => row))
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0)),
+  ])
+}
+
+test('26: an image that finishes loading keeps the reader at the bottom', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  const cid = await createChannel(page, 'tall-image')
+  await seedHistory(cid)
+  const log = await openAtBottom(page, cid)
+
+  await page.getByPlaceholder('Write a message…').click()
+  await dispatchPaste(page, 'textarea', { name: 'tall-figure.png', type: 'image/png', body: tallPng(40, 600) })
+  await expect(page.getByText('tall-figure.png')).toBeVisible()
+  await send(page, 'tall figure attached')
+
+  // The real row's <img> decodes after the stick effect: only late-growth pinning
+  // keeps the log at its end once the image has its full height.
+  const img = log.locator('img[alt="tall-figure.png"]')
+  await expect(img).toBeVisible()
+  await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalHeight)).toBe(600)
+  await expect.poll(() => img.evaluate((el: HTMLElement) => el.offsetHeight)).toBeGreaterThan(200)
+  await expect.poll(() => gap(log)).toBeLessThanOrEqual(2)
+  await expect(page.getByRole('button', { name: /^Jump to/ })).toBeHidden()
+
+  await page.context().close()
+})
+
+// Wave 22: opening a conversation (markRead) also reads its DM/mention bells and so
+// drops them from the digest email — so the pane marks read only while someone is
+// LOOKING (tab visible + focused). Playwright's focus emulation makes every page report
+// hasFocus() === true, so the test shadows document.hasFocus on the instance to model
+// an unfocused window (a background tab, the desktop shell hidden in the tray).
+test('27: a message that lands while the tab is unfocused is not read until the reader looks', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  const pageB = await joinAs(page, browser, BOB, 'member')
+
+  // Bob opens a DM with the admin (Roland); the admin opens it focused (read now).
+  await pageB.goto('/chat')
+  await pageB.getByRole('button', { name: 'New direct message' }).click()
+  await pageB.getByRole('button', { name: 'Roland' }).click()
+  await pageB.getByRole('button', { name: 'Start' }).click()
+  await pageB.waitForURL(/\/chat\/[^/]+$/)
+  const dmId = new URL(pageB.url()).pathname.split('/').pop()!
+  await send(pageB, 'dm opener')
+  // Record the page's EventSource so the reconnect leg below can drive it.
+  await page.context().addInitScript(() => {
+    const Orig = window.EventSource
+    const seen: EventSource[] = []
+    ;(window as unknown as { __es: EventSource[] }).__es = seen
+    window.EventSource = class extends Orig {
+      constructor(url: string | URL, init?: EventSourceInit) { super(url, init); seen.push(this) }
+    }
+  })
+  await page.goto('/chat/' + dmId)
+  await waitForHydration(page)
+  await expect(logMsg(page, 'dm opener')).toBeVisible()
+  const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  const bellFor = (messageId: string) => db.notification.findFirst({
+    where: { userId: me.id, type: 'message_dm', payload: { path: ['messageId'], equals: messageId } },
+  })
+  const opener = await db.message.findFirstOrThrow({ where: { conversationId: dmId, body: 'dm opener' } })
+  await expect.poll(async () => (await bellFor(opener.id))?.readAt ?? null).not.toBeNull()
+
+  // Unfocused from here; the override must really take effect in the page.
+  await page.evaluate(() => { Object.defineProperty(document, 'hasFocus', { configurable: true, value: () => false }) })
+  expect(await page.evaluate(() => document.hasFocus())).toBe(false)
+  let readPosts = 0
+  page.on('request', (r) => { if (r.method() === 'POST' && r.url().endsWith(`/api/chat/conversations/${dmId}/read`)) readPosts++ })
+
+  // Inbound while unfocused: rendered, belled, NOT read — though the reader is at the bottom.
+  await send(pageB, 'unseen dm')
+  await expect(logMsg(page, 'unseen dm')).toBeVisible()
+  const unseen = await db.message.findFirstOrThrow({ where: { conversationId: dmId, body: 'unseen dm' } })
+  await expect.poll(async () => (await bellFor(unseen.id)) !== null).toBe(true)
+
+  // A reconnect refetch (loadLatest) while unfocused must not read either. The stream's
+  // drop + reopen is driven through the registry's own handlers (onerror then onopen →
+  // the 'reconnect' event); the pane refetches and remounts every row — a probe
+  // attribute on the old rows marks when that has happened.
+  await page.locator('[data-msg-id]').first().evaluate((el: HTMLElement) => { el.dataset.probe = '1' })
+  await page.evaluate(() => {
+    for (const es of (window as unknown as { __es: EventSource[] }).__es) {
+      es.onerror?.call(es, new Event('error'))
+      es.onopen?.call(es, new Event('open'))
+    }
+  })
+  await expect(page.locator('[data-msg-id][data-probe]')).toHaveCount(0)
+  await expect(logMsg(page, 'unseen dm')).toBeVisible()
+  expect(readPosts).toBe(0)
+  expect((await bellFor(unseen.id))?.readAt ?? null).toBeNull()
+  const member = await db.conversationMember.findFirstOrThrow({ where: { conversationId: dmId, userId: me.id } })
+  expect(member.lastReadAt === null || member.lastReadAt < unseen.createdAt).toBe(true)
+
+  // The reader looks again (focus, still at the bottom) → the deferred read lands.
+  await page.evaluate(() => {
+    delete (document as unknown as { hasFocus?: unknown }).hasFocus
+    window.dispatchEvent(new Event('focus'))
+  })
+  await expect.poll(async () => (await bellFor(unseen.id))?.readAt ?? null).not.toBeNull()
+  expect(readPosts).toBe(1)
+
+  await pageB.context().close()
   await page.context().close()
 })
