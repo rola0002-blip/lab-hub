@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.36.1] - 2026-11-21
+
 ### Fixed
 - **The notification bell no longer re-badges on every refresh.** The bell
   counted every unread notification but, when opened, marked as read only the
