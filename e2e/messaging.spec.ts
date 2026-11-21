@@ -1201,3 +1201,112 @@ test('27: a message that lands while the tab is unfocused is not read until the 
   await pageB.context().close()
   await page.context().close()
 })
+
+// Wave 22 review: a `?msg=` deep link whose centring scroll does not move the log (a
+// conversation that does not overflow, or a target already in place) fires no scroll
+// event. Dropping the at-bottom intent there left "Jump to latest" on screen at gap 0:
+// the next tall message did not stick and live reads stopped. Bell rows and pushes
+// open exactly this kind of link into a fresh conversation.
+test('28: a deep link into a short conversation keeps the reader at the bottom', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  const pageB = await joinAs(page, browser, BOB, 'member')
+  const cid = await createChannel(page, 'deep-short')
+  await joinChannel(pageB, cid, 'deep-short')
+  // One send at a time, each awaited on the admin side (the test-24 idiom).
+  await send(pageB, 'short one')
+  await expect(logMsg(page, 'short one')).toBeVisible()
+  await send(pageB, 'short two')
+  await expect(logMsg(page, 'short two')).toBeVisible()
+  const target = await db.message.findFirstOrThrow({ where: { conversationId: cid, body: 'short two' } })
+
+  await page.goto(`/chat/${cid}?msg=${target.id}`)
+  await waitForHydration(page)
+  const log = page.getByRole('log', { name: 'Messages' })
+  await expect(log.locator(`[data-msg-id="${target.id}"]`)).toBeVisible()
+  expect(await log.evaluate((el: HTMLElement) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(2)
+  await expect(page.getByRole('button', { name: /^Jump to/ })).toBeHidden()
+
+  // Tall messages that make the log overflow stick to the newest row.
+  const tall = (tag: string) => Array.from({ length: 12 }, (_, i) => `${tag} line ${i + 1}`).join('\n')
+  for (const tag of ['deep a', 'deep b', 'deep c']) {
+    await send(pageB, tall(tag))
+    await expect(logMsg(page, `${tag} line 12`)).toBeAttached()
+  }
+  await expect.poll(() => log.evaluate((el: HTMLElement) => el.scrollHeight - el.clientHeight)).toBeGreaterThan(100)
+  await expect.poll(() => gap(log)).toBeLessThanOrEqual(2)
+  await expect(page.getByRole('button', { name: /^Jump to/ })).toBeHidden()
+
+  await pageB.context().close()
+  await page.context().close()
+})
+
+// Wave 22 review: a read deferred while nobody looked must land when the reader
+// reaches the newest message while looking — not only on a focus event that finds
+// them at the bottom. Here a deep link loads unfocused (read deferred), focus returns
+// at mid-history (still no read), then the reader scrolls to the end. A fetch wrapper
+// counts read POSTs synchronously, so the "no read yet" checks need no waiting.
+test('29: a deferred read lands when the reader scrolls to the newest message', async ({ browser }) => {
+  test.setTimeout(90_000)
+  const page = await admin(browser)
+  const pageB = await joinAs(page, browser, BOB, 'member')
+
+  await pageB.goto('/chat')
+  await pageB.getByRole('button', { name: 'New direct message' }).click()
+  await pageB.getByRole('button', { name: 'Roland' }).click()
+  await pageB.getByRole('button', { name: 'Start' }).click()
+  await pageB.waitForURL(/\/chat\/[^/]+$/)
+  const dmId = new URL(pageB.url()).pathname.split('/').pop()!
+  await seedHistory(dmId)
+  await send(pageB, 'deferred dm')
+  const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  await expect.poll(() => db.message.count({ where: { conversationId: dmId, body: 'deferred dm' } })).toBe(1)
+  const msg = await db.message.findFirstOrThrow({ where: { conversationId: dmId, body: 'deferred dm' } })
+  const bell = () => db.notification.findFirst({
+    where: { userId: me.id, type: 'message_dm', payload: { path: ['messageId'], equals: msg.id } },
+  })
+  await expect.poll(async () => (await bell()) !== null).toBe(true)
+
+  await page.addInitScript(() => {
+    const w = window as unknown as { __readCalls: number; __unfocused: boolean }
+    w.__readCalls = 0
+    w.__unfocused = true
+    const realHasFocus = Document.prototype.hasFocus
+    Object.defineProperty(document, 'hasFocus', { configurable: true, value: () => (w.__unfocused ? false : realHasFocus.call(document)) })
+    const origFetch = window.fetch
+    window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if ((init?.method ?? 'GET') === 'POST' && /\/api\/chat\/conversations\/[^/]+\/read$/.test(url)) w.__readCalls++
+      return origFetch(input, init)
+    }
+  })
+  const readCalls = () => page.evaluate(() => (window as unknown as { __readCalls: number }).__readCalls)
+  await page.emulateMedia({ reducedMotion: 'reduce' }) // the deep-link scroll is instant
+  const old = await db.message.findFirstOrThrow({ where: { conversationId: dmId, body: 'history row 5' } })
+  await page.goto(`/chat/${dmId}?msg=${old.id}`)
+  await waitForHydration(page)
+  const log = page.getByRole('log', { name: 'Messages' })
+  await expect(log.locator(`[data-msg-id="${old.id}"]`)).toBeVisible()
+  await expect(logMsg(page, 'deferred dm')).toBeAttached()
+  expect(await readCalls()).toBe(0) // loaded unfocused: the read is deferred
+  expect(await gap(log)).toBeGreaterThan(100) // the reader is in history
+
+  // Focus returns while the reader is mid-history: still no read.
+  expect(await page.evaluate(() => {
+    const w = window as unknown as { __readCalls: number; __unfocused: boolean }
+    w.__unfocused = false
+    window.dispatchEvent(new Event('focus'))
+    return w.__readCalls
+  })).toBe(0)
+  expect((await bell())?.readAt ?? null).toBeNull()
+
+  // Scrolling to the newest message while looking takes the deferred read, once.
+  await log.evaluate((el: HTMLElement) => { el.scrollTop = el.scrollHeight })
+  await expect.poll(readCalls).toBe(1)
+  await expect.poll(async () => (await bell())?.readAt ?? null).not.toBeNull()
+  await expect(page.getByRole('button', { name: /^Jump to/ })).toBeHidden()
+  expect(await readCalls()).toBe(1)
+
+  await pageB.context().close()
+  await page.context().close()
+})

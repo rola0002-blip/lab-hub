@@ -44,6 +44,21 @@ const DEEPLINK_MAX_PAGES = 12
 // the end; below the threshold we show the jump-to-latest button.
 const AT_BOTTOM_PX = 80
 
+// Wave 22: someone is LOOKING at the pane — the tab is visible and the window focused.
+// markRead also reads the conversation's bell rows, so it waits for this.
+const isLooking = () => document.visibilityState === 'visible' && document.hasFocus()
+
+// Wave 22: whether `scrollIntoView({ block: 'center' })` on `el` will move the log —
+// the target's centre on the scrollport's centre, clamped to the scroll range. A move
+// under 1 px counts as none: it may fire no scroll event.
+function centringMoves(log: HTMLElement, el: HTMLElement): boolean {
+  const portTop = log.getBoundingClientRect().top + log.clientTop
+  const r = el.getBoundingClientRect()
+  const max = log.scrollHeight - log.clientHeight
+  const to = Math.min(max, Math.max(0, log.scrollTop + (r.top - portTop) - (log.clientHeight - r.height) / 2))
+  return Math.abs(to - log.scrollTop) >= 1
+}
+
 // Pane-level day divider — a sticky pill that rides the top of the scroller while
 // you read a day's messages. W20-A: it is the FIRST child of its day's wrapper, so
 // it sticks only within that day and the next day's pill pushes it off the top.
@@ -125,20 +140,20 @@ export default function MessagePane({ conversationId, conversationType, channelN
   const markRead = useCallback(() => void fetch(`/api/chat/conversations/${conversationId}/read`, { method: 'POST' }), [conversationId])
 
   // Wave 22: markRead also reads this conversation's DM/mention bells (and so drops
-  // them from the digest email), so it runs only while someone is looking: tab
-  // visible and focused. A read that comes due while nobody is looking (background-tab
-  // reconnect, the desktop shell restored into the tray, an inbound message while
-  // unfocused) is deferred to the next focus/visibility change, and taken then only
-  // if the reader is at the bottom.
+  // them from the digest email), so it runs only while someone is looking (isLooking).
+  // A read that comes due while nobody is looking (background-tab reconnect, the
+  // desktop shell hidden in the tray, an inbound message while unfocused) is deferred
+  // (pendingReadRef) and taken once the reader looks at the newest message: on the next
+  // focus/visibility change if they are at the bottom then, or when syncBottom sees
+  // them reach the bottom while looking.
   const pendingReadRef = useRef(false)
   const markReadWhenLooking = useCallback(() => {
-    if (document.visibilityState === 'visible' && document.hasFocus()) { pendingReadRef.current = false; markRead() }
+    if (isLooking()) { pendingReadRef.current = false; markRead() }
     else pendingReadRef.current = true
   }, [markRead])
   useEffect(() => {
     const onLook = () => {
-      if (!pendingReadRef.current || !atBottomRef.current) return
-      if (document.visibilityState !== 'visible' || !document.hasFocus()) return
+      if (!pendingReadRef.current || !atBottomRef.current || !isLooking()) return
       pendingReadRef.current = false
       markRead()
     }
@@ -372,8 +387,12 @@ export default function MessagePane({ conversationId, conversationType, channelN
     if (bottom === atBottomRef.current) return
     atBottomRef.current = bottom
     setAtBottom(bottom)
-    if (bottom) setNewCount(0)
-  }, [])
+    if (!bottom) return
+    setNewCount(0)
+    // A deferred read lands when the reader reaches the newest message while looking
+    // (wave 22): a focus that found them mid-history skipped it.
+    if (pendingReadRef.current && isLooking()) { pendingReadRef.current = false; markRead() }
+  }, [markRead])
   const leaveBottom = useCallback(() => { atBottomRef.current = false; setAtBottom(false) }, [])
 
   useEffect(() => { // first load opens at newest; afterwards stick by intent (at-bottom reader or own send)
@@ -431,11 +450,15 @@ export default function MessagePane({ conversationId, conversationType, channelN
   const jumpToLatest = useCallback(() => {
     const el = scroller.current
     if (!el) return
+    // Already at the end, the scrollTo below fires no scroll event — re-derive here:
+    // the button must never outlive a click that leaves the reader at the newest row.
+    const atEnd = el.scrollHeight - el.scrollTop - el.clientHeight < 1
     const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
     el.scrollTo({ top: el.scrollHeight, behavior })
     setNewCount(0)
-    markRead()
-  }, [markRead])
+    markReadWhenLooking() // also clears a deferred read, so syncBottom does not repeat it
+    if (atEnd) syncBottom()
+  }, [markReadWhenLooking, syncBottom])
 
   // Pane-scoped `r` = reply-in-thread on the focused message. useGlobalHotkey
   // already ignores keypresses while an input/textarea is focused; we resolve the
@@ -493,19 +516,24 @@ export default function MessagePane({ conversationId, conversationType, channelN
       const r = await fetch(`/api/chat/conversations/${conversationId}/messages?before=${messages[0].id}`)
       if (!r.ok) return
       const d = await r.json()
+      // Wave 22: a prepend is the reader going back in history — drop the at-bottom
+      // intent so neither the stick effect nor the ResizeObserver snaps the log to the
+      // newest row (in a log that did not overflow, the reader was at both ends). The
+      // stick effect's syncBottom re-derives the real state after the prepend renders.
+      leaveBottom()
       setMessages((prev) => [...d.messages, ...prev]); setHasMore(d.hasMore)
     } finally {
       loadingEarlier.current = false
     }
-  }, [conversationId, messages])
+  }, [conversationId, messages, leaveBottom])
 
   // Deep-link: land ON the `?msg=` target. If it isn't loaded yet, page older
   // history (bounded) until it is — this effect re-runs as `messages` grows —
   // then centre it and flash the mention tint (~1.5s). `deepLinkRef` tracks the
   // current target so we scroll once per link and re-arm on a new target
   // (including a same-conversation soft-navigation, since the pane never
-  // remounts). The one deliberate synchronous state write is leaveBottom (as
-  // syncBottom is in the stick effect): pagination goes through loadEarlier
+  // remounts). The one deliberate synchronous state write is leaveBottom or
+  // syncBottom (as in the stick effect): pagination goes through loadEarlier
   // (async), and the flash is a transient CSS class, not React state.
   const deepLinkRef = useRef<{ id: string | null; tries: number; done: boolean }>({ id: null, tries: 0, done: false })
   useEffect(() => {
@@ -517,10 +545,15 @@ export default function MessagePane({ conversationId, conversationType, channelN
     if (el) {
       st.done = true
       const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      // Wave 22: drop the at-bottom intent first so neither the stick effect nor
-      // the ResizeObserver fights the (smooth) scroll; its scroll events then
-      // re-derive the real state through syncBottom.
-      leaveBottom()
+      // Wave 22: when the centring scroll will move the log, drop the at-bottom intent
+      // first so neither the stick effect nor the ResizeObserver fights the (smooth)
+      // scroll; its scroll events then re-derive the real state through syncBottom.
+      // When it will not move (a log that does not overflow, or the target already in
+      // place), no scroll event follows, so re-derive now: dropping the intent there
+      // left the jump button on screen at the newest message.
+      const log = scroller.current
+      if (log && centringMoves(log, el)) leaveBottom()
+      else syncBottom()
       el.scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' })
       el.classList.add('msg-flash')
       setTimeout(() => el.classList.remove('msg-flash'), 1500)
@@ -528,7 +561,7 @@ export default function MessagePane({ conversationId, conversationType, channelN
     }
     // Target not in the loaded window yet — page back until found or exhausted.
     if (hasMore && st.tries < DEEPLINK_MAX_PAGES) { st.tries++; void loadEarlier() }
-  }, [deepLinkMsgId, messages, hasMore, loading, loadEarlier, leaveBottom])
+  }, [deepLinkMsgId, messages, hasMore, loading, loadEarlier, leaveBottom, syncBottom])
 
   // DM headers show the person, not a generic label: their avatar + name (via
   // dmName, which also handles group DMs) + a live presence line. The peer is the
