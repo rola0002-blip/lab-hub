@@ -11,7 +11,7 @@ Cloudflare tunnel; every server compose call uses **`--profile prod --profile tu
 | **Back up** (also nightly 03:00) | `./scripts/backup.sh` |
 | **Check health** | `curl http://localhost:3000/api/health` |
 | **View logs** | `docker compose --profile prod --profile tunnel logs -f app` |
-| **Bring stack up** | `./scripts/macos/stack-up.sh` (or `docker compose --profile prod --profile tunnel up -d`) |
+| **Bring stack up** | `./scripts/macos/stack-up.sh` — boots the image named by `.env` `LABHUB_VERSION` (the local image of that tag if the pull fails); or `docker compose --profile prod --profile tunnel up -d` |
 
 > **Tags must match `package.json`.** A release tag = `v` + the `package.json` version. Cut
 > releases with `npm run release` only — a hand-made tag whose name disagrees makes `update.sh`

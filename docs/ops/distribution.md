@@ -73,18 +73,34 @@ docker run --rm -i -v labhub_uploads:/data alpine \
 
 ## Maintainer: dogfooding the image (this repo's own deployment)
 
-Instead of `git pull && --build`, run the published image with the existing
-`labhub_*` volumes (see `docker-compose.image.yml`):
+The boot LaunchAgent (`scripts/macos/stack-up.sh`) runs the image named by
+`LABHUB_VERSION` in `.env`, with the existing `labhub_*` volumes (see
+`docker-compose.image.yml`). Keep that pin equal to the version you deploy: a
+stale pin boots the older release at the next restart.
+
+A published release:
 
 ```
 ./scripts/backup.sh    # safety net first
-docker compose --profile prod down
-LABHUB_VERSION=vX.Y.Z docker compose -f docker-compose.yml \
-  -f docker-compose.image.yml --profile prod up -d --pull always
-curl -fsS http://127.0.0.1:3000/api/health   # confirm vX.Y.Z
+sed -i '' 's/^LABHUB_VERSION=.*/LABHUB_VERSION=vX.Y.Z/' .env
+docker compose -f docker-compose.yml -f docker-compose.image.yml \
+  --profile prod --profile tunnel up -d --pull always
+curl -fsS http://127.0.0.1:<APP_PORT>/api/health   # confirm X.Y.Z
 ```
 
-Roll back by re-running with the previous `LABHUB_VERSION`.
+A release that is tagged locally but not yet published (build the tag's commit):
+
+```
+docker compose --profile prod build app
+docker tag labhub-app:latest ghcr.io/rola0002-blip/lab-hub:vX.Y.Z
+sed -i '' 's/^LABHUB_VERSION=.*/LABHUB_VERSION=vX.Y.Z/' .env
+docker compose -f docker-compose.yml -f docker-compose.image.yml \
+  --profile prod --profile tunnel up -d --no-deps --pull never app
+```
+
+At boot, `stack-up.sh` pulls the pinned tag; when the pull fails (tag not yet
+published, or no network) it boots the local image of the same tag. Roll back
+by pinning the previous `LABHUB_VERSION` and re-running the first block.
 
 NOTE: a git checkout and a dist install both use compose project `labhub` —
 never run both simultaneously on the same machine. On the dev/dogfood

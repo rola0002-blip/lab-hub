@@ -6,6 +6,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **The notification bell no longer re-badges on every refresh.** The bell
+  counted every unread notification but, when opened, marked as read only the
+  20 rows it showed — anything older stayed unread and came back in the badge
+  after each reload. Opening the bell now reads everything up to its newest
+  row. Reading a conversation in chat also clears that conversation's
+  direct-message and mention notifications (thread replies stay in the bell
+  until you open it), so the badge no longer counts messages you have already
+  read in chat.
+- **Chat follows the newest message.** Sending a message now always scrolls the
+  conversation to it, from any scroll position. An incoming message keeps you
+  at the bottom when you were at the bottom — previously anything taller than
+  about two lines (the first message of a new day, a long message, an image)
+  stopped the scroll and showed "Jump to latest" instead. An image that
+  finishes loading, or a composer that grows while you type, no longer pushes
+  the newest message out of view.
+- **macOS server boot falls back to the local image.** `scripts/macos/stack-up.sh`
+  (the boot LaunchAgent) starts the image named by `.env` `LABHUB_VERSION`.
+  When that tag could not be pulled — not yet published, or no network at
+  boot — Compose started nothing at all; the script now boots the local image
+  of the same tag. Keep `LABHUB_VERSION` equal to the deployed version (see the
+  dogfooding section of `docs/ops/distribution.md`): a stale pin boots the older
+  release at the next restart.
+
 ## [0.36.0] - 2026-10-17
 
 ### Added
