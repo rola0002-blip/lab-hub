@@ -2,6 +2,7 @@ import 'server-only'
 import type { Prisma as P, Message } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { emitEvent } from '@/lib/events'
+import { clearConversationBells } from '@/lib/notification-read'
 import { removeUpload } from '@/lib/uploads'
 import { isMember } from './conversation-service'
 import { parseMentions } from './mentions'
@@ -326,9 +327,18 @@ export async function getMessageDto(messageId: string): Promise<MessageDto | nul
 }
 
 export async function markRead(args: { userId: string; conversationId: string }): Promise<void> {
-  await prisma.conversationMember.updateMany({
-    where: { conversationId: args.conversationId, userId: args.userId }, data: { lastReadAt: new Date() },
+  const at = new Date()
+  const { count } = await prisma.conversationMember.updateMany({
+    where: { conversationId: args.conversationId, userId: args.userId }, data: { lastReadAt: at },
   })
+  // Wave 22: reading the conversation reads its DM/mention bells (root messages up
+  // to `at`) — members only (count 0 = not a member). BEFORE the read event, so the
+  // bell's refresh on that event sees cleared rows. Best-effort: a bell-sync failure
+  // must never fail the read itself.
+  if (count > 0) {
+    try { await clearConversationBells({ userId: args.userId, conversationId: args.conversationId, upTo: at }) }
+    catch (e) { console.error('clearConversationBells failed', e) }
+  }
   await emitEvent({ t: 'read', cid: args.conversationId, uid: args.userId })
 }
 

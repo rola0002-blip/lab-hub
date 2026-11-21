@@ -279,6 +279,9 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
   // Bot posts never alert here (shouldPingFromMessage) — a bot DM's bell row alerts through load() instead (W20-C).
   useEvents((e) => {
     if (e.t === 'notif' || e.t === 'reconnect') { void load(); return }
+    // Wave 22: a chat read can clear bell rows server-side; `read` is routed to its own
+    // user only. Skip the fetch when the badge is already zero.
+    if (e.t === 'read') { if (unread > 0) void load(); return }
     if (e.t !== 'msg' || !('cid' in e)) return
     const cid = e.cid
     const conv = conversations.find((c) => c.id === cid)
@@ -320,8 +323,10 @@ export default function Bell({ soundsSeed = false }: { soundsSeed?: boolean }) {
     const next = !open
     setOpen(next)
     if (next && unread > 0) {
-      const ids = items.filter((i) => !i.readAt).map((i) => i.id)
-      await fetch('/api/notifications/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) })
+      // Wave 22: read EVERYTHING up to the newest loaded row, not just the ids the
+      // 20-row window shows — older unread rows otherwise re-badge on every refresh.
+      const newest = items[0]?.createdAt
+      if (newest) await fetch('/api/notifications/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ upTo: newest }) })
       setUnread(0)
     }
   }

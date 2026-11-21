@@ -44,6 +44,21 @@ const DEEPLINK_MAX_PAGES = 12
 // the end; below the threshold we show the jump-to-latest button.
 const AT_BOTTOM_PX = 80
 
+// Wave 22: someone is LOOKING at the pane — the tab is visible and the window focused.
+// markRead also reads the conversation's bell rows, so it waits for this.
+const isLooking = () => document.visibilityState === 'visible' && document.hasFocus()
+
+// Wave 22: whether `scrollIntoView({ block: 'center' })` on `el` will move the log —
+// the target's centre on the scrollport's centre, clamped to the scroll range. A move
+// under 1 px counts as none: it may fire no scroll event.
+function centringMoves(log: HTMLElement, el: HTMLElement): boolean {
+  const portTop = log.getBoundingClientRect().top + log.clientTop
+  const r = el.getBoundingClientRect()
+  const max = log.scrollHeight - log.clientHeight
+  const to = Math.min(max, Math.max(0, log.scrollTop + (r.top - portTop) - (log.clientHeight - r.height) / 2))
+  return Math.abs(to - log.scrollTop) >= 1
+}
+
 // Pane-level day divider — a sticky pill that rides the top of the scroller while
 // you read a day's messages. W20-A: it is the FIRST child of its day's wrapper, so
 // it sticks only within that day and the next day's pill pushes it off the top.
@@ -111,6 +126,11 @@ export default function MessagePane({ conversationId, conversationType, channelN
   // handler can read the live value without re-subscribing.
   const unreadCapturedRef = useRef<string | null>(null)
   const atBottomRef = useRef(true)
+  // Wave 22: atBottomRef is the reader's INTENT — written by syncBottom (user scrolls,
+  // post-snap sync), the conversation-switch reset and the deep-link guard only;
+  // content growth never clears it.
+  const stickNextRef = useRef(false) // own send: land on the newest message once
+  const content = useRef<HTMLDivElement>(null)
   // Live snapshot of id→name so the SSE handler can resolve `<@id>` mentions to
   // readable names when flattening an inbound body for the #live-msgs region,
   // without re-subscribing the handler on every roster change.
@@ -118,6 +138,29 @@ export default function MessagePane({ conversationId, conversationType, channelN
   useEffect(() => { namesRef.current = new Map(users.map((u) => [u.id, u.name])) }, [users])
 
   const markRead = useCallback(() => void fetch(`/api/chat/conversations/${conversationId}/read`, { method: 'POST' }), [conversationId])
+
+  // Wave 22: markRead also reads this conversation's DM/mention bells (and so drops
+  // them from the digest email), so it runs only while someone is looking (isLooking).
+  // A read that comes due while nobody is looking (background-tab reconnect, the
+  // desktop shell hidden in the tray, an inbound message while unfocused) is deferred
+  // (pendingReadRef) and taken once the reader looks at the newest message: on the next
+  // focus/visibility change if they are at the bottom then, or when syncBottom sees
+  // them reach the bottom while looking.
+  const pendingReadRef = useRef(false)
+  const markReadWhenLooking = useCallback(() => {
+    if (isLooking()) { pendingReadRef.current = false; markRead() }
+    else pendingReadRef.current = true
+  }, [markRead])
+  useEffect(() => {
+    const onLook = () => {
+      if (!pendingReadRef.current || !atBottomRef.current || !isLooking()) return
+      pendingReadRef.current = false
+      markRead()
+    }
+    window.addEventListener('focus', onLook)
+    document.addEventListener('visibilitychange', onLook)
+    return () => { window.removeEventListener('focus', onLook); document.removeEventListener('visibilitychange', onLook) }
+  }, [markRead])
 
   const loadLatest = useCallback(async () => {
     setLoading(true)
@@ -131,8 +174,8 @@ export default function MessagePane({ conversationId, conversationType, channelN
       unreadCapturedRef.current = conversationId
       setFirstUnreadId(d.firstUnreadId ?? null)
     }
-    markRead()
-  }, [conversationId, markRead])
+    markReadWhenLooking()
+  }, [conversationId, markReadWhenLooking])
 
   // loadLatest only setStates after awaiting fetch — async, never a synchronous cascading render.
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -195,6 +238,7 @@ export default function MessagePane({ conversationId, conversationType, channelN
   useEffect(() => {
     firstLoad.current = true
     atBottomRef.current = true
+    pendingReadRef.current = false // a deferred read never lands on the next conversation
     // One-shot transition on a conversation id change, never a cascading render.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setAtBottom(true)
@@ -242,6 +286,10 @@ export default function MessagePane({ conversationId, conversationType, channelN
       return [...prev, msg]
     })
   }, [])
+
+  // Own send (temp + its 201 replacement) always lands on the newest message, from
+  // any scroll position — Slack's behaviour. Retries of a failed temp do not.
+  const onComposerSent = useCallback((m: Msg) => { stickNextRef.current = true; upsert(m) }, [upsert])
 
   // Flag a temp whose POST failed so its row can offer an inline retry.
   const markFailed = useCallback((tempId: string) => {
@@ -291,10 +339,12 @@ export default function MessagePane({ conversationId, conversationType, channelN
           return
         }
         // Read-state honesty: an inbound message only advances lastReadAt when we
-        // are actually LOOKING at it — scrolled to the bottom AND the tab focused.
-        // Otherwise the unread badge clears while the message was never seen.
+        // are actually LOOKING at it — scrolled to the bottom AND the tab visible
+        // and focused (unfocused, the read waits for the next focus while still at
+        // the bottom). Otherwise the unread badge clears while the message was
+        // never seen.
         upsert(m)
-        if (atBottomRef.current && document.hasFocus()) markRead()
+        if (atBottomRef.current) markReadWhenLooking()
         // A genuinely-new inbound message (this handler already filters to the
         // current conversation and this branch drops our own echo + system rows,
         // and backfill never routes through here) is announced to assistive tech
@@ -323,7 +373,7 @@ export default function MessagePane({ conversationId, conversationType, channelN
       if (typingTimer.current) clearTimeout(typingTimer.current)
       typingTimer.current = setTimeout(() => setTyping(null), 4000)
     }
-  }), [conversationId, registerConversationHandler, loadLatest, loadPinned, upsert, markRead, selfId])
+  }), [conversationId, registerConversationHandler, loadLatest, loadPinned, upsert, markReadWhenLooking, selfId])
 
   // Bottom-proximity is derived from live geometry; only re-render on transitions.
   // Called from onScroll AND after every content change: a refetch (SSE reconnect)
@@ -337,10 +387,15 @@ export default function MessagePane({ conversationId, conversationType, channelN
     if (bottom === atBottomRef.current) return
     atBottomRef.current = bottom
     setAtBottom(bottom)
-    if (bottom) setNewCount(0)
-  }, [])
+    if (!bottom) return
+    setNewCount(0)
+    // A deferred read lands when the reader reaches the newest message while looking
+    // (wave 22): a focus that found them mid-history skipped it.
+    if (pendingReadRef.current && isLooking()) { pendingReadRef.current = false; markRead() }
+  }, [markRead])
+  const leaveBottom = useCallback(() => { atBottomRef.current = false; setAtBottom(false) }, [])
 
-  useEffect(() => { // first load opens at newest; afterwards stick to bottom only when near it
+  useEffect(() => { // first load opens at newest; afterwards stick by intent (at-bottom reader or own send)
     const el = scroller.current
     if (!el) return
     // On first load, open at newest — UNLESS we're deep-linking, in which case the
@@ -351,24 +406,59 @@ export default function MessagePane({ conversationId, conversationType, channelN
       syncBottom()
       return
     }
-    // Stick threshold = AT_BOTTOM_PX (was 200): the button shows exactly when we
-    // DON'T snap, so an inbound message can never yank the pane while the jump
-    // button is on screen (wave 9 A3).
-    if (el.scrollHeight - el.scrollTop - el.clientHeight < AT_BOTTOM_PX) el.scrollTop = el.scrollHeight
+    // Stick by the reader's intent BEFORE the append, never post-append geometry:
+    // measured after the append, any new content taller than AT_BOTTOM_PX (a day pill
+    // + sender header, a long message, an image) read as "not at bottom" and never
+    // stuck (wave 22). Wave-9 A3 still holds: the jump button shows exactly when
+    // atBottom is false, and false never auto-snaps — except your own send.
+    if (stickNextRef.current || atBottomRef.current) el.scrollTop = el.scrollHeight
+    stickNextRef.current = false
     syncBottom()
   }, [messages, deepLinkMsgId, syncBottom])
 
-  // Track bottom-proximity for the jump button on user scroll.
-  const onScroll = useCallback(() => { syncBottom() }, [syncBottom])
+  // Late growth (an image decoding, the typing line, the composer growing and
+  // shrinking the scroller, a window or thread-panel resize) changes geometry with
+  // no messages change and no scroll event — keep a reader at the bottom pinned.
+  useEffect(() => {
+    const el = scroller.current
+    const inner = content.current
+    if (!el || !inner || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => { if (atBottomRef.current) el.scrollTop = el.scrollHeight })
+    ro.observe(el)
+    ro.observe(inner)
+    return () => ro.disconnect()
+  }, [])
+
+  // Track bottom-proximity for the jump button on user scroll. A scroll event is
+  // dispatched a frame after the scrollTop write that queued it — often our own
+  // snap — so content that grew in between (an image decoding) makes it read "not
+  // at bottom" although the reader never moved. Growth never moves scrollTop UP, so
+  // only an upward move may clear the at-bottom intent; otherwise re-pin (wave 22).
+  const lastTopRef = useRef(0)
+  const onScroll = useCallback(() => {
+    const el = scroller.current
+    if (!el) return
+    const movedUp = el.scrollTop < lastTopRef.current
+    lastTopRef.current = el.scrollTop
+    if (atBottomRef.current && !movedUp && el.scrollHeight - el.scrollTop - el.clientHeight >= AT_BOTTOM_PX) {
+      el.scrollTop = el.scrollHeight
+      return
+    }
+    syncBottom()
+  }, [syncBottom])
 
   const jumpToLatest = useCallback(() => {
     const el = scroller.current
     if (!el) return
+    // Already at the end, the scrollTo below fires no scroll event — re-derive here:
+    // the button must never outlive a click that leaves the reader at the newest row.
+    const atEnd = el.scrollHeight - el.scrollTop - el.clientHeight < 1
     const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
     el.scrollTo({ top: el.scrollHeight, behavior })
     setNewCount(0)
-    markRead()
-  }, [markRead])
+    markReadWhenLooking() // also clears a deferred read, so syncBottom does not repeat it
+    if (atEnd) syncBottom()
+  }, [markReadWhenLooking, syncBottom])
 
   // Pane-scoped `r` = reply-in-thread on the focused message. useGlobalHotkey
   // already ignores keypresses while an input/textarea is focused; we resolve the
@@ -426,19 +516,25 @@ export default function MessagePane({ conversationId, conversationType, channelN
       const r = await fetch(`/api/chat/conversations/${conversationId}/messages?before=${messages[0].id}`)
       if (!r.ok) return
       const d = await r.json()
+      // Wave 22: a prepend is the reader going back in history — drop the at-bottom
+      // intent so neither the stick effect nor the ResizeObserver snaps the log to the
+      // newest row (in a log that did not overflow, the reader was at both ends). The
+      // stick effect's syncBottom re-derives the real state after the prepend renders.
+      leaveBottom()
       setMessages((prev) => [...d.messages, ...prev]); setHasMore(d.hasMore)
     } finally {
       loadingEarlier.current = false
     }
-  }, [conversationId, messages])
+  }, [conversationId, messages, leaveBottom])
 
   // Deep-link: land ON the `?msg=` target. If it isn't loaded yet, page older
   // history (bounded) until it is — this effect re-runs as `messages` grows —
   // then centre it and flash the mention tint (~1.5s). `deepLinkRef` tracks the
   // current target so we scroll once per link and re-arm on a new target
   // (including a same-conversation soft-navigation, since the pane never
-  // remounts). No synchronous setState here: pagination goes through
-  // loadEarlier (async), and the flash is a transient CSS class, not React state.
+  // remounts). The one deliberate synchronous state write is leaveBottom or
+  // syncBottom (as in the stick effect): pagination goes through loadEarlier
+  // (async), and the flash is a transient CSS class, not React state.
   const deepLinkRef = useRef<{ id: string | null; tries: number; done: boolean }>({ id: null, tries: 0, done: false })
   useEffect(() => {
     if (!deepLinkMsgId) return
@@ -449,6 +545,15 @@ export default function MessagePane({ conversationId, conversationType, channelN
     if (el) {
       st.done = true
       const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      // Wave 22: when the centring scroll will move the log, drop the at-bottom intent
+      // first so neither the stick effect nor the ResizeObserver fights the (smooth)
+      // scroll; its scroll events then re-derive the real state through syncBottom.
+      // When it will not move (a log that does not overflow, or the target already in
+      // place), no scroll event follows, so re-derive now: dropping the intent there
+      // left the jump button on screen at the newest message.
+      const log = scroller.current
+      if (log && centringMoves(log, el)) leaveBottom()
+      else syncBottom()
       el.scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' })
       el.classList.add('msg-flash')
       setTimeout(() => el.classList.remove('msg-flash'), 1500)
@@ -456,7 +561,7 @@ export default function MessagePane({ conversationId, conversationType, channelN
     }
     // Target not in the loaded window yet — page back until found or exhausted.
     if (hasMore && st.tries < DEEPLINK_MAX_PAGES) { st.tries++; void loadEarlier() }
-  }, [deepLinkMsgId, messages, hasMore, loading, loadEarlier])
+  }, [deepLinkMsgId, messages, hasMore, loading, loadEarlier, leaveBottom, syncBottom])
 
   // DM headers show the person, not a generic label: their avatar + name (via
   // dmName, which also handles group DMs) + a live presence line. The peer is the
@@ -593,6 +698,10 @@ export default function MessagePane({ conversationId, conversationType, channelN
         <div ref={scroller} onScroll={onScroll} onKeyDown={onListKeyDown} onFocus={onListFocus}
           role="log" aria-label="Messages" aria-live="off"
           className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
+          {/* Wave 22: a plain wrapper for the ResizeObserver (late growth keeps an
+              at-bottom reader pinned). It carries no role/overflow/z-index/transform,
+              so the W20-A day-group sticky containing blocks are unchanged. */}
+          <div ref={content}>
           {/* Initial load shows skeleton rows instead of a blank/flash of the wrong
               intro; it clears as soon as the first fetch resolves. */}
           {loading && <MessageListSkeleton />}
@@ -644,6 +753,7 @@ export default function MessagePane({ conversationId, conversationType, channelN
           </IssueRefProvider>
           )}
           {typing && <TypingIndicator name={typing} />}
+          </div>
         </div>
         {!atBottom && (
           <button type="button" onClick={jumpToLatest}
@@ -655,7 +765,7 @@ export default function MessagePane({ conversationId, conversationType, channelN
         )}
         {archived
           ? <p className="border-t border-border p-3 text-sm text-muted">This conversation is archived.</p>
-          : <Composer ref={composerRef} main onNavigateUp={enterListAtNewest} conversationId={conversationId} selfRole={selfRole} memberIds={memberIds} onSent={upsert} onRemove={remove} onFail={markFailed} />}
+          : <Composer ref={composerRef} main onNavigateUp={enterListAtNewest} conversationId={conversationId} selfRole={selfRole} memberIds={memberIds} onSent={onComposerSent} onRemove={remove} onFail={markFailed} />}
       </div>
       {threadRoot && (
         <ThreadPanel rootId={threadRoot} conversationId={conversationId} conversationType={conversationType} channelName={channelName}

@@ -31,10 +31,20 @@ if [ -n "$mem_bytes" ]; then
   fi
 fi
 
-# SP10 posture: run the published GHCR image (fast, no local build). LABHUB_VERSION
-# comes from .env when present (set at dogfood migration), else latest. --pull always
-# picks up new releases on boot; on pull failure the local image still boots.
+# SP10 posture: run the GHCR image named by LABHUB_VERSION (from .env when present,
+# else latest). --pull always picks up a newer published build of that tag on boot.
+# A deploy builds locally and tags the build with its GHCR name before the tag is
+# published, so the pull can fail (unpublished tag, or no network at boot). A failed
+# pull makes compose start NOTHING — so retry with --pull never, which boots the
+# local image of the same tag. Wave 22: a stale pin (v0.23.0) silently downgraded
+# production from v0.36.0 at the 2026-10-21 reboot, and this fallback did not exist.
 LABHUB_VERSION="$(sed -n 's/^LABHUB_VERSION=//p' .env 2>/dev/null | tail -1)"
 export LABHUB_VERSION="${LABHUB_VERSION:-latest}"
-docker compose -f docker-compose.yml -f docker-compose.image.yml \
-  --profile prod --profile tunnel up -d --pull always
+compose() {
+  docker compose -f docker-compose.yml -f docker-compose.image.yml \
+    --profile prod --profile tunnel "$@"
+}
+if ! compose up -d --pull always; then
+  echo "WARNING: could not pull ghcr.io/rola0002-blip/lab-hub:${LABHUB_VERSION}; booting the local image." >&2
+  compose up -d --pull never
+fi
