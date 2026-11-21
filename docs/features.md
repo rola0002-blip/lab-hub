@@ -16,7 +16,11 @@ messages; a "Pinned (n)" button in
 the conversation header lists them with deep links to each one, and guests
 see the list but cannot pin. Conversations can be favorited — a star that
 floats them to the top of their section in the sidebar. The composer grows
-with your message up to 200 px, then scrolls inside. Channels can be muted
+with your message up to 200 px, then scrolls inside. The conversation follows
+the newest message: your own send always scrolls to it, and an incoming
+message, a loading image or a growing composer keeps you at the bottom when
+you were there (scroll up and a "Jump to latest" button counts what arrived
+instead). Channels can be muted
 or left straight from the conversation list, any chat or Files page opens in
 its own window, and a stray file drop inside chat never navigates the tab
 away. Signing in returns you to the conversation you last had open.
@@ -41,7 +45,9 @@ older than 15 minutes only update the badge), and an idle member gets a
 Web Push with the same title, text, link and per-type tag (one push per
 notification type per minute). A LabHub Bot DM that carries a notification
 alerts once, through that notification — bot messages themselves never
-alert. Browser tabs can also raise a native OS
+alert. Opening the bell marks every notification in it read, and reading a
+conversation clears its direct-message and mention notifications (thread
+replies stay in the bell until you open it). Browser tabs can also raise a native OS
 popup per incoming message through the `Notification` constructor; an
 installed PWA (iOS 16.4+, Android) raises the same popup through the
 service worker's `registration.showNotification()` — the only surface
