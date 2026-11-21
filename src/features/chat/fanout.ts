@@ -82,7 +82,8 @@ export async function fanoutMessage(
     }
     // Wave 22: fan-out runs after the msg event, so a reader already looking at the
     // conversation can mark it read before the row above exists — settle those rows
-    // now (insert-then-recheck), so the bell never counts a message seen live.
+    // now (insert-then-recheck), so a message seen live does not stay counted. The
+    // badge can show it for a moment: notify() announces each row before this runs.
     await settleCaughtUpBells(m, belled)
   } catch (e) {
     console.error('fanoutMessage failed', e) // fan-out must never break sending

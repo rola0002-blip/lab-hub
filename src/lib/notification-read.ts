@@ -7,7 +7,8 @@ import { emitEvent } from './events'
 // unread row (GET /api/notifications) but the tray loads only the newest 20, and
 // it used to mark just those ids — anything older stayed unread forever and
 // re-badged on every refresh. Chat bells also piled up behind that window, because
-// reading a conversation never touched Notification. Three exits:
+// reading a conversation never touched Notification. Three exits (plus the legacy
+// ids path, markNotificationsRead, for tabs loaded before the deploy):
 //  1. markNotificationsReadUpTo — opening the tray reads every row up to the newest
 //     row it loaded (a row that lands after that load stays unread).
 //  2. clearConversationBells — reading a conversation reads its DM/mention bells for

@@ -114,6 +114,20 @@ describe('notification-read', () => {
       const ch = await makeChannel()
       expect(await clearConversationBells({ userId: u.id, conversationId: ch.id, upTo: T })).toBe(0)
     })
+
+    it('returns 0 when the rows name only replies or later messages (no root qualifies)', async () => {
+      const u = await makeUser()
+      const peer = await makeUser()
+      const ch = await makeChannel()
+      const root = await makeMessage(ch.id, peer.id, { createdAt: at(-10) })
+      const reply = await makeMessage(ch.id, peer.id, { createdAt: at(-5), parentId: root.id })
+      const later = await makeMessage(ch.id, peer.id, { createdAt: at(5) })
+      const onReply = await bell(u.id, { type: 'message_mention', payload: { conversationId: ch.id, messageId: reply.id } })
+      const onLater = await bell(u.id, { type: 'message_mention', payload: { conversationId: ch.id, messageId: later.id } })
+      expect(await clearConversationBells({ userId: u.id, conversationId: ch.id, upTo: T })).toBe(0)
+      expect(await readAtOf(onReply.id)).toBeNull()
+      expect(await readAtOf(onLater.id)).toBeNull()
+    })
   })
 
   describe('markRead (chat)', () => {
@@ -191,6 +205,18 @@ describe('notification-read', () => {
       expect(await settleCaughtUpBells(m, [])).toEqual([])
       expect(await settleCaughtUpBells({ ...m, parentId: 'x' }, [b.id])).toEqual([])
     })
+
+    it('a caught-up reader whose row is already read settles nothing', async () => {
+      const a = await makeUser()
+      const b = await makeUser()
+      const dm = await makeDm([a.id, b.id])
+      const m = await makeMessage(dm.id, a.id, { createdAt: T })
+      await prisma.conversationMember.updateMany({ where: { conversationId: dm.id, userId: b.id }, data: { lastReadAt: at(1) } })
+      const firstRead = at(2)
+      const row = await bell(b.id, { type: 'message_dm', payload: { conversationId: dm.id, messageId: m.id }, readAt: firstRead })
+      expect(await settleCaughtUpBells(m, [b.id])).toEqual([])
+      expect(await readAtOf(row.id)).toEqual(firstRead) // never re-stamped
+    })
   })
 
   describe('POST /api/notifications/read', () => {
@@ -232,6 +258,11 @@ describe('notification-read', () => {
     it('a non-ISO upTo is a 400', async () => {
       await signIn()
       expect((await req(JSON.stringify({ upTo: 'nope' }))).status).toBe(400)
+    })
+
+    it('a year-0 upTo (valid ISO, rejected by Postgres) is a 400, never a 500', async () => {
+      await signIn()
+      expect((await req(JSON.stringify({ upTo: '0000-01-01T00:00:00Z' }))).status).toBe(400)
     })
 
     it('no session is a 401', async () => {
