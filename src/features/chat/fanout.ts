@@ -7,6 +7,7 @@ import { isActive as isActiveUser } from '@/lib/activity'
 import { tryReservePush } from '@/lib/push-squelch'
 import { sendPush } from '@/lib/push'
 import { mentionEmail, dmEmail } from '@/lib/email/templates'
+import { settleCaughtUpBells } from '@/lib/notification-read'
 import { renderBody } from './mentions'
 
 type Seams = {
@@ -51,6 +52,7 @@ export async function fanoutMessage(
     const senderRow = await prisma.user.findUnique({ where: { id: m.userId }, select: { isSystem: true } })
     const senderIsBot = senderRow?.isSystem ?? false
 
+    const belled: string[] = []
     for (const member of members) {
       if (member.user.banned || member.user.isSystem) continue
       const direct = m.mentionUserIds.includes(member.userId)
@@ -68,6 +70,7 @@ export async function fanoutMessage(
           ? (c.type === 'DM' ? dmEmail(orgName, args.senderName, preview) : mentionEmail(orgName, args.senderName, where, preview))
           : undefined
         await notify(member.userId, type, { message: `${args.senderName} in ${where}: ${preview}`, conversationId: c.id, messageId: m.id, senderId: m.userId }, email)
+        belled.push(member.userId)
       }
       // Push is ACTIVITY-gated, not connection-gated: an open tab or a
       // desktop app in the tray must not silence the phone — only real,
@@ -77,6 +80,10 @@ export async function fanoutMessage(
         await push(member.userId, { title: pushTitle, body: pushBody, url: pushUrl, tag: c.id }).catch(() => {})
       }
     }
+    // Wave 22: fan-out runs after the msg event, so a reader already looking at the
+    // conversation can mark it read before the row above exists — settle those rows
+    // now (insert-then-recheck), so the bell never counts a message seen live.
+    await settleCaughtUpBells(m, belled)
   } catch (e) {
     console.error('fanoutMessage failed', e) // fan-out must never break sending
   }

@@ -508,3 +508,89 @@ test('bell rows pop out once; the paired bot DM stays silent', async ({ page, br
 
   await bobCtx.close()
 })
+
+// Wave 22 (v0.36.1): the badge counts EVERY unread row but the tray loads only the
+// newest 20. Opening the tray must read every row up to the newest loaded one —
+// the old ids-of-the-20 POST left older unread rows behind, and they re-badged
+// the bell on every refresh.
+const isBellLoad = (r: { url(): string; request(): { method(): string } }) =>
+  new URL(r.url()).pathname === '/api/notifications' && r.request().method() === 'GET'
+
+test('opening the tray reads rows older than the 20 it shows; a reload keeps the badge clear', async ({ page }) => {
+  const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  const now = Date.now()
+  await db.notification.createMany({
+    data: [
+      // The 5 OLDEST rows are unread — buried below the tray's 20-row window.
+      ...Array.from({ length: 5 }, (_, i) => ({
+        userId: me.id, type: 'issue_assigned', payload: { message: `buried ${i}` },
+        createdAt: new Date(now - 3_600_000 + i * 1_000),
+      })),
+      // The 20 NEWER rows (the whole visible window) are already read.
+      ...Array.from({ length: 20 }, (_, i) => ({
+        userId: me.id, type: 'issue_assigned', payload: { message: `visible ${i}` },
+        createdAt: new Date(now - 1_800_000 + i * 1_000), readAt: new Date(now - 60_000),
+      })),
+    ],
+  })
+  const bell = page.getByRole('button', { name: 'Notifications' })
+  await page.goto('/chat')
+  await waitForHydration(page)
+  await expect(bell.getByText('5', { exact: true })).toBeVisible()
+
+  await bell.click()
+  await expect(bell.getByText('5', { exact: true })).toHaveCount(0)
+  await expect.poll(() => db.notification.count({ where: { userId: me.id, readAt: null } })).toBe(0)
+
+  const reloaded = page.waitForResponse(isBellLoad)
+  await page.reload()
+  await waitForHydration(page)
+  expect(((await (await reloaded).json()) as { unread: number }).unread).toBe(0)
+  await expect(bell.getByText('5', { exact: true })).toHaveCount(0)
+})
+
+// Wave 22: reading a DM in chat reads its bell row — the tray is never opened.
+test('reading a DM in chat clears its bell without opening the tray', async ({ page, browser }) => {
+  test.setTimeout(120_000)
+  const me = await db.user.findFirstOrThrow({ where: { email: ADMIN.email } })
+  const token = await createMemberViaInvite(page, 'belldm@lab.test', 'member')
+  const bobCtx = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': '10.20.31.22' } })
+  const bob = await bobCtx.newPage()
+  await acceptInvite(bob, token, 'Dm Bob', 'MemberPass!1234')
+
+  const bell = page.getByRole('button', { name: 'Notifications' })
+  await page.goto('/dashboard')
+  await waitForHydration(page)
+
+  // Bob starts a DM to the admin ("Roland") through the UI and sends one message.
+  await bob.goto('/chat')
+  await waitForHydration(bob)
+  await bob.getByRole('button', { name: 'New direct message' }).click()
+  await bob.getByRole('button', { name: 'Roland' }).click()
+  await bob.getByRole('button', { name: 'Start' }).click()
+  await bob.waitForURL(/\/chat\/[^/]+$/)
+  const box = bob.getByPlaceholder('Write a message…')
+  await box.fill('bell dm hello')
+  await box.press('Enter')
+
+  // The admin's bell (live notif event) badges the DM on the dashboard.
+  await expect(bell.getByText('1', { exact: true })).toBeVisible({ timeout: 20_000 })
+
+  // Still badged on the chat home (nothing read yet), then open the DM from the rail
+  // — a client-side navigation, so the same Bell must drop its badge on its own.
+  await page.goto('/chat')
+  await waitForHydration(page)
+  await expect(bell.getByText('1', { exact: true })).toBeVisible()
+  await page.getByRole('link', { name: /Dm Bob/ }).click()
+  await expect(page.getByRole('log', { name: 'Messages' }).getByText('bell dm hello')).toBeVisible()
+  await expect(bell.getByText('1', { exact: true })).toHaveCount(0, { timeout: 15_000 })
+  await expect.poll(() => db.notification.count({ where: { userId: me.id, readAt: null } })).toBe(0)
+
+  const reloaded = page.waitForResponse(isBellLoad)
+  await page.reload()
+  await waitForHydration(page)
+  expect(((await (await reloaded).json()) as { unread: number }).unread).toBe(0)
+  await expect(bell.getByText('1', { exact: true })).toHaveCount(0)
+
+  await bobCtx.close()
+})
