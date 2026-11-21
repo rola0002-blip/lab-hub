@@ -160,11 +160,11 @@ line when you deliberately upgrade the connector.
 - [ ] First `docker compose --profile prod --profile tunnel up -d --build` reaches the **setup wizard** at `https://labhub.<domain>` (tunnel healthy; TLS valid).
 - [ ] **Setup-token gate:** the wizard shows a *Setup token* field and **rejects** a wrong/blank token; setup succeeds only with the `SETUP_TOKEN` printed by `init-env.sh`.
 - [ ] **Server Action** end-to-end over the tunnel (e.g. create an invite on People) succeeds — no Origin/Host error. If it errors, add `experimental: { serverActions: { allowedOrigins: ['labhub.<domain>'] } }` to `next.config.ts` and re-verify (§4.4).
-- [ ] `update.sh` on the current (no-op) tag: backs up, rebuilds, health-polls to the matching version, reports success.
-- [ ] `update.sh` on a deliberately-bad tag: prints the exact `rollback.sh <prev>` + `logs` guidance and exits non-zero.
+- [ ] `update.sh` on the current (no-op) tag: backs up, builds `ghcr.io/rola0002-blip/lab-hub:<tag>`, starts it, health-polls to the matching version, sets `.env` `LABHUB_VERSION=<tag>`, reports success.
+- [ ] `update.sh` on a deliberately-bad tag: prints the exact `rollback.sh <prev>` + `logs` guidance, exits non-zero, and leaves `.env` `LABHUB_VERSION` unchanged.
 - [ ] `backup.sh` writes `labhub-<stamp>.sql.gz` (+ `uploads-<stamp>.tar.gz` once uploads exist), honors keep-last-14, and mirrors to `BACKUP_MIRROR_PATH` when set.
 - [ ] **Non-ASCII backup round-trip.** Seed a chat message with an emoji and a member whose name uses CJK/accented characters (e.g. 陈 / José); run `backup.sh`; restore that dump per the ops card into a scratch stack; confirm the emoji and name come back **byte-identical** (not mojibake / `?`).
-- [ ] `rollback.sh <prev>` returns the app to the prior version with data intact.
+- [ ] `rollback.sh <prev>` returns the app to the prior version with data intact and sets `.env` `LABHUB_VERSION=<prev>`.
 - [ ] **FileVault is disabled** (or a documented unattended-unlock path exists) — required for the automatic login that reboot survival depends on (§9); macOS greys out auto-login when FileVault is on.
 - [ ] The two `launchd` agents survive a **reboot**: after power-cycling, `colima` + the stack come up automatically and `https://labhub.<domain>` is reachable; the 03:00 backup agent fires and produces an artifact.
 - [ ] **Security headers:** `curl -sI https://labhub.<domain>/` shows HSTS, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, and the report-only CSP; a document fetch via `/uploads/...` shows `nosniff`.

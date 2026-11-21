@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **macOS server updates and rollbacks now set the boot pin.**
+  `scripts/macos/update.sh` and `rollback.sh` build the release as
+  `ghcr.io/rola0002-blip/lab-hub:<tag>`, start it the way the boot path does,
+  and set `LABHUB_VERSION` in `.env` once `/api/health` reports the version.
+  Before, they started an untagged build and left the pin unchanged, so the
+  next restart started the previously pinned version. `update.sh` also removes
+  older local LabHub images (about 3 GB each) and keeps the version it
+  replaced, which `rollback.sh` now starts without a rebuild.
+
 ## [0.36.1] - 2026-11-21
 
 ### Fixed

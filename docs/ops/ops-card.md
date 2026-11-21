@@ -11,11 +11,18 @@ Cloudflare tunnel; every server compose call uses **`--profile prod --profile tu
 | **Back up** (also nightly 03:00) | `./scripts/backup.sh` |
 | **Check health** | `curl http://localhost:3000/api/health` |
 | **View logs** | `docker compose --profile prod --profile tunnel logs -f app` |
-| **Bring stack up** | `./scripts/macos/stack-up.sh` — boots the image named by `.env` `LABHUB_VERSION` (the local image of that tag if the pull fails); or `docker compose --profile prod --profile tunnel up -d` |
+| **Bring stack up** | `./scripts/macos/stack-up.sh` — boots the image named by `.env` `LABHUB_VERSION` (the local image of that tag if the pull fails); or `docker compose -f docker-compose.yml -f docker-compose.image.yml --profile prod --profile tunnel up -d` |
 
 > **Tags must match `package.json`.** A release tag = `v` + the `package.json` version. Cut
 > releases with `npm run release` only — a hand-made tag whose name disagrees makes `update.sh`
 > report FAILED on a healthy stack (the health-gate compares the tag to `/api/health`'s version).
+
+> **The boot pin.** A boot starts the image named by `.env` `LABHUB_VERSION`
+> (`ghcr.io/rola0002-blip/lab-hub:<tag>`). `update.sh` and `rollback.sh` set it after the
+> health check passes; `update.sh` also removes older local LabHub images (about 3 GB each),
+> keeping the version it replaced, which `rollback.sh` then starts without a rebuild. Do not
+> deploy with a bare `docker compose … up -d --build`: the boot path ignores that image, so
+> the next restart starts the pinned version again.
 
 > **`APP_URL` is exact + loopback-only binds.** `APP_URL` must equal the public Cloudflare
 > hostname exactly (`https://labhub.<domain>`, no port/slash). `APP_PORT=3000` is the on-box
@@ -34,7 +41,7 @@ tar -xzf backups/uploads-<stamp>.tar.gz -C /tmp && docker compose cp /tmp/upload
 # (uid 1000 node) can serve the files. Adapt the volume name — it is <compose-project>_uploads
 # (e.g. labhub_uploads when cloned to $HOME/labhub); docker volume ls | grep uploads:
 docker run --rm -u 0 -v labhub_uploads:/data/uploads busybox chown -R 1000:1000 /data/uploads
-docker compose --profile prod --profile tunnel up -d app
+docker compose -f docker-compose.yml -f docker-compose.image.yml --profile prod --profile tunnel up -d app
 ```
 
 ## Onboarding without email

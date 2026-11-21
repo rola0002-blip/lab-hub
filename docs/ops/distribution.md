@@ -88,19 +88,21 @@ docker compose -f docker-compose.yml -f docker-compose.image.yml \
 curl -fsS http://127.0.0.1:<APP_PORT>/api/health   # confirm X.Y.Z
 ```
 
-A release that is tagged locally but not yet published (build the tag's commit):
+Any release tag, published or only tagged locally — `update.sh` backs up,
+builds the tag as `ghcr.io/rola0002-blip/lab-hub:vX.Y.Z`, starts it, waits for
+`/api/health` to report the version, and only then sets `LABHUB_VERSION` in
+`.env`. It also removes older local LabHub images, keeping the version it
+replaced:
 
 ```
-docker compose --profile prod build app
-docker tag labhub-app:latest ghcr.io/rola0002-blip/lab-hub:vX.Y.Z
-sed -i '' 's/^LABHUB_VERSION=.*/LABHUB_VERSION=vX.Y.Z/' .env
-docker compose -f docker-compose.yml -f docker-compose.image.yml \
-  --profile prod --profile tunnel up -d --no-deps --pull never app
+./scripts/macos/update.sh vX.Y.Z
+git switch main    # update.sh leaves the checkout detached at the tag
 ```
 
 At boot, `stack-up.sh` pulls the pinned tag; when the pull fails (tag not yet
 published, or no network) it boots the local image of the same tag. Roll back
-by pinning the previous `LABHUB_VERSION` and re-running the first block.
+with `./scripts/macos/rollback.sh vX.Y.Z`: it starts the local image of that
+tag (or builds it) and sets the pin the same way.
 
 NOTE: a git checkout and a dist install both use compose project `labhub` —
 never run both simultaneously on the same machine. On the dev/dogfood
